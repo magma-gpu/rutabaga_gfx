@@ -503,7 +503,7 @@ impl VirglRenderer {
 
     fn export_blob(&self, resource_id: u32) -> RutabagaResult<Arc<MesaHandle>> {
         let mut fd_type = 0;
-        let mut fd = 0;
+        let mut fd = -1;
         // TODO(b/315870313): Add safety comment
         #[allow(clippy::undocumented_unsafe_blocks)]
         let ret =
