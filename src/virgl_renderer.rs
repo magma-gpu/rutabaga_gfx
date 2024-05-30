@@ -881,6 +881,29 @@ impl RutabagaComponent for VirglRenderer {
         })
     }
 
+    fn resource_map(&self, _resource_id: u32, _addr: Option<u64>) -> RutabagaResult<()> {
+        #[cfg(feature = "virgl_resource_map2")]
+        {
+            if let Some(addr) = _addr {
+                // SAFETY:
+                // Safe because virglrenderer is initialized and addr is a valid pointer provided
+                // by the caller.
+                let ret = unsafe {
+                    virgl_renderer_resource_map_fixed(_resource_id, addr as *mut libc::c_void)
+                };
+                if ret != 0 {
+                    return Err(RutabagaError::MappingFailed(ret));
+                }
+                Ok(())
+            } else {
+                // virgl_renderer_resource_map_fixed requires a fixed address
+                Err(MesaError::Unsupported.into())
+            }
+        }
+        #[cfg(not(feature = "virgl_resource_map2"))]
+        Err(MesaError::Unsupported.into())
+    }
+
     fn map(&self, resource_id: u32) -> RutabagaResult<MesaMapping> {
         let mut map: *mut c_void = null_mut();
         let mut size: u64 = 0;

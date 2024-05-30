@@ -308,6 +308,13 @@ pub trait RutabagaComponent {
         Err(MesaError::Unsupported.into())
     }
 
+    /// Implementations must map the blob resource on success. If addr is Some, the resource
+    /// should be mapped at the specified address. Otherwise, the implementation may choose
+    /// the address.
+    fn resource_map(&self, _resource_id: u32, _addr: Option<u64>) -> RutabagaResult<()> {
+        Err(MesaError::Unsupported.into())
+    }
+
     /// Implementations must map the blob resource on success.  This is typically done by
     /// glMapBufferRange(...) or vkMapMemory.
     fn map(&self, _resource_id: u32) -> RutabagaResult<MesaMapping> {
@@ -974,6 +981,26 @@ impl Rutabaga {
 
         self.resources.insert(resource_id, resource);
         Ok(())
+    }
+
+    pub fn resource_map(&mut self, resource_id: u32, addr: Option<u64>) -> RutabagaResult<()> {
+        let resource = self
+            .resources
+            .get_mut(&resource_id)
+            .ok_or(RutabagaError::InvalidResourceId)?;
+
+        let component_type = calculate_component(resource.component_mask)?;
+        if component_type == RutabagaComponentType::CrossDomain {
+            resource.mapping = None;
+            return Ok(());
+        }
+
+        let component = self
+            .components
+            .get(&component_type)
+            .ok_or(RutabagaError::InvalidComponent)?;
+
+        component.resource_map(resource_id, addr)
     }
 
     /// Returns a memory mapping of the blob resource.
