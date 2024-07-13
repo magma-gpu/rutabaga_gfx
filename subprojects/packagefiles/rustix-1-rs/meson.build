@@ -29,6 +29,7 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
   '--cfg', 'feature="net"',
   '--cfg', 'feature="param"',
   '--cfg', 'feature="pipe"',
+  '--cfg', 'feature="thread"',
   ]
 elif host_machine.system() == 'darwin' or host_machine.system() == 'macos'
   rustix_args += [
