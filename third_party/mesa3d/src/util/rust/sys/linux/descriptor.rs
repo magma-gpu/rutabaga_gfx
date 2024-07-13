@@ -1,8 +1,8 @@
 // Copyright 2025 Google
 // SPDX-License-Identifier: MIT
 
-use std::fs::File;
 use std::fs::read_link;
+use std::fs::File;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Result;

@@ -5,6 +5,7 @@
 //! The cross-domain component type, specialized for allocating and sharing resources across domain
 //! boundaries.
 
+use log::error;
 use std::cmp::max;
 use std::collections::BTreeMap as Map;
 use std::collections::VecDeque;
@@ -15,7 +16,6 @@ use std::sync::Condvar;
 use std::sync::Mutex;
 use std::thread;
 
-use log::error;
 use mesa3d_util::create_pipe;
 use mesa3d_util::AsBorrowedDescriptor;
 use mesa3d_util::AsRawDescriptor;
@@ -64,7 +64,10 @@ use crate::RutabagaGralloc;
 use crate::RutabagaGrallocBackendFlags;
 use crate::RutabagaGrallocFlags;
 
+mod atomic_memory_sentinel_manager;
 mod cross_domain_protocol;
+
+use atomic_memory_sentinel_manager::AtomicMemorySentinelManager;
 
 const CROSS_DOMAIN_CONTEXT_CHANNEL_ID: u64 = 1;
 const CROSS_DOMAIN_RESAMPLE_ID: u64 = 2;
@@ -86,6 +89,7 @@ enum CrossDomainJob {
     HandleFence(RutabagaFence),
     AddReadPipe(u32),
     Finish,
+    AddAtomicMemorySentinel(u32, Event),
 }
 
 enum RingWrite<'a, T> {
@@ -95,6 +99,7 @@ enum RingWrite<'a, T> {
 
 type CrossDomainJobs = Mutex<Option<VecDeque<CrossDomainJob>>>;
 type CrossDomainItemState = Arc<Mutex<CrossDomainItems>>;
+type SentinelManager = Arc<Mutex<AtomicMemorySentinelManager>>;
 
 struct CrossDomainItems {
     descriptor_id: u32,
@@ -104,6 +109,7 @@ struct CrossDomainItems {
 
 struct CrossDomainState {
     context_resources: ContextResources,
+    sentinel_manager: SentinelManager,
     query_ring_id: u32,
     channel_ring_id: u32,
     connection: Option<Tube>,
@@ -124,11 +130,11 @@ struct CrossDomainContext {
     state: Option<Arc<CrossDomainState>>,
     context_resources: ContextResources,
     item_state: CrossDomainItemState,
+    sentinel_manager: SentinelManager,
     fence_handler: RutabagaFenceHandler,
     worker_thread: Option<thread::JoinHandle<RutabagaResult<()>>>,
     resample_evt: Option<Event>,
     kill_evt: Option<Event>,
-    virtiofs_table: Option<VirtioFsTable>,
 }
 
 /// The CrossDomain component contains a list of paths that the guest may connect to and the
@@ -178,12 +184,14 @@ impl CrossDomainState {
         query_ring_id: u32,
         channel_ring_id: u32,
         context_resources: ContextResources,
+        sentinel_manager: SentinelManager,
         connection: Option<Tube>,
     ) -> CrossDomainState {
         CrossDomainState {
             query_ring_id,
             channel_ring_id,
             context_resources,
+            sentinel_manager,
             connection,
             jobs: Mutex::new(Some(VecDeque::new())),
             jobs_cvar: Condvar::new(),
@@ -350,6 +358,38 @@ impl CrossDomainWorker {
                 CROSS_DOMAIN_KILL_ID => {
                     self.fence_handler.call(fence);
                 }
+                id if id >= CROSS_DOMAIN_ATOMIC_MEMORY_SENTINEL_START as u64
+                    && id < CROSS_DOMAIN_PIPE_READ_START as u64 =>
+                {
+                    let memory_watcher_id: u32 =
+                        id.try_into().map_err(MesaError::TryFromIntError)?;
+                    let mut manager = self.state.sentinel_manager.lock().unwrap();
+                    let mut remove = false;
+                    let mut fence_opt = Some(fence);
+
+                    if manager.is_shutdown(memory_watcher_id) {
+                        if let Some(evt) = manager.get_event(memory_watcher_id) {
+                            self.wait_ctx.delete(evt.as_borrowed_descriptor())?;
+                        }
+                        remove = true;
+                    } else if let Some(cmd_memory_watcher) =
+                        manager.handle_event(memory_watcher_id)?
+                    {
+                        self.state.write_to_ring(
+                            RingWrite::Write(cmd_memory_watcher, None),
+                            self.state.channel_ring_id,
+                        )?;
+                        self.fence_handler.call(fence_opt.take().unwrap());
+                    }
+
+                    if let Some(fence) = fence_opt {
+                        self.state.add_job(CrossDomainJob::HandleFence(fence));
+                    }
+
+                    if remove {
+                        manager.remove_watcher(memory_watcher_id);
+                    }
+                }
                 _ => {
                     let mut items = self.item_state.lock().unwrap();
                     let mut cmd_read: CrossDomainReadWrite = Default::default();
@@ -505,6 +545,10 @@ impl CrossDomainWorker {
                         _ => return Err(RutabagaError::InvalidCrossDomainItemType),
                     }
                 }
+                CrossDomainJob::AddAtomicMemorySentinel(id, recv) => {
+                    self.wait_ctx
+                        .add(id as u64, recv.as_borrowed_descriptor())?;
+                }
                 CrossDomainJob::Finish => return Ok(()),
             }
         }
@@ -560,6 +604,7 @@ impl CrossDomainContext {
         let query_ring_id = cmd_init.query_ring_id;
         let channel_ring_id = cmd_init.channel_ring_id;
         let context_resources = self.context_resources.clone();
+        let sentinel_manager = self.sentinel_manager.clone();
 
         // Zero means no requested channel.
         if cmd_init.channel_type != 0 {
@@ -590,6 +635,7 @@ impl CrossDomainContext {
                 query_ring_id,
                 channel_ring_id,
                 context_resources,
+                sentinel_manager,
                 Some(connection),
             ));
 
@@ -618,6 +664,7 @@ impl CrossDomainContext {
                 query_ring_id,
                 channel_ring_id,
                 context_resources,
+                sentinel_manager,
                 None,
             )));
         }
@@ -764,6 +811,42 @@ impl CrossDomainContext {
         } else {
             return Err(RutabagaError::InvalidCrossDomainState);
         }
+
+        Ok(())
+    }
+
+    fn atomic_memory_sentinel_signal(
+        &mut self,
+        cmd_atomic_memory_sentinel_signal: &CrossDomainSignalAtomicMemorySentinel,
+    ) -> RutabagaResult<()> {
+        let manager = self.sentinel_manager.lock().unwrap();
+        manager.signal_watcher(cmd_atomic_memory_sentinel_signal.id)
+    }
+
+    fn atomic_memory_sentinel_destroy(
+        &mut self,
+        cmd_atomic_memory_sentinel_destroy: &CrossDomainDestroyAtomicMemorySentinel,
+    ) -> RutabagaResult<()> {
+        let mut manager = self.sentinel_manager.lock().unwrap();
+        manager.destroy_watcher(cmd_atomic_memory_sentinel_destroy.id)
+    }
+
+    fn atomic_memory_sentinel_new(
+        &mut self,
+        cmd_atomic_memory_sentinel_new: &CrossDomainCreateAtomicMemorySentinel,
+    ) -> RutabagaResult<()> {
+        let id = cmd_atomic_memory_sentinel_new.id;
+        let fs_id = cmd_atomic_memory_sentinel_new.fs_id;
+        let handle = cmd_atomic_memory_sentinel_new.handle;
+
+        let mut manager = self.sentinel_manager.lock().unwrap();
+        let evt = manager.create_watcher(id, fs_id, handle)?;
+
+        let state = self
+            .state
+            .as_ref()
+            .ok_or(RutabagaError::InvalidCrossDomainState)?;
+        state.add_job(CrossDomainJob::AddAtomicMemorySentinel(id, evt));
 
         Ok(())
     }
@@ -998,6 +1081,24 @@ impl RutabagaContext for CrossDomainContext {
 
                     self.write(&cmd_write, opaque_data)?;
                 }
+                CROSS_DOMAIN_CMD_CREATE_ATOMIC_MEMORY_SENTINEL => {
+                    let (cmd_atomic_memory_sentinel_new, _) =
+                        CrossDomainCreateAtomicMemorySentinel::read_from_prefix(commands)
+                            .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
+                    self.atomic_memory_sentinel_new(&cmd_atomic_memory_sentinel_new)?;
+                }
+                CROSS_DOMAIN_CMD_SIGNAL_ATOMIC_MEMORY_SENTINEL => {
+                    let (cmd_atomic_memory_sentinel_signal, _) =
+                        CrossDomainSignalAtomicMemorySentinel::read_from_prefix(commands)
+                            .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
+                    self.atomic_memory_sentinel_signal(&cmd_atomic_memory_sentinel_signal)?;
+                }
+                CROSS_DOMAIN_CMD_DESTROY_ATOMIC_MEMORY_SENTINEL => {
+                    let (cmd_atomic_memory_sentinel_destroy, _) =
+                        CrossDomainDestroyAtomicMemorySentinel::read_from_prefix(commands)
+                            .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
+                    self.atomic_memory_sentinel_destroy(&cmd_atomic_memory_sentinel_destroy)?;
+                }
                 _ => return Err(MesaError::WithContext("invalid cross domain command").into()),
             }
 
@@ -1125,11 +1226,13 @@ impl RutabagaComponent for CrossDomain {
             state: None,
             context_resources: Arc::new(Mutex::new(Default::default())),
             item_state: Arc::new(Mutex::new(Default::default())),
+            sentinel_manager: Arc::new(Mutex::new(AtomicMemorySentinelManager::new(
+                self.virtiofs_table.clone(),
+            ))),
             fence_handler,
             worker_thread: None,
             resample_evt: None,
             kill_evt: None,
-            virtiofs_table: self.virtiofs_table.clone(),
         }))
     }
 

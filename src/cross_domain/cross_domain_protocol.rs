@@ -19,10 +19,14 @@ pub const CROSS_DOMAIN_CMD_SEND: u8 = 4;
 pub const CROSS_DOMAIN_CMD_RECEIVE: u8 = 5;
 pub const CROSS_DOMAIN_CMD_READ: u8 = 6;
 pub const CROSS_DOMAIN_CMD_WRITE: u8 = 7;
+pub const CROSS_DOMAIN_CMD_CREATE_ATOMIC_MEMORY_SENTINEL: u8 = 8;
+pub const CROSS_DOMAIN_CMD_SIGNAL_ATOMIC_MEMORY_SENTINEL: u8 = 9;
+pub const CROSS_DOMAIN_CMD_DESTROY_ATOMIC_MEMORY_SENTINEL: u8 = 10;
 
 /// Channel types (must match rutabaga channel types)
 pub const CROSS_DOMAIN_CHANNEL_TYPE_WAYLAND: u32 = 0x0001;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_CAMERA: u32 = 0x0002;
+pub const CROSS_DOMAIN_CHANNEL_TYPE_X11: u32 = 0x0011;
 
 /// The maximum number of identifiers
 pub const CROSS_DOMAIN_MAX_IDENTIFIERS: usize = 28;
@@ -49,6 +53,8 @@ pub const CROSS_DOMAIN_CHANNEL_RING: u32 = 1;
 
 /// Read pipe IDs start at this value.
 pub const CROSS_DOMAIN_PIPE_READ_START: u32 = 0x80000000;
+/// Memory watcher IDs start at this value.
+pub const CROSS_DOMAIN_ATOMIC_MEMORY_SENTINEL_START: u32 = 0x40000000;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
@@ -121,4 +127,33 @@ pub struct CrossDomainReadWrite {
     pub opaque_data_size: u32,
     pub pad: u32,
     // Data of size "opaque data size follows"
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainCreateAtomicMemorySentinel {
+    pub hdr: CrossDomainHeader,
+    /// VirtioFS filesystem ID - identifies which virtio-fs instance
+    pub fs_id: u64,
+    /// VirtioFS file handle - identifies the file within the filesystem to map and watch
+    pub handle: u64,
+    /// Memory watcher ID - unique ID for this watcher, used in signal/destroy commands
+    pub id: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainSignalAtomicMemorySentinel {
+    pub hdr: CrossDomainHeader,
+    pub id: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainDestroyAtomicMemorySentinel {
+    pub hdr: CrossDomainHeader,
+    pub id: u32,
+    pub pad: u32,
 }
