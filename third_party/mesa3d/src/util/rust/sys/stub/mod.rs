@@ -3,6 +3,7 @@
 
 pub mod descriptor;
 pub mod event;
+pub mod futex;
 pub mod memory_mapping;
 pub mod pipe;
 pub mod shm;

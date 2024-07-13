@@ -25,6 +25,7 @@ pub use sys::platform::descriptor::OwnedDescriptor;
 pub use sys::platform::descriptor::RawDescriptor;
 pub use sys::platform::descriptor::DEFAULT_RAW_DESCRIPTOR;
 pub use sys::platform::event::Event;
+pub use sys::platform::futex;
 pub use sys::platform::pipe::create_pipe;
 pub use sys::platform::pipe::ReadPipe;
 pub use sys::platform::pipe::WritePipe;
