@@ -19,10 +19,14 @@ pub const CROSS_DOMAIN_CMD_SEND: u8 = 4;
 pub const CROSS_DOMAIN_CMD_RECEIVE: u8 = 5;
 pub const CROSS_DOMAIN_CMD_READ: u8 = 6;
 pub const CROSS_DOMAIN_CMD_WRITE: u8 = 7;
+pub const CROSS_DOMAIN_CMD_FUTEX_NEW: u8 = 8;
+pub const CROSS_DOMAIN_CMD_FUTEX_SIGNAL: u8 = 9;
+pub const CROSS_DOMAIN_CMD_FUTEX_DESTROY: u8 = 10;
 
 /// Channel types (must match rutabaga channel types)
 pub const CROSS_DOMAIN_CHANNEL_TYPE_WAYLAND: u32 = 0x0001;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_CAMERA: u32 = 0x0002;
+pub const CROSS_DOMAIN_CHANNEL_TYPE_X11: u32 = 0x0011;
 
 /// The maximum number of identifiers
 pub const CROSS_DOMAIN_MAX_IDENTIFIERS: usize = 28;
@@ -38,6 +42,8 @@ pub const CROSS_DOMAIN_ID_TYPE_READ_PIPE: u32 = 3;
 /// The host receives the write end of the pipe over the host Wayland socket.
 pub const CROSS_DOMAIN_ID_TYPE_WRITE_PIPE: u32 = 4;
 
+pub const CROSS_DOMAIN_ID_TYPE_SHM: u32 = 5;
+
 /// No ring
 pub const CROSS_DOMAIN_RING_NONE: u32 = 0xffffffff;
 /// A ring for metadata queries.
@@ -47,6 +53,8 @@ pub const CROSS_DOMAIN_CHANNEL_RING: u32 = 1;
 
 /// Read pipe IDs start at this value.
 pub const CROSS_DOMAIN_PIPE_READ_START: u32 = 0x80000000;
+/// Futex IDs start at this value.
+pub const CROSS_DOMAIN_FUTEX_START: u32 = 0x40000000;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
@@ -119,4 +127,30 @@ pub struct CrossDomainReadWrite {
     pub opaque_data_size: u32,
     pub pad: u32,
     // Data of size "opaque data size follows"
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainFutexNew {
+    pub hdr: CrossDomainHeader,
+    pub fs_id: u64,
+    pub handle: u64,
+    pub id: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainFutexSignal {
+    pub hdr: CrossDomainHeader,
+    pub id: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainFutexDestroy {
+    pub hdr: CrossDomainHeader,
+    pub id: u32,
+    pub pad: u32,
 }
