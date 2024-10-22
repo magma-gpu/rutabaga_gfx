@@ -330,58 +330,45 @@ impl CrossDomainWorker {
         // The CrossDomainJob queue guarantees a new fence has been generated before polling is
         // resumed.
         if let Some(event) = events.first() {
-            match event.connection_id {
-                CROSS_DOMAIN_CONTEXT_CHANNEL_ID => {
-                    let (len, descriptors) = self.state.receive_msg(receive_buf)?;
-                    if len != 0 || !descriptors.is_empty() {
-                        let mut cmd_receive: CrossDomainSendReceive = Default::default();
+            match event.token {
+                CrossDomainToken::ContextChannel => {
+                    let (len, files) = self.state.receive_msg(receive_buf)?;
+                    let mut cmd_receive: CrossDomainSendReceive = Default::default();
 
-                        let num_descriptors = descriptors.len();
-                        cmd_receive.hdr.cmd = CROSS_DOMAIN_CMD_RECEIVE;
-                        cmd_receive.num_identifiers = descriptors
-                            .len()
-                            .try_into()
-                            .map_err(MesaError::TryFromIntError)?;
-                        cmd_receive.opaque_data_size =
-                            len.try_into().map_err(MesaError::TryFromIntError)?;
+                    let num_files = files.len();
+                    cmd_receive.hdr.cmd = CROSS_DOMAIN_CMD_RECEIVE;
+                    cmd_receive.num_identifiers = files.len().try_into()?;
+                    cmd_receive.opaque_data_size = len.try_into()?;
 
-                        let iter = cmd_receive
-                            .identifiers
-                            .iter_mut()
-                            .zip(cmd_receive.identifier_types.iter_mut())
-                            .zip(cmd_receive.identifier_sizes.iter_mut())
-                            .zip(descriptors)
-                            .take(num_descriptors);
+                    let iter = cmd_receive
+                        .identifiers
+                        .iter_mut()
+                        .zip(cmd_receive.identifier_types.iter_mut())
+                        .zip(cmd_receive.identifier_sizes.iter_mut())
+                        .zip(files)
+                        .take(num_files);
 
-                        for (((identifier, identifier_type), identifier_size), descriptor) in iter {
-                            *identifier = match descriptor.determine_type() {
-                                Ok(DescriptorType::Memory(size)) => {
-                                    *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
-                                    *identifier_size = size;
-                                    add_item(
-                                        &self.item_state,
-                                        CrossDomainItem::WaylandKeymap(descriptor),
-                                    )
-                                }
-                                Ok(DescriptorType::WritePipe) => {
-                                    *identifier_type = CROSS_DOMAIN_ID_TYPE_WRITE_PIPE;
-                                    add_item(
-                                        &self.item_state,
-                                        CrossDomainItem::WaylandWritePipe(WritePipe::new(
-                                            descriptor.into_raw_descriptor(),
-                                        )),
-                                    )
-                                }
-                                _ => return Err(RutabagaError::InvalidCrossDomainItemType),
-                            };
-                        }
+                    for (((identifier, identifier_type), identifier_size), mut file) in iter {
+                        // Safe since the descriptors from receive_msg(..) are owned by us and valid.
+                        descriptor_analysis(&mut file, identifier_type, identifier_size)?;
 
-                        self.state.write_to_ring(
-                            RingWrite::Write(cmd_receive, Some(&receive_buf[0..len])),
-                            self.state.channel_ring_id,
-                        )?;
-                        self.fence_handler.call(fence);
+                        *identifier = match *identifier_type {
+                            CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB => add_item(
+                                &self.item_state,
+                                CrossDomainItem::WaylandKeymap(file.into()),
+                            ),
+                            CROSS_DOMAIN_ID_TYPE_WRITE_PIPE => {
+                                add_item(&self.item_state, CrossDomainItem::WaylandWritePipe(file))
+                            }
+                            _ => return Err(RutabagaError::InvalidCrossDomainItemType),
+                        };
                     }
+
+                    self.state.write_to_ring(
+                        RingWrite::Write(cmd_receive, Some(&receive_buf[0..len])),
+                        self.state.channel_ring_id,
+                    )?;
+                    self.fence_handler.call(fence);
                 }
                 CROSS_DOMAIN_RESAMPLE_ID => {
                     // The resample event is triggered when the job queue is in the following state:
