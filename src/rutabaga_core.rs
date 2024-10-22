@@ -5,10 +5,14 @@
 //! rutabaga_core: Cross-platform, Rust-based, Wayland and Vulkan centric GPU virtualization.
 use std::collections::BTreeMap as Map;
 use std::convert::TryInto;
+use std::fs::File;
 use std::io::IoSlice;
 use std::io::IoSliceMut;
+use std::io::Read;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use mesa3d_util::MemoryMapping;
 use mesa3d_util::MesaError;
@@ -64,6 +68,8 @@ use crate::RutabagaPaths;
 
 const RUTABAGA_DEFAULT_WIDTH: u32 = 1280;
 const RUTABAGA_DEFAULT_HEIGHT: u32 = 1024;
+
+pub type ExportTable = Arc<Mutex<Map<(u64, u64), File>>>;
 
 /// Information required for 2D functionality.
 #[derive(Clone, Deserialize, Serialize)]
@@ -1268,6 +1274,7 @@ pub struct RutabagaBuilder {
     debug_handler: Option<RutabagaDebugHandler>,
     renderer_features: Option<String>,
     server_descriptor: Option<OwnedDescriptor>,
+    export_table: Option<ExportTable>,
 }
 
 impl RutabagaBuilder {
@@ -1289,6 +1296,7 @@ impl RutabagaBuilder {
             debug_handler: None,
             renderer_features: None,
             server_descriptor: None,
+            export_table: None,
         }
     }
 
@@ -1390,6 +1398,12 @@ impl RutabagaBuilder {
         server_descriptor: Option<OwnedDescriptor>,
     ) -> RutabagaBuilder {
         self.server_descriptor = server_descriptor;
+        self
+    }
+
+    /// Set export table for the RutabagaBuilder
+    pub fn set_export_table(mut self, export_table: ExportTable) -> RutabagaBuilder {
+        self.export_table = Some(export_table);
         self
     }
 
@@ -1507,7 +1521,11 @@ impl RutabagaBuilder {
                 rutabaga_components.insert(RutabagaComponentType::Magma, magma);
             }
 
-            let cross_domain = CrossDomain::init(self.paths.clone(), self.fence_handler.clone())?;
+            let cross_domain = CrossDomain::init(
+                self.paths.clone(),
+                self.fence_handler.clone(),
+                self.export_table.take(),
+            )?;
             rutabaga_components.insert(RutabagaComponentType::CrossDomain, cross_domain);
             push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
         }
