@@ -5,11 +5,14 @@
 //! The cross-domain component type, specialized for allocating and sharing resources across domain
 //! boundaries.
 
+use log::info;
 use std::cmp::max;
 use std::collections::BTreeMap as Map;
 use std::collections::VecDeque;
 use std::convert::TryInto;
+use std::fs::read_link;
 use std::mem::size_of;
+use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::Mutex;
@@ -30,6 +33,7 @@ use mesa3d_util::TubeType;
 use mesa3d_util::WaitContext;
 use mesa3d_util::WaitTimeout;
 use mesa3d_util::WritePipe;
+use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
 use zerocopy::FromBytes;
 use zerocopy::Immutable;
@@ -75,7 +79,8 @@ const CROSS_DOMAIN_MAX_SEND_RECV_SIZE: usize =
 
 enum CrossDomainItem {
     ImageRequirements(ImageMemoryRequirements),
-    WaylandKeymap(OwnedDescriptor),
+    ShmBlob(OwnedDescriptor),
+    DmaBuf(OwnedDescriptor),
     WaylandReadPipe(ReadPipe),
     WaylandWritePipe(WritePipe),
 }
@@ -351,10 +356,28 @@ impl CrossDomainWorker {
                         descriptor_analysis(&mut file, identifier_type, identifier_size)?;
 
                         *identifier = match *identifier_type {
-                            CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB => add_item(
-                                &self.item_state,
-                                CrossDomainItem::WaylandKeymap(file.into()),
-                            ),
+                            CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB => {
+                                let fd_path =
+                                    read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))
+                                        .unwrap();
+                                if fd_path.starts_with("/dmabuf:") {
+                                    add_item(&self.item_state, CrossDomainItem::DmaBuf(file.into()))
+                                } else if fd_path.starts_with("/memfd:") {
+                                    add_item(
+                                        &self.item_state,
+                                        CrossDomainItem::ShmBlob(file.into()),
+                                    )
+                                } else {
+                                    info!(
+                                        "Unknown fd item path {:?}, treating as a shmem blob",
+                                        fd_path
+                                    );
+                                    add_item(
+                                        &self.item_state,
+                                        CrossDomainItem::ShmBlob(file.into()),
+                                    )
+                                }
+                            }
                             CROSS_DOMAIN_ID_TYPE_WRITE_PIPE => {
                                 add_item(&self.item_state, CrossDomainItem::WaylandWritePipe(file))
                             }
@@ -853,7 +876,7 @@ impl RutabagaContext for CrossDomainContext {
 
         // Items that are removed from the table after one usage.
         match item {
-            CrossDomainItem::WaylandKeymap(descriptor) => {
+            CrossDomainItem::ShmBlob(descriptor) => {
                 let hnd = MesaHandle {
                     os_handle: descriptor,
                     handle_type: MESA_HANDLE_TYPE_MEM_SHM,
@@ -874,6 +897,30 @@ impl RutabagaContext for CrossDomainContext {
                     size: resource_create_blob.size,
                     mapping: None,
                     guest_cpu_mappable: false,
+                })
+            }
+            CrossDomainItem::DmaBuf(descriptor) => {
+                let hnd = MesaHandle {
+                    os_handle: descriptor,
+                    handle_type: MESA_HANDLE_TYPE_MEM_DMABUF,
+                };
+
+                Ok(RutabagaResource {
+                    resource_id,
+                    handle: Some(Arc::new(hnd)),
+                    blob: true,
+                    blob_mem: resource_create_blob.blob_mem,
+                    blob_flags: resource_create_blob.blob_flags,
+                    map_info: Some(RUTABAGA_MAP_CACHE_CACHED | RUTABAGA_MAP_ACCESS_RW),
+                    #[cfg(target_os = "macos")]
+                    map_ptr: None,
+                    info_2d: None,
+                    info_3d: None,
+                    vulkan_info: None,
+                    backing_iovecs: None,
+                    component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+                    size: resource_create_blob.size,
+                    mapping: None,
                 })
             }
             _ => Err(RutabagaError::InvalidCrossDomainItemType),
