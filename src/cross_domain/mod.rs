@@ -30,6 +30,7 @@ use mesa3d_util::TubeType;
 use mesa3d_util::WaitContext;
 use mesa3d_util::WaitTimeout;
 use mesa3d_util::WritePipe;
+use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
 use zerocopy::FromBytes;
 use zerocopy::Immutable;
@@ -74,7 +75,7 @@ const CROSS_DOMAIN_MAX_SEND_RECV_SIZE: usize =
 
 enum CrossDomainItem {
     ImageRequirements(ImageMemoryRequirements),
-    WaylandKeymap(OwnedDescriptor),
+    Blob(MesaHandle),
     WaylandReadPipe(ReadPipe),
     WaylandWritePipe(WritePipe),
 }
@@ -353,13 +354,15 @@ impl CrossDomainWorker {
                             .determine_type()
                             .map_err(|e| RutabagaError::MesaError(e.into()))?;
                         match desc_type {
-                            DescriptorType::Memory(size) => {
+                            DescriptorType::Memory(size, handle_type) => {
                                 *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
                                 *identifier_size = size;
-                                *identifier = add_item(
-                                    &self.item_state,
-                                    CrossDomainItem::WaylandKeymap(file.into()),
-                                );
+
+                                let mesa_handle = MesaHandle {
+                                    os_handle: file,
+                                    handle_type,
+                                };
+                                *identifier = add_item(&self.item_state, CrossDomainItem::Blob(mesa_handle));
                             }
                             DescriptorType::WritePipe => {
                                 *identifier_type = CROSS_DOMAIN_ID_TYPE_WRITE_PIPE;
@@ -861,11 +864,16 @@ impl RutabagaContext for CrossDomainContext {
 
         // Items that are removed from the table after one usage.
         match item {
-            CrossDomainItem::WaylandKeymap(descriptor) => {
-                let hnd = MesaHandle {
-                    os_handle: descriptor,
-                    handle_type: MESA_HANDLE_TYPE_MEM_SHM,
+            CrossDomainItem::Blob(hnd) => {
+                let map_access = if hnd.handle_type == MESA_HANDLE_TYPE_MEM_SHM {
+                    RUTABAGA_MAP_ACCESS_READ
+                } else if hnd.handle_type == MESA_HANDLE_TYPE_MEM_DMABUF {
+                    RUTABAGA_MAP_ACCESS_RW
+                } else {
+                    // Default to READ for unknown types
+                    RUTABAGA_MAP_ACCESS_READ
                 };
+                let map_info = Some(RUTABAGA_MAP_CACHE_CACHED | map_access);
 
                 Ok(RutabagaResource {
                     resource_id,
@@ -873,7 +881,7 @@ impl RutabagaContext for CrossDomainContext {
                     blob: true,
                     blob_mem: resource_create_blob.blob_mem,
                     blob_flags: resource_create_blob.blob_flags,
-                    map_info: Some(RUTABAGA_MAP_CACHE_CACHED | RUTABAGA_MAP_ACCESS_READ),
+                    map_info,
                     info_2d: None,
                     info_3d: None,
                     vulkan_info: None,
