@@ -1,0 +1,37 @@
+[package]
+name = "mesa3d_magma"
+version = "0.1.6"
+authors = ["Mesa3D Authors"]
+edition = "2021"
+description = "This is a GPU system call abstraction crate"
+license = "MIT"
+
+[lib]
+name = "mesa3d_magma"
+path = "lib.rs"
+
+[dependencies]
+mesa3d_util = {path = "../util/rust", version = "0.1.6"}
+mesa3d_protocols = {path = "../virtio/protocols", version = "0.1.6"}
+virtgpu_kumquat = {path = "../virtio/virtgpu_kumquat", version = "0.1.6"}
+cfg-if = "1.0.0"
+libc = "0.2.116"
+remain = "0.2"
+thiserror = "2.0.6"
+zerocopy = { version = "0.8.13", features = ["derive"] }
+log = "0.4.22"
+
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
+rustix = { version = "1.0.7", features = ["event", "fs", "mm", "net", "param", "pipe"] }
+
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.61.1"
+features = [
+    "Win32_Foundation",
+    "Wdk_Graphics_Direct3D"
+]
+
+[build-dependencies.bindgen]
+version = "^0.68.1"
+features = ["runtime"]
+default-features = false
