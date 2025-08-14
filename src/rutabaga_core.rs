@@ -22,6 +22,7 @@ use serde::Serialize;
 use crate::cross_domain::CrossDomain;
 #[cfg(feature = "gfxstream")]
 use crate::gfxstream::Gfxstream;
+use crate::magma::MagmaVirtioGpu;
 use crate::rutabaga_2d::Rutabaga2D;
 use crate::rutabaga_utils::GfxstreamFlags;
 use crate::rutabaga_utils::Resource3DInfo;
@@ -46,8 +47,8 @@ use crate::rutabaga_utils::RUTABAGA_CAPSET_CROSS_DOMAIN;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_DRM;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_GFXSTREAM_COMPOSER;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_GFXSTREAM_GLES;
-use crate::rutabaga_utils::RUTABAGA_CAPSET_GFXSTREAM_MAGMA;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_GFXSTREAM_VULKAN;
+use crate::rutabaga_utils::RUTABAGA_CAPSET_MAGMA;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VENUS;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VIRGL;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VIRGL2;
@@ -447,9 +448,9 @@ const RUTABAGA_CAPSETS: [RutabagaCapsetInfo; 9] = [
         name: "drm",
     },
     RutabagaCapsetInfo {
-        capset_id: RUTABAGA_CAPSET_GFXSTREAM_MAGMA,
-        component: RutabagaComponentType::Gfxstream,
-        name: "gfxstream-magma",
+        capset_id: RUTABAGA_CAPSET_MAGMA,
+        component: RutabagaComponentType::Magma,
+        name: "magma",
     },
     RutabagaCapsetInfo {
         capset_id: RUTABAGA_CAPSET_GFXSTREAM_GLES,
@@ -1381,7 +1382,6 @@ impl RutabagaBuilder {
 
         if self.capset_mask != 0 {
             let supports_gfxstream = capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_VULKAN)
-                | capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_MAGMA)
                 | capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_GLES)
                 | capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_COMPOSER);
             let supports_virglrenderer = capset_enabled(RUTABAGA_CAPSET_VIRGL2)
@@ -1452,9 +1452,13 @@ impl RutabagaBuilder {
                 rutabaga_components.insert(RutabagaComponentType::Gfxstream, gfxstream);
 
                 push_capset(RUTABAGA_CAPSET_GFXSTREAM_VULKAN);
-                push_capset(RUTABAGA_CAPSET_GFXSTREAM_MAGMA);
                 push_capset(RUTABAGA_CAPSET_GFXSTREAM_GLES);
                 push_capset(RUTABAGA_CAPSET_GFXSTREAM_COMPOSER);
+            }
+
+            if capset_enabled(RUTABAGA_CAPSET_MAGMA) {
+                let magma = MagmaVirtioGpu::init(fence_handler.clone())?;
+                rutabaga_components.insert(RutabagaComponentType::Magma, magma);
             }
 
             let cross_domain = CrossDomain::init(self.channels, fence_handler.clone())?;
