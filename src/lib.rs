@@ -10,6 +10,7 @@ mod cross_domain;
 mod generated;
 mod gfxstream;
 mod gfxstream_stub;
+mod magma;
 #[macro_use]
 mod macros;
 #[cfg(any(feature = "gfxstream", feature = "virgl_renderer"))]
