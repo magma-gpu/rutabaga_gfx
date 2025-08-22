@@ -1,2 +1,4 @@
 /target
+third_party/mesa3d/src/util/rust/target
+third_party/mesa3d/src/virtio/protocols/target/
 Cargo.lock
