@@ -1,0 +1,21 @@
+[package]
+name = "mesa3d_protocols"
+version = "0.1.7"
+authors = ["Mesa3D authors"]
+edition = "2021"
+description = "Rust protocols from Mesa3D project"
+license = "MIT"
+
+[lib]
+name = "mesa3d_protocols"
+path = "lib.rs"
+
+[dependencies]
+mesa3d_util = {path = "../../util/rust", version = "0.1.71"}
+zerocopy = { version = "0.8.13", features = ["derive"] }
+
+[profile.dev]
+lto = true
+incremental = false
+
+[workspace]
