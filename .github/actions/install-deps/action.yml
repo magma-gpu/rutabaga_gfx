@@ -1,0 +1,19 @@
+name: 'Install Dependencies'
+description: 'Installs toolchain dependencies'
+runs:
+  using: "composite"
+  steps:
+    - run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          clang \
+          clang-tidy \
+          libncurses-dev \
+          build-essential \
+          meson \
+          ninja-build \
+          pkg-config \
+          libx11-dev \
+          libdrm-dev \
+          libepoxy-dev
+      shell: bash
