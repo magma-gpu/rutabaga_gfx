@@ -13,7 +13,8 @@ use crate::rutabaga_gralloc::formats::canonical_image_requirements;
 use crate::rutabaga_gralloc::gralloc::Gralloc;
 use crate::rutabaga_gralloc::gralloc::ImageAllocationInfo;
 use crate::rutabaga_gralloc::gralloc::ImageMemoryRequirements;
-use crate::rutabaga_utils::*;
+use crate::rutabaga_utils::RutabagaResult;
+use crate::rutabaga_utils::RUTABAGA_MAP_CACHE_CACHED;
 
 /// A gralloc implementation capable of allocation from system memory.
 pub struct SystemGralloc(());
