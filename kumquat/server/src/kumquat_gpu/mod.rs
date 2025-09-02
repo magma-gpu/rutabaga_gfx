@@ -51,9 +51,9 @@ const SNAPSHOT_DIR: &str = "/tmp/";
 #[non_exhaustive]
 #[derive(Error, Debug)]
 pub enum KumquatGpuError {
-    #[error("rutabaga component failed with error {0}")]
+    #[error("Mesa Error {0}")]
     MesaError(MesaError),
-    #[error("Rutabaga error {0}")]
+    #[error("Rutabaga Error {0}")]
     RutabagaError(RutabagaError),
 }
 
@@ -122,6 +122,10 @@ pub struct KumquatGpu {
 impl KumquatGpu {
     pub fn new(capset_names: String, renderer_features: String) -> KumquatGpuResult<KumquatGpu> {
         let capset_mask = calculate_capset_mask(capset_names.as_str().split(":"));
+        if capset_mask == 0 {
+            return Err(MesaError::Unsupported.into());
+        }
+
         let fence_state = Arc::new(Mutex::new(FenceData {
             pending_fences: Default::default(),
         }));
