@@ -30,6 +30,7 @@ pub fn ret_to_res(ret: i32) -> RutabagaResult<()> {
 }
 
 pub struct RutabagaCookie {
+    #[allow(dead_code)]
     pub render_server_fd: Option<OwnedDescriptor>,
     pub fence_handler: Option<RutabagaFenceHandler>,
     pub debug_handler: Option<RutabagaDebugHandler>,

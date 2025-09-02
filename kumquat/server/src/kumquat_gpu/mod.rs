@@ -99,7 +99,7 @@ pub type FenceState = Arc<Mutex<FenceData>>;
 pub fn create_fence_handler(fence_state: FenceState) -> RutabagaFenceHandler {
     RutabagaFenceHandler::new(move |completed_fence: RutabagaFence| {
         let mut state = fence_state.lock().unwrap();
-        match (*state).pending_fences.entry(completed_fence.fence_id) {
+        match state.pending_fences.entry(completed_fence.fence_id) {
             Entry::Occupied(o) => {
                 let (_, mut event) = o.remove_entry();
                 event.signal().unwrap();
@@ -150,7 +150,7 @@ impl KumquatGpu {
     }
 
     pub fn allocate_id(&mut self) -> u32 {
-        self.id_allocator = self.id_allocator + 1;
+        self.id_allocator += 1;
         self.id_allocator
     }
 }
@@ -246,7 +246,7 @@ impl KumquatGpuConnection {
                         .ok_or(RutabagaError::InvalidResourceId)?;
 
                     resource.attached_contexts.remove(&cmd.ctx_id);
-                    if resource.attached_contexts.len() == 0 {
+                    if resource.attached_contexts.is_empty() {
                         if resource.mapping.is_some() {
                             kumquat_gpu.rutabaga.detach_backing(cmd.resource_id)?;
                         }
@@ -396,7 +396,7 @@ impl KumquatGpuConnection {
 
                             fence_descriptor_opt = Some(emulated_fence);
                             let mut fence_state = kumquat_gpu.fence_state.lock().unwrap();
-                            (*fence_state).pending_fences.insert(fence_id, event);
+                            fence_state.pending_fences.insert(fence_id, event);
                         }
 
                         kumquat_gpu.rutabaga.create_fence(fence)?;
@@ -484,7 +484,7 @@ impl KumquatGpuConnection {
                         .context_attach_resource(cmd.ctx_id, resource_id)?;
                 }
                 KumquatGpuProtocol::SnapshotSave => {
-                    kumquat_gpu.rutabaga.snapshot(&Path::new(SNAPSHOT_DIR))?;
+                    kumquat_gpu.rutabaga.snapshot(Path::new(SNAPSHOT_DIR))?;
 
                     let resp = kumquat_gpu_protocol_ctrl_hdr {
                         type_: KUMQUAT_GPU_PROTOCOL_RESP_OK_SNAPSHOT,
@@ -494,7 +494,7 @@ impl KumquatGpuConnection {
                     self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::SnapshotRestore => {
-                    kumquat_gpu.rutabaga.restore(&Path::new(SNAPSHOT_DIR))?;
+                    kumquat_gpu.rutabaga.restore(Path::new(SNAPSHOT_DIR))?;
 
                     let resp = kumquat_gpu_protocol_ctrl_hdr {
                         type_: KUMQUAT_GPU_PROTOCOL_RESP_OK_SNAPSHOT,
