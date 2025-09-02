@@ -20,9 +20,3 @@ minigbm = ["rutabaga_gfx/minigbm"]
 gfxstream = ["rutabaga_gfx/gfxstream"]
 virgl_renderer = ["rutabaga_gfx/virgl_renderer"]
 vulkano = ["rutabaga_gfx/vulkano"]
-
-[profile.dev]
-lto = true
-incremental = false
-
-[workspace]

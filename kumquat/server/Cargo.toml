@@ -22,9 +22,3 @@ log = "0.4"
 remain = "0.2"
 thiserror = "1.0.23"
 clap = { version = "4.1.8", features = ["derive"] }
-
-[profile.dev]
-lto = true
-incremental = false
-
-[workspace]

@@ -14,8 +14,3 @@ path = "lib.rs"
 mesa3d_util = {path = "../../util/rust", version = "0.1.71"}
 zerocopy = { version = "0.8.13", features = ["derive"] }
 
-[profile.dev]
-lto = true
-incremental = false
-
-[workspace]
