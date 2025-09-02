@@ -18,7 +18,7 @@ use crate::kumquat_gpu::KumquatGpuResult;
 
 enum KumquatConnection {
     GpuListener,
-    GpuConnection(KumquatGpuConnection),
+    GpuConnection(Box<KumquatGpuConnection>),
 }
 
 pub struct Kumquat {
@@ -49,7 +49,7 @@ impl Kumquat {
                                 )?;
                                 self.connections.insert(
                                     self.connection_id,
-                                    KumquatConnection::GpuConnection(new_gpu_conn),
+                                    KumquatConnection::GpuConnection(Box::new(new_gpu_conn)),
                                 );
                             }
                         }

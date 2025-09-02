@@ -424,6 +424,8 @@ pub extern "C" fn rutabaga_resource_create_3d(
     .unwrap_or(-ESRCH)
 }
 
+/// # Safety
+/// - Caller must ensure `ptr, `import_handle` and `import_data` are all valid pointers.
 #[no_mangle]
 pub unsafe extern "C" fn rutabaga_resource_import(
     ptr: &mut rutabaga,

@@ -38,7 +38,7 @@ fn main() -> KumquatGpuResult<()> {
 
     let mut kumquat = KumquatBuilder::new()
         .set_capset_names(args.capset_names)
-        .set_gpu_socket((!args.gpu_socket_path.is_empty()).then(|| args.gpu_socket_path))
+        .set_gpu_socket((!args.gpu_socket_path.is_empty()).then_some(args.gpu_socket_path))
         .set_renderer_features(args.renderer_features)
         .build()?;
 
