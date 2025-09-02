@@ -40,11 +40,26 @@ use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
 
 use crate::generated::virgl_renderer_bindings::*;
-use crate::renderer_utils::*;
+use crate::renderer_utils::ret_to_res;
+use crate::renderer_utils::RutabagaCookie;
+use crate::renderer_utils::VirglBox;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
 use crate::rutabaga_core::RutabagaResource;
-use crate::rutabaga_utils::*;
+use crate::rutabaga_utils::Resource3DInfo;
+use crate::rutabaga_utils::ResourceCreate3D;
+use crate::rutabaga_utils::ResourceCreateBlob;
+use crate::rutabaga_utils::RutabagaComponentType;
+use crate::rutabaga_utils::RutabagaError;
+use crate::rutabaga_utils::RutabagaFence;
+use crate::rutabaga_utils::RutabagaFenceHandler;
+use crate::rutabaga_utils::RutabagaIovec;
+use crate::rutabaga_utils::RutabagaResult;
+use crate::rutabaga_utils::Transfer3D;
+use crate::rutabaga_utils::VirglRendererFlags;
+use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE;
+use crate::rutabaga_utils::RUTABAGA_FLAG_INFO_RING_IDX;
+use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 
 type Query = virgl_renderer_export_query;
 

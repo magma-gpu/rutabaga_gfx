@@ -19,7 +19,6 @@ use vulkano::memory::MemoryAllocateInfo;
 use vulkano::memory::MemoryImportInfo;
 
 use crate::rutabaga_gralloc::vulkano_gralloc::VulkanoGralloc;
-use crate::RutabagaError;
 use crate::RutabagaResult;
 
 impl VulkanoGralloc {

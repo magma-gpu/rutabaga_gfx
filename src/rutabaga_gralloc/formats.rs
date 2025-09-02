@@ -15,7 +15,8 @@ use vulkano::image::ImageAspect as VulkanImageAspect;
 use crate::checked_arithmetic;
 use crate::rutabaga_gralloc::gralloc::ImageAllocationInfo;
 use crate::rutabaga_gralloc::gralloc::ImageMemoryRequirements;
-use crate::rutabaga_utils::*;
+use crate::rutabaga_utils::RutabagaError;
+use crate::rutabaga_utils::RutabagaResult;
 
 /*
  * This list is based on Sommelier / cros_gralloc guest userspace.  Formats that are never

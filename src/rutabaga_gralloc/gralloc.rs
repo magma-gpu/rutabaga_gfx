@@ -20,7 +20,9 @@ use crate::rutabaga_gralloc::minigbm::MinigbmDevice;
 use crate::rutabaga_gralloc::system_gralloc::SystemGralloc;
 #[cfg(feature = "vulkano")]
 use crate::rutabaga_gralloc::vulkano_gralloc::VulkanoGralloc;
-use crate::rutabaga_utils::*;
+use crate::rutabaga_utils::RutabagaError;
+use crate::rutabaga_utils::RutabagaResult;
+use crate::rutabaga_utils::VulkanInfo;
 
 const RUTABAGA_GRALLOC_BACKEND_SYSTEM: u32 = 1 << 0;
 const RUTABAGA_GRALLOC_BACKEND_GBM: u32 = 1 << 1;
