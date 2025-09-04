@@ -1,6 +1,13 @@
-# Rutabaga Virtual Graphics Interface
+<div align="center">
+  <img src="https://github.com/magma-gpu/rutabaga_gfx/raw/main/images/rutabaga_gfx_logo.png" alt="" width=320>
+  <p><strong>The Rutabaga Virtual Graphics Interface (VGI): Cross-platform, Rust-based GPU paravirtualization</strong></p>
 
-![rutabaga diagram](images/rutabaga_gfx_logo.png)
+[![License](https://img.shields.io/github/license/magma-gpu/rutabaga_gfx)](https://github.com/magma-gpu/rutabaga_gfx/blob/main/LICENSE)
+[![Crates.io](https://img.shields.io/crates/d/rutabaga_gfx.svg)](https://crates.io/crates/rutabaga_gfx)
+[![rustc 1.81.0](https://img.shields.io/badge/rust-1.81%2B-orange.svg)](https://img.shields.io/badge/rust-1.81%2B-orange.svg)
+[![Documentation](https://docs.rs/rutabaga_gfx/badge.svg)](https://docs.rs/rutabaga_gfx)
+
+</div>
 
 The Rutabaga Virtual Graphics Interface (VGI) is a cross-platform abstraction for GPU and display
 virtualization. The virtio-gpu
@@ -8,7 +15,7 @@ virtualization. The virtio-gpu
 commands between various Rust, C++, and C implementations. The diagram below does not exhaustively
 depict all available context types.
 
-![rutabaga diagram](images/rutabaga_gfx.png)
+![rutabaga diagram](https://github.com/magma-gpu/rutabaga_gfx/raw/main/images/rutabaga_gfx.png)
 
 ## Rust API
 
@@ -136,9 +143,9 @@ remoting and microkernels. This takes direct inspiration from the
 design, the library interface and protocol are OS-agnostic. An OS-specific virtgpu implementation
 handles paravirtualization.
 
-Follow along with [Mesa MR](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/33190) to see
+Follow along with the [Mesa MR](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/33190) to see
 if it works or we fall flat on our face.
 
 <!-- Image from Mesa MR -->
 
-![magma diagram](images/magma.png)
+![magma diagram](https://github.com/magma-gpu/rutabaga_gfx/raw/main/images/magma.png)
