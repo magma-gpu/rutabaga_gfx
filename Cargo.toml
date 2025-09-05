@@ -13,7 +13,7 @@ version = "0.1.61"
 authors = ["The ChromiumOS Authors + Android Open Source Project"]
 edition = "2021"
 description = "Handling virtio-gpu protocols"
-license-file = "LICENSE"
+license = "BSD-3-Clause"
 
 [features]
 gfxstream = []
