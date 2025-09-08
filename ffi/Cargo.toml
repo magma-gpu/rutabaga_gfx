@@ -16,7 +16,6 @@ libc = "0.2.93"
 log = "0.4"
 
 [features]
-minigbm = ["rutabaga_gfx/minigbm"]
+gbm = ["rutabaga_gfx/gbm"]
 gfxstream = ["rutabaga_gfx/gfxstream"]
-virgl_renderer = ["rutabaga_gfx/virgl_renderer"]
 vulkano = ["rutabaga_gfx/vulkano"]

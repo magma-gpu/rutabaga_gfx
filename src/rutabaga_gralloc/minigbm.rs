@@ -6,7 +6,7 @@
 //!
 //! External code found at <https://chromium.googlesource.com/chromiumos/platform/minigbm>.
 
-#![cfg(feature = "minigbm")]
+#![cfg(feature = "gbm")]
 
 use std::fs::File;
 use std::io::Error;

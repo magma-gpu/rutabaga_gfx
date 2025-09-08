@@ -5,7 +5,7 @@
 // Generated with bindgen --default-enum-style=rust --allowlist-function='gbm_.*'
 // --allowlist-type='gbm_.*' minigbm/gbm.h Then modified manually
 
-#![cfg(feature = "minigbm")]
+#![cfg(feature = "gbm")]
 /* Added below line manually */
 #![allow(dead_code, non_camel_case_types)]
 
