@@ -108,7 +108,7 @@ jobs:
           sudo ninja -C build install
       - name: Build Project
         run: >
-          cargo build --package rutabaga_gfx --features=virgl_renderer,minigbm
+          cargo build --package rutabaga_gfx --features=virgl_renderer,gbm
           --target=x86_64-unknown-linux-gnu
 
   build-linux-aarch64:

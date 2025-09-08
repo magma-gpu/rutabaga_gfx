@@ -19,7 +19,7 @@ license = "BSD-3-Clause"
 gfxstream = []
 gfxstream_stub = []
 virgl_renderer = []
-minigbm = []
+gbm = []
 # Vulkano features are just a prototype and not integrated yet into the ChromeOS build system.
 vulkano = ["dep:vulkano"]
 x = []

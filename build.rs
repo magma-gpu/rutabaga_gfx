@@ -8,7 +8,7 @@ use pkg_config::Error;
 
 pub type PkgConfigResult<T> = std::result::Result<T, Error>;
 
-fn minigbm() -> PkgConfigResult<()> {
+fn gbm() -> PkgConfigResult<()> {
     pkg_config::probe_library("gbm")?;
     Ok(())
 }
@@ -93,8 +93,8 @@ fn main() -> PkgConfigResult<()> {
         use_fence_passing_option1 = false;
     }
 
-    if env::var("CARGO_FEATURE_MINIGBM").is_ok() {
-        minigbm()?;
+    if env::var("CARGO_FEATURE_GBM").is_ok() {
+        gbm()?;
     }
 
     if env::var("CARGO_FEATURE_GFXSTREAM").is_ok()
