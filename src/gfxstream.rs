@@ -620,6 +620,7 @@ impl RutabagaComponent for Gfxstream {
             component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
             size: 0,
             mapping: None,
+            guest_cpu_mappable: false,
         })
     }
 
@@ -679,6 +680,7 @@ impl RutabagaComponent for Gfxstream {
                 component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
                 size: 0,
                 mapping: None,
+                guest_cpu_mappable: false,
             }))
         }
     }
@@ -887,6 +889,7 @@ impl RutabagaComponent for Gfxstream {
             component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
             size: resource_create_blob.size,
             mapping: None,
+            guest_cpu_mappable: false,
         })
     }
 
