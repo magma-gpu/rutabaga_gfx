@@ -137,12 +137,12 @@ impl KumquatGpu {
             Some(renderer_features)
         };
 
-        let rutabaga = RutabagaBuilder::new(capset_mask)
+        let rutabaga = RutabagaBuilder::new(capset_mask, fence_handler)
             .set_use_external_blob(true)
             .set_use_egl(true)
             .set_wsi(RutabagaWsi::Surfaceless)
             .set_renderer_features(renderer_features_opt)
-            .build(fence_handler)?;
+            .build()?;
 
         Ok(KumquatGpu {
             rutabaga,

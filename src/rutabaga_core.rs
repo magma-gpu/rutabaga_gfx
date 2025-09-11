@@ -1217,6 +1217,7 @@ impl Rutabaga {
 
 /// Rutabaga Builder, following the Rust builder pattern.
 pub struct RutabagaBuilder {
+    fence_handler: RutabagaFenceHandler,
     display_width: u32,
     display_height: u32,
     default_component: RutabagaComponentType,
@@ -1231,12 +1232,13 @@ pub struct RutabagaBuilder {
 
 impl RutabagaBuilder {
     /// Create new a RutabagaBuilder.
-    pub fn new(capset_mask: u64) -> RutabagaBuilder {
+    pub fn new(capset_mask: u64, fence_handler: RutabagaFenceHandler) -> RutabagaBuilder {
         let virglrenderer_flags = VirglRendererFlags::new()
             .use_thread_sync(true)
             .use_async_fence_cb(true);
         let gfxstream_flags = GfxstreamFlags::new();
         RutabagaBuilder {
+            fence_handler,
             display_width: RUTABAGA_DEFAULT_WIDTH,
             display_height: RUTABAGA_DEFAULT_HEIGHT,
             default_component: RutabagaComponentType::NoneSelected,
@@ -1250,12 +1252,6 @@ impl RutabagaBuilder {
         }
     }
 
-    /// Set the default component for the RutabagaBuilder
-    pub fn set_default_component(mut self, component: RutabagaComponentType) -> RutabagaBuilder {
-        self.default_component = component;
-        self
-    }
-
     /// Set display width for the RutabagaBuilder
     pub fn set_display_width(mut self, display_width: u32) -> RutabagaBuilder {
         self.display_width = display_width;
@@ -1265,6 +1261,12 @@ impl RutabagaBuilder {
     /// Set display height for the RutabagaBuilder
     pub fn set_display_height(mut self, display_height: u32) -> RutabagaBuilder {
         self.display_height = display_height;
+        self
+    }
+
+    /// Set the default component for the RutabagaBuilder
+    pub fn set_default_component(mut self, component: RutabagaComponentType) -> RutabagaBuilder {
+        self.default_component = component;
         self
     }
 
@@ -1366,7 +1368,7 @@ impl RutabagaBuilder {
     /// This should be only called once per every virtual machine instance.  Rutabaga tries to
     /// intialize all 3D components which have been built. In 2D mode, only the 2D component is
     /// initialized.
-    pub fn build(mut self, fence_handler: RutabagaFenceHandler) -> RutabagaResult<Rutabaga> {
+    pub fn build(mut self) -> RutabagaResult<Rutabaga> {
         let mut rutabaga_components: Map<RutabagaComponentType, Box<dyn RutabagaComponent>> =
             Default::default();
 
@@ -1436,7 +1438,7 @@ impl RutabagaBuilder {
             if self.default_component == RutabagaComponentType::VirglRenderer {
                 if let Ok(virgl) = VirglRenderer::init(
                     self.virglrenderer_flags,
-                    fence_handler.clone(),
+                    self.fence_handler.clone(),
                     self.server_descriptor,
                 ) {
                     rutabaga_components.insert(RutabagaComponentType::VirglRenderer, virgl);
@@ -1458,7 +1460,7 @@ impl RutabagaBuilder {
                     self.display_height,
                     self.gfxstream_flags,
                     self.renderer_features,
-                    fence_handler.clone(),
+                    self.fence_handler.clone(),
                     self.debug_handler.clone(),
                 )?;
 
@@ -1470,17 +1472,17 @@ impl RutabagaBuilder {
             }
 
             if capset_enabled(RUTABAGA_CAPSET_MAGMA) {
-                let magma = MagmaVirtioGpu::init(fence_handler.clone())?;
+                let magma = MagmaVirtioGpu::init(self.fence_handler.clone())?;
                 rutabaga_components.insert(RutabagaComponentType::Magma, magma);
             }
 
-            let cross_domain = CrossDomain::init(self.channels, fence_handler.clone())?;
+            let cross_domain = CrossDomain::init(self.channels, self.fence_handler.clone())?;
             rutabaga_components.insert(RutabagaComponentType::CrossDomain, cross_domain);
             push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
         }
 
         if self.default_component == RutabagaComponentType::Rutabaga2D {
-            let rutabaga_2d = Rutabaga2D::init(fence_handler.clone())?;
+            let rutabaga_2d = Rutabaga2D::init(self.fence_handler.clone())?;
             rutabaga_components.insert(RutabagaComponentType::Rutabaga2D, rutabaga_2d);
         }
 
@@ -1492,7 +1494,7 @@ impl RutabagaBuilder {
             components: rutabaga_components,
             default_component: self.default_component,
             capset_info: rutabaga_capsets,
-            fence_handler,
+            fence_handler: self.fence_handler,
         })
     }
 }
@@ -1503,9 +1505,9 @@ mod tests {
     use std::fs;
 
     fn new_2d() -> Rutabaga {
-        RutabagaBuilder::new(0)
+        RutabagaBuilder::new(0, RutabagaHandler::new(|_| {}))
             .set_default_component(RutabagaComponentType::Rutabaga2D)
-            .build(RutabagaHandler::new(|_| {}))
+            .build()
             .unwrap()
     }
 
