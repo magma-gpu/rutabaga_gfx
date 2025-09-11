@@ -631,6 +631,7 @@ pub struct RutabagaChannel {
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub enum RutabagaComponentType {
+    NoneSelected,
     Rutabaga2D,
     VirglRenderer,
     Gfxstream,
@@ -641,11 +642,12 @@ pub enum RutabagaComponentType {
 impl RutabagaComponentType {
     pub fn as_str(&self) -> &'static str {
         match self {
-            RutabagaComponentType::CrossDomain => "crossdomain",
+            RutabagaComponentType::NoneSelected => "none_selected",
+            RutabagaComponentType::CrossDomain => "cross_domain",
             RutabagaComponentType::Gfxstream => "gfxstream",
             RutabagaComponentType::Magma => "magma",
-            RutabagaComponentType::Rutabaga2D => "rutabaga2d",
-            RutabagaComponentType::VirglRenderer => "virglrenderer",
+            RutabagaComponentType::Rutabaga2D => "rutabaga_2d",
+            RutabagaComponentType::VirglRenderer => "virgl_renderer",
         }
     }
 }
