@@ -1215,7 +1215,6 @@ impl Rutabaga {
 }
 
 /// Rutabaga Builder, following the Rust builder pattern.
-#[derive(Clone)]
 pub struct RutabagaBuilder {
     display_width: u32,
     display_height: u32,
@@ -1226,6 +1225,7 @@ pub struct RutabagaBuilder {
     channels: Option<Vec<RutabagaChannel>>,
     debug_handler: Option<RutabagaDebugHandler>,
     renderer_features: Option<String>,
+    server_descriptor: Option<OwnedDescriptor>,
 }
 
 impl RutabagaBuilder {
@@ -1245,6 +1245,7 @@ impl RutabagaBuilder {
             channels: None,
             debug_handler: None,
             renderer_features: None,
+            server_descriptor: None,
         }
     }
 
@@ -1344,16 +1345,21 @@ impl RutabagaBuilder {
         self
     }
 
+    /// Set server descriptor for the RutabagaBuilder
+    pub fn set_server_descriptor(
+        mut self,
+        server_descriptor: Option<OwnedDescriptor>,
+    ) -> RutabagaBuilder {
+        self.server_descriptor = server_descriptor;
+        self
+    }
+
     /// Builds Rutabaga and returns a handle to it.
     ///
     /// This should be only called once per every virtual machine instance.  Rutabaga tries to
     /// intialize all 3D components which have been built. In 2D mode, only the 2D component is
     /// initialized.
-    pub fn build(
-        mut self,
-        fence_handler: RutabagaFenceHandler,
-        #[allow(unused_variables)] rutabaga_server_descriptor: Option<OwnedDescriptor>,
-    ) -> RutabagaResult<Rutabaga> {
+    pub fn build(mut self, fence_handler: RutabagaFenceHandler) -> RutabagaResult<Rutabaga> {
         let mut rutabaga_components: Map<RutabagaComponentType, Box<dyn RutabagaComponent>> =
             Default::default();
 
@@ -1424,7 +1430,7 @@ impl RutabagaBuilder {
                 if let Ok(virgl) = VirglRenderer::init(
                     self.virglrenderer_flags,
                     fence_handler.clone(),
-                    rutabaga_server_descriptor,
+                    self.server_descriptor,
                 ) {
                     rutabaga_components.insert(RutabagaComponentType::VirglRenderer, virgl);
 
@@ -1491,7 +1497,7 @@ mod tests {
 
     fn new_2d() -> Rutabaga {
         RutabagaBuilder::new(RutabagaComponentType::Rutabaga2D, 0)
-            .build(RutabagaHandler::new(|_| {}), None)
+            .build(RutabagaHandler::new(|_| {}))
             .unwrap()
     }
 

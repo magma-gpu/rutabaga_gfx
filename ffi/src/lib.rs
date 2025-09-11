@@ -280,7 +280,7 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
             .set_debug_handler(debug_handler_opt)
             .set_rutabaga_channels(rutabaga_channels_opt)
             .set_renderer_features(renderer_features_opt)
-            .build(fence_handler, None);
+            .build(fence_handler);
 
         let rtbg = return_on_error!(result);
         *ptr = Box::into_raw(Box::new(rtbg)) as _;
