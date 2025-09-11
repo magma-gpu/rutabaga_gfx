@@ -143,7 +143,7 @@ impl KumquatGpu {
             .set_use_egl(true)
             .set_wsi(RutabagaWsi::Surfaceless)
             .set_renderer_features(renderer_features_opt)
-            .build(fence_handler, None)?;
+            .build(fence_handler)?;
 
         Ok(KumquatGpu {
             rutabaga,
