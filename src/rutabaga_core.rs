@@ -489,10 +489,11 @@ fn calculate_component(component_mask: u8) -> RutabagaResult<RutabagaComponentTy
     }
 
     match component_mask.trailing_zeros() {
-        0 => Ok(RutabagaComponentType::Rutabaga2D),
-        1 => Ok(RutabagaComponentType::VirglRenderer),
-        2 => Ok(RutabagaComponentType::Gfxstream),
-        3 => Ok(RutabagaComponentType::CrossDomain),
+        0 => Ok(RutabagaComponentType::NoneSelected),
+        1 => Ok(RutabagaComponentType::Rutabaga2D),
+        2 => Ok(RutabagaComponentType::VirglRenderer),
+        3 => Ok(RutabagaComponentType::Gfxstream),
+        4 => Ok(RutabagaComponentType::CrossDomain),
         _ => Err(RutabagaError::InvalidComponent),
     }
 }
@@ -1230,7 +1231,7 @@ pub struct RutabagaBuilder {
 
 impl RutabagaBuilder {
     /// Create new a RutabagaBuilder.
-    pub fn new(default_component: RutabagaComponentType, capset_mask: u64) -> RutabagaBuilder {
+    pub fn new(capset_mask: u64) -> RutabagaBuilder {
         let virglrenderer_flags = VirglRendererFlags::new()
             .use_thread_sync(true)
             .use_async_fence_cb(true);
@@ -1238,7 +1239,7 @@ impl RutabagaBuilder {
         RutabagaBuilder {
             display_width: RUTABAGA_DEFAULT_WIDTH,
             display_height: RUTABAGA_DEFAULT_HEIGHT,
-            default_component,
+            default_component: RutabagaComponentType::NoneSelected,
             gfxstream_flags,
             virglrenderer_flags,
             capset_mask,
@@ -1247,6 +1248,12 @@ impl RutabagaBuilder {
             renderer_features: None,
             server_descriptor: None,
         }
+    }
+
+    /// Set the default component for the RutabagaBuilder
+    pub fn set_default_component(mut self, component: RutabagaComponentType) -> RutabagaBuilder {
+        self.default_component = component;
+        self
     }
 
     /// Set display width for the RutabagaBuilder
@@ -1496,7 +1503,8 @@ mod tests {
     use std::fs;
 
     fn new_2d() -> Rutabaga {
-        RutabagaBuilder::new(RutabagaComponentType::Rutabaga2D, 0)
+        RutabagaBuilder::new(0)
+            .set_default_component(RutabagaComponentType::Rutabaga2D)
             .build(RutabagaHandler::new(|_| {}))
             .unwrap()
     }
