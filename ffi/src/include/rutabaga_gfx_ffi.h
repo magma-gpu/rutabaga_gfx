@@ -156,7 +156,6 @@ struct rutabaga_import_data {
         uint32_t strides[4];
         uint32_t offsets[4];
         uint64_t modifier;
-        bool guest_cpu_mappable;
     } info_3d;
 };
 

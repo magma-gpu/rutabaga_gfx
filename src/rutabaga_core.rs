@@ -94,6 +94,7 @@ pub struct RutabagaResource {
     pub component_mask: u8,
     pub size: u64,
     pub mapping: Option<MemoryMapping>,
+    pub guest_cpu_mappable: bool,
 }
 
 /// The preserved fields of `RutabagaResource` that are saved and loaded across snapshot and
@@ -170,6 +171,7 @@ impl TryFrom<RutabagaResourceSnapshot> for RutabagaResource {
             size: snapshot.size,
             component_mask: snapshot.component_mask,
             mapping: None,
+            guest_cpu_mappable: false,
         })
     }
 }
@@ -234,6 +236,7 @@ pub trait RutabagaComponent {
             component_mask: 0,
             size: 0,
             mapping: None,
+            guest_cpu_mappable: false,
         })
     }
 
@@ -1054,6 +1057,16 @@ impl Rutabaga {
         resource
             .info_3d
             .ok_or(MesaError::WithContext("no 3d info available").into())
+    }
+
+    /// Returns true if the resource is mappable by the guest CPU.
+    pub fn guest_cpu_mappable(&self, resource_id: u32) -> RutabagaResult<bool> {
+        let resource = self
+            .resources
+            .get(&resource_id)
+            .ok_or(RutabagaError::InvalidResourceId)?;
+
+        Ok(resource.guest_cpu_mappable)
     }
 
     /// Exports a blob resource.  See virtio-gpu spec for blob flag use flags.

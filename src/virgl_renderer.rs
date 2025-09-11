@@ -422,7 +422,6 @@ impl VirglRenderer {
             strides: query.out_strides,
             offsets: query.out_offsets,
             modifier: query.out_modifier,
-            guest_cpu_mappable: false,
         })
     }
 
@@ -595,7 +594,6 @@ impl RutabagaComponent for VirglRenderer {
                         strides: [info_ext.base.stride, 0, 0, 0], // Assuming single plane
                         offsets: [0, 0, 0, 0],                    // Assuming single plane
                         modifier: info_ext.modifiers,
-                        guest_cpu_mappable: false,
                     });
                 }
             }
@@ -615,6 +613,7 @@ impl RutabagaComponent for VirglRenderer {
             component_mask: 1 << (RutabagaComponentType::VirglRenderer as u8),
             size: 0,
             mapping: None,
+            guest_cpu_mappable: false,
         })
     }
 
@@ -795,6 +794,7 @@ impl RutabagaComponent for VirglRenderer {
             component_mask: 1 << (RutabagaComponentType::VirglRenderer as u8),
             size: resource_create_blob.size,
             mapping: None,
+            guest_cpu_mappable: false,
         })
     }
 
