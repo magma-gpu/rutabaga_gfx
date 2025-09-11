@@ -1487,6 +1487,7 @@ impl RutabagaBuilder {
 #[cfg(test)]
 mod tests {
     use crate::*;
+    use std::fs;
 
     fn new_2d() -> Rutabaga {
         RutabagaBuilder::new(RutabagaComponentType::Rutabaga2D, 0)
@@ -1496,18 +1497,25 @@ mod tests {
 
     #[test]
     fn snapshot_restore_2d_no_resources() {
-        let snapshot_dir = tempfile::tempdir().unwrap();
+        let mut snapshot_dir = std::env::temp_dir();
+        snapshot_dir.push(format!("rutabaga_snapshot"));
+
+        fs::create_dir(&snapshot_dir).unwrap();
 
         let rutabaga1 = new_2d();
-        rutabaga1.snapshot(snapshot_dir.path()).unwrap();
+        rutabaga1.snapshot(snapshot_dir.as_path()).unwrap();
 
         let mut rutabaga1 = new_2d();
-        rutabaga1.restore(snapshot_dir.path()).unwrap();
+        rutabaga1.restore(snapshot_dir.as_path()).unwrap();
+
+        fs::remove_dir_all(&snapshot_dir).unwrap();
     }
 
     #[test]
     fn snapshot_restore_2d_one_resource() {
-        let snapshot_dir = tempfile::tempdir().unwrap();
+        let mut snapshot_dir = std::env::temp_dir();
+        snapshot_dir.push(format!("rutabaga_snapshot2"));
+        fs::create_dir(&snapshot_dir).unwrap();
 
         let resource_id = 123;
         let resource_create_3d = ResourceCreate3D {
@@ -1536,10 +1544,10 @@ mod tests {
                 }],
             )
             .unwrap();
-        rutabaga1.snapshot(snapshot_dir.path()).unwrap();
+        rutabaga1.snapshot(snapshot_dir.as_path()).unwrap();
 
         let mut rutabaga2 = new_2d();
-        rutabaga2.restore(snapshot_dir.path()).unwrap();
+        rutabaga2.restore(snapshot_dir.as_path()).unwrap();
 
         assert_eq!(rutabaga2.resources.len(), 1);
         let rutabaga_resource = rutabaga2.resources.get(&resource_id).unwrap();
@@ -1554,5 +1562,7 @@ mod tests {
         );
         // NOTE: We attached an backing iovec, but it should be gone post-restore.
         assert!(rutabaga_resource.backing_iovecs.is_none());
+
+        fs::remove_dir_all(&snapshot_dir).unwrap();
     }
 }
