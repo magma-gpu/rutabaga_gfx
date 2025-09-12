@@ -9,11 +9,13 @@ members = [
 
 [package]
 name = "rutabaga_gfx"
-version = "0.1.61"
-authors = ["The ChromiumOS Authors + Android Open Source Project"]
+version = "0.1.71"
+authors = ["Magma GPU project"]
 edition = "2021"
-description = "Handling virtio-gpu protocols"
+description = "Cross-platform, open-source, Rust-based graphics paravirtualization"
 license = "BSD-3-Clause"
+repository = "https://github.com/magma-gpu/rutabaga_gfx"
+rust-version = "1.81.0"
 
 [features]
 gfxstream = []
