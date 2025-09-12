@@ -1,10 +1,12 @@
 [package]
 name = "kumquat_virtio"
-version = "0.1.61"
-authors = ["Android Open Source Project"]
+version = "0.1.71"
+authors = ["Magma GPU project"]
 edition = "2021"
-description = "Handling virtio multi-media protocols via a Rust server"
+description = "A Rust server designed for virtio-multimedia use cases"
 license = "BSD-3-Clause"
+repository = "https://github.com/magma-gpu/rutabaga_gfx"
+rust-version = "1.81.0"
 
 [[bin]]
 name = "kumquat"
@@ -15,8 +17,8 @@ gfxstream = ["rutabaga_gfx/gfxstream"]
 
 [dependencies]
 mesa3d_util = { path = "../../third_party/mesa3d/src/util/rust/", version = "0.1.71" }
-mesa3d_protocols = { path = "../../third_party/mesa3d/src/virtio/protocols", version = "0.1.7" }
-rutabaga_gfx = { path = "../../", version = "0.1.61"}
+mesa3d_protocols = { path = "../../third_party/mesa3d/src/virtio/protocols", version = "0.1.71" }
+rutabaga_gfx = { path = "../../", version = "0.1.71"}
 zerocopy = { version = "0.8.13", features = ["derive"] }
 log = "0.4"
 remain = "0.2"
