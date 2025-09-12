@@ -1297,13 +1297,6 @@ impl RutabagaBuilder {
         self
     }
 
-    /// Sets use GLX flags in gfxstream + virglrenderer.
-    pub fn set_use_glx(mut self, v: bool) -> RutabagaBuilder {
-        self.gfxstream_flags = self.gfxstream_flags.use_glx(v);
-        self.virglrenderer_flags = self.virglrenderer_flags.use_glx(v);
-        self
-    }
-
     /// Sets use surfaceless flags in gfxstream + virglrenderer.
     pub fn set_use_surfaceless(mut self, v: bool) -> RutabagaBuilder {
         self.gfxstream_flags = self.gfxstream_flags.use_surfaceless(v);
