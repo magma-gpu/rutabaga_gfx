@@ -9,7 +9,6 @@ mod context_common;
 mod cross_domain;
 mod generated;
 mod gfxstream;
-mod gfxstream_stub;
 mod magma;
 #[macro_use]
 mod macros;
