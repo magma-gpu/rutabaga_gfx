@@ -1048,7 +1048,7 @@ impl Rutabaga {
     }
 
     /// Returns the 3D info associated with the resource, if any.
-    pub fn query(&self, resource_id: u32) -> RutabagaResult<Resource3DInfo> {
+    pub fn resource3d_info(&self, resource_id: u32) -> RutabagaResult<Resource3DInfo> {
         let resource = self
             .resources
             .get(&resource_id)
