@@ -367,6 +367,7 @@ pub type RutabagaResult<T> = std::result::Result<T, RutabagaError>;
 /// Flags for virglrenderer.  Copied from virglrenderer bindings.
 const VIRGLRENDERER_USE_EGL: u32 = 1 << 0;
 const VIRGLRENDERER_THREAD_SYNC: u32 = 1 << 1;
+#[allow(dead_code)]
 const VIRGLRENDERER_USE_GLX: u32 = 1 << 2;
 const VIRGLRENDERER_USE_SURFACELESS: u32 = 1 << 3;
 const VIRGLRENDERER_USE_GLES: u32 = 1 << 4;
@@ -444,11 +445,6 @@ impl VirglRendererFlags {
         self.set_flag(VIRGLRENDERER_THREAD_SYNC, v)
     }
 
-    /// Use GLX for context creation.
-    pub fn use_glx(self, v: bool) -> VirglRendererFlags {
-        self.set_flag(VIRGLRENDERER_USE_GLX, v)
-    }
-
     /// No surfaces required when creating context.
     pub fn use_surfaceless(self, v: bool) -> VirglRendererFlags {
         self.set_flag(VIRGLRENDERER_USE_SURFACELESS, v)
@@ -478,6 +474,7 @@ impl VirglRendererFlags {
 const STREAM_RENDERER_FLAGS_USE_EGL: u32 = 1 << 0;
 #[allow(dead_code)]
 const STREAM_RENDERER_FLAGS_THREAD_SYNC: u32 = 1 << 1;
+#[allow(dead_code)]
 const STREAM_RENDERER_FLAGS_USE_GLX: u32 = 1 << 2;
 const STREAM_RENDERER_FLAGS_USE_SURFACELESS: u32 = 1 << 3;
 const STREAM_RENDERER_FLAGS_USE_GLES: u32 = 1 << 4;
@@ -513,11 +510,6 @@ impl GfxstreamFlags {
     /// Use EGL for context creation.
     pub fn use_egl(self, v: bool) -> GfxstreamFlags {
         self.set_flag(STREAM_RENDERER_FLAGS_USE_EGL, v)
-    }
-
-    /// Use GLX for context creation.
-    pub fn use_glx(self, v: bool) -> GfxstreamFlags {
-        self.set_flag(STREAM_RENDERER_FLAGS_USE_GLX, v)
     }
 
     /// No surfaces required when creating context.

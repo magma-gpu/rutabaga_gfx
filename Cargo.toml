@@ -21,7 +21,6 @@ virgl_renderer = []
 gbm = []
 # Vulkano features are just a prototype and not integrated yet into the ChromeOS build system.
 vulkano = ["dep:vulkano"]
-x = []
 
 [dependencies]
 cfg-if = "1.0.0"
