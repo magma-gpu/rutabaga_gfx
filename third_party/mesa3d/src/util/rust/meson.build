@@ -52,7 +52,7 @@ if host_machine.system() == 'linux'
     fallback: ['errno-0.3-rs', 'dep_errno'],
     required: true,
   )
-  
+
   dep_mesa3d_util += [dep_rustix, dep_bitflags, dep_errno]
 endif
 

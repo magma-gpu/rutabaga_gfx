@@ -327,7 +327,7 @@ impl CrossDomainWorker {
         // fence data, that will break the expected order of events.  We need the guest to generate
         // a new fence before we can resume polling.
         //
-        // The CrossDomainJob queue gurantees a new fence has been generated before polling is
+        // The CrossDomainJob queue guarantees a new fence has been generated before polling is
         // resumed.
         if let Some(event) = events.first() {
             match event.connection_id {

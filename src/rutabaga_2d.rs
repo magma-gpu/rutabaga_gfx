@@ -226,7 +226,7 @@ impl RutabagaComponent for Rutabaga2D {
             .take()
             .ok_or(RutabagaError::InvalidIovec)?;
 
-        // All offical virtio_gpu formats are 4 bytes per pixel.
+        // All official virtio_gpu formats are 4 bytes per pixel.
         let resource_bpp = 4;
         let mut src_slices = Vec::with_capacity(iovecs.len());
         for iovec in &iovecs {
@@ -274,7 +274,7 @@ impl RutabagaComponent for Rutabaga2D {
             .take()
             .ok_or(RutabagaError::Invalid2DInfo)?;
 
-        // All offical virtio_gpu formats are 4 bytes per pixel.
+        // All official virtio_gpu formats are 4 bytes per pixel.
         let resource_bpp = 4;
         let src_stride = resource_bpp * info_2d.width;
         let src_offset = 0;

@@ -190,7 +190,7 @@ pub trait RutabagaComponent {
         (0, 0)
     }
 
-    /// Implementations should return the capabilites of given a `capset_id` and `version`.  A
+    /// Implementations should return the capabilities of given a `capset_id` and `version`.  A
     /// zero-sized array is returned by default.
     fn get_capset(&self, _capset_id: u32, _version: u32) -> Vec<u8> {
         Vec::new()
@@ -501,7 +501,7 @@ fn calculate_component(component_mask: u8) -> RutabagaResult<RutabagaComponentTy
     }
 }
 
-/// The global libary handle used to query capability sets, create resources and contexts.
+/// The global library handle used to query capability sets, create resources and contexts.
 ///
 /// Currently, Rutabaga only supports one default component.  Many components running at the
 /// same time is a stretch goal of Rutabaga GFX.
@@ -658,7 +658,7 @@ impl Rutabaga {
         Ok(self.capset_info[idx])
     }
 
-    /// Gets the version and size for the capabilty set `index`.
+    /// Gets the version and size for the capability set `index`.
     pub fn get_capset_info(&self, index: u32) -> RutabagaResult<(u32, u32, u32)> {
         let capset_info = self.capset_index_to_component_info(index)?;
 
@@ -1372,7 +1372,7 @@ impl RutabagaBuilder {
     /// Builds Rutabaga and returns a handle to it.
     ///
     /// This should be only called once per every virtual machine instance.  Rutabaga tries to
-    /// intialize all 3D components which have been built. In 2D mode, only the 2D component is
+    /// initialize all 3D components which have been built. In 2D mode, only the 2D component is
     /// initialized.
     pub fn build(mut self) -> RutabagaResult<Rutabaga> {
         let mut rutabaga_components: Map<RutabagaComponentType, Box<dyn RutabagaComponent>> =

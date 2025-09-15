@@ -18,11 +18,11 @@ pub enum MesaError {
     /// An error with the MesaHandle
     #[error("invalid Mesa handle")]
     InvalidMesaHandle,
-    /// An input/output error occured.
-    #[error("an input/output error occur: {0}")]
+    /// An input/output error occurred.
+    #[error("an input/output error occurred: {0}")]
     IoError(IoError),
     /// Nul crate error.
-    #[error("Nul Error occured {0}")]
+    #[error("Nul Error occurred {0}")]
     NulError(NulError),
     /// Rustix crate error.
     #[cfg(any(target_os = "android", target_os = "linux"))]
@@ -35,7 +35,7 @@ pub enum MesaError {
     #[error("the requested function is not implemented")]
     Unsupported,
     /// Utf8 error.
-    #[error("an utf8 error occured: {0}")]
+    #[error("an utf8 error occurred: {0}")]
     Utf8Error(Utf8Error),
     /// An error with a free form context, similar to anyhow
     #[error("operation failed: {0}")]
