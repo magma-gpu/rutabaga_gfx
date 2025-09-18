@@ -1,0 +1,6 @@
+[wrap-file]
+directory = itoa-1.0.9
+source_url = https://crates.io/api/v1/crates/itoa/1.0.9/download
+source_filename = itoa-1.0.9.tar.gz
+source_hash = af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38
+patch_directory = itoa-1-rs

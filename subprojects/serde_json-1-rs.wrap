@@ -1,0 +1,6 @@
+[wrap-file]
+directory = serde_json-1.0.145
+source_url = https://crates.io/api/v1/crates/serde_json/1.0.145/download
+source_filename = serde_json-1.0.145.tar.gz
+source_hash = 402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c
+patch_directory = serde_json-1-rs

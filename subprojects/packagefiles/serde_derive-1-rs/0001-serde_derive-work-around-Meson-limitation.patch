@@ -1,0 +1,28 @@
+From 248356c3217516a361a01a525b9363c52a42268b Mon Sep 17 00:00:00 2001
+From: Gurchetan Singh <gurchetansingh@google.com>
+Date: Thu, 19 Dec 2024 11:29:44 -0800
+Subject: [PATCH] serde_derive: work around Meson limitation
+
+A local hack until:
+
+https://github.com/mesonbuild/meson/pull/10030
+https://github.com/mesonbuild/meson/issues/13752
+
+is fixed.
+---
+ src/lib.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lib.rs b/src/lib.rs
+index 2113900..3271319 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -100,7 +100,7 @@
+ impl private {
+     fn ident(&self) -> Ident {
+         Ident::new(
+-            concat!("__private", env!("CARGO_PKG_VERSION_PATCH")),
++            concat!("__private", "226"),
+             Span::call_site(),
+         )
+     }

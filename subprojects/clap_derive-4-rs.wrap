@@ -1,0 +1,6 @@
+[wrap-file]
+directory = clap_derive-4.5.47
+source_url = https://crates.io/api/v1/crates/clap_derive/4.5.47/download
+source_filename = clap_derive-4.5.47.tar.gz
+source_hash = bbfd7eae0b0f1a6e63d4b13c9c478de77c2eb546fba158ad50b4203dc24b9f9c
+patch_directory = clap_derive-4-rs
