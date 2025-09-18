@@ -1,0 +1,31 @@
+# 2025 Magma GPU project
+# SPDX-License-Identifier: MIT
+
+option(
+  'features',
+  type : 'array',
+  value : [''],
+  choices : ['', 'gbm', 'gfxstream', 'virgl_renderer'],
+  description : 'List of rutabaga features to enable'
+)
+
+option(
+  'ffi',
+  type : 'boolean',
+  value : false,
+  description : 'Build FFI bindings'
+)
+
+option(
+  'kumquat',
+  type : 'boolean',
+  value : false,
+  description : 'Build Kumquat',
+)
+
+option(
+  'build-tests',
+  type : 'boolean',
+  value : false,
+  description : 'Build unit tests',
+)

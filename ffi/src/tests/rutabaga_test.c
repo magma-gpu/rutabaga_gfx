@@ -14,7 +14,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <rutabaga_gfx/rutabaga_gfx_ffi.h>
+#include "rutabaga_gfx_ffi.h"
 
 #include "virtgpu_cross_domain_protocol.h"
 

@@ -13,7 +13,7 @@ use mesa3d_util::WritePipe;
 use crate::kumquat_gpu::KumquatGpuResult;
 
 #[derive(Parser, Debug)]
-#[command(version, about = None, long_about = None)]
+#[command(version = "1.71", about = None, long_about = None)]
 struct Args {
     /// Colon-separated list of virtio-gpu capsets.  For example,
     /// "--capset-names=gfxstream-vulkan:cross-domain"
