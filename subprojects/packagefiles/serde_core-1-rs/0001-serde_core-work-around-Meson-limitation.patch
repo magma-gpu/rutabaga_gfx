@@ -1,0 +1,40 @@
+Meson doesn't work with build.rs scripts at all.
+
+https://github.com/serde-rs/serde/blob/master/serde/build.rs
+
+The only way I see this working without patching forever is
+adding a mesonbuild there.
+
+---
+ src/lib.rs                       | 2 +-
+ src/serde_core_private_hack.rs | 6 ++++++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+ create mode 100644 src/serde_core_private_hack.rs
+
+diff --git a/src/lib.rs b/src/lib.rs
+index 2113900..3271319 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -263,7 +263,7 @@
+     pub use core::result::Result;
+ }
+ 
+-include!(concat!(env!("OUT_DIR"), "/private.rs"));
++include!("serde_core_private_hack.rs");
+ 
+ #[cfg(all(not(feature = "std"), no_core_error))]
+ mod std_error;
+diff --git a/src/serde_core_private_hack.rs b/src/serde_core_private_hack.rs
+new file mode 100644
+index 0000000..dd735c1
+--- /dev/null
++++ b/src/serde_core_private_hack.rs
+@@ -0,0 +1,6 @@
++#[doc(hidden)]
++pub mod __private226 {
++    #[doc(hidden)]
++    pub use crate::private::*;
++}
++
+-- 
+2.43.0.472.g315744a25f-goog

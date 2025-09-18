@@ -1,0 +1,8 @@
+[wrap-file]
+directory = serde_core-1.0.226
+source_url = https://crates.io/api/v1/crates/serde_core/1.0.226/download
+source_filename = serde_core-1.0.226.tar.gz
+source_hash = ba2ba63999edb9dac981fb34b3e5c0d111a69b0924e253ed29d83f7c99e966a4
+patch_directory = serde_core-1-rs
+
+diff_files = serde_core-1-rs/0001-serde_core-work-around-Meson-limitation.patch

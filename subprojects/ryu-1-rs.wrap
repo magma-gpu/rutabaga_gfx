@@ -1,0 +1,6 @@
+[wrap-file]
+directory = ryu-1.0.15
+source_url = https://crates.io/api/v1/crates/ryu/1.0.15/download
+source_filename = ryu-1.0.15.tar.gz
+source_hash = 1ad4cc8da4ef723ed60bced201181d83791ad433213d8c24efffda1eec85d741
+patch_directory = ryu-1-rs

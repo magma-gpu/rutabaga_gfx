@@ -1,0 +1,6 @@
+[wrap-file]
+directory = memchr-2.7.5
+source_url = https://crates.io/api/v1/crates/memchr/2.7.5/download
+source_filename = memchr-2.7.5.tar.gz
+source_hash = 32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0
+patch_directory = memchr-2-rs
