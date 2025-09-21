@@ -33,5 +33,6 @@ pub struct RutabagaCookie {
     #[allow(dead_code)]
     pub render_server_fd: Option<OwnedDescriptor>,
     pub fence_handler: Option<RutabagaFenceHandler>,
+    #[allow(dead_code)]
     pub debug_handler: Option<RutabagaDebugHandler>,
 }
