@@ -53,6 +53,7 @@ use crate::rutabaga_utils::RUTABAGA_CAPSET_VENUS;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VIRGL;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VIRGL2;
 use crate::rutabaga_utils::RUTABAGA_CONTEXT_INIT_CAPSET_ID_MASK;
+#[cfg(fence_passing_option1)]
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 use crate::rutabaga_utils::RUTABAGA_FLAG_INFO_RING_IDX;
 use crate::snapshot::RutabagaSnapshotReader;
@@ -1520,7 +1521,7 @@ mod tests {
     #[test]
     fn snapshot_restore_2d_no_resources() {
         let mut snapshot_dir = std::env::temp_dir();
-        snapshot_dir.push(format!("rutabaga_snapshot"));
+        snapshot_dir.push("rutabaga_snapshot");
 
         fs::create_dir(&snapshot_dir).unwrap();
 
@@ -1536,7 +1537,7 @@ mod tests {
     #[test]
     fn snapshot_restore_2d_one_resource() {
         let mut snapshot_dir = std::env::temp_dir();
-        snapshot_dir.push(format!("rutabaga_snapshot2"));
+        snapshot_dir.push("rutabaga_snapshot2");
         fs::create_dir(&snapshot_dir).unwrap();
 
         let resource_id = 123;

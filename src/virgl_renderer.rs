@@ -12,7 +12,6 @@ use std::io::Error as SysError;
 use std::io::IoSlice;
 use std::io::IoSliceMut;
 use std::mem::size_of;
-use std::mem::transmute;
 use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
@@ -390,7 +389,8 @@ impl VirglRenderer {
             virgl_renderer_init(
                 cookie as *mut c_void,
                 virglrenderer_flags.into(),
-                transmute(VIRGL_RENDERER_CALLBACKS),
+                VIRGL_RENDERER_CALLBACKS as *const virgl_renderer_callbacks
+                    as *mut virgl_renderer_callbacks,
             )
         };
 
