@@ -436,16 +436,6 @@ struct cb_data {
     size_t len;
 };
 
-static void snapshot_cb(uint64_t user_data, const uint8_t* data, size_t len) {
-    struct cb_data* cb_data = (struct cb_data*)user_data;
-    if (cb_data->len + len > 2000) {
-      // Silently truncate. Checked for by the test.
-      len = 2000 - cb_data->len;
-    }
-    memcpy(cb_data->buf + cb_data->len, data, len);
-    cb_data->len += len;
-}
-
 static int test_rutabaga_finish(struct rutabaga_test *test)
 {
     int result;
@@ -459,8 +449,8 @@ static int test_rutabaga_finish(struct rutabaga_test *test)
 static int test_rutabaga_2d_snapshot(struct rutabaga_test *test, const char* dir)
 {
     struct rutabaga_create_3d rc_3d = { 0 };
-    struct rutabaga_transfer transfer = { 0 };
     int result;
+    struct rutabaga_transfer transfer = { 0 };
     uint32_t resource_id = s_resource_id++;
 
     result = test_rutabaga_init(test, 0);
@@ -534,6 +524,7 @@ int ftw_cb(const char *fpath, const struct stat *, int, struct FTW *) {
 
 int recursive_rm(const char* dir) {
     CHECK(nftw(dir, ftw_cb, 64, FTW_DEPTH | FTW_PHYS) == 0);
+    return 0;
 }
 
 int main(int argc, char *argv[])
