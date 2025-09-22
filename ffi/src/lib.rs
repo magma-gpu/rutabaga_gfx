@@ -33,6 +33,7 @@ use rutabaga_gfx::ResourceCreateBlob;
 use rutabaga_gfx::Rutabaga;
 use rutabaga_gfx::RutabagaBuilder;
 use rutabaga_gfx::RutabagaChannel;
+use rutabaga_gfx::RutabagaComponentType;
 use rutabaga_gfx::RutabagaDebug;
 use rutabaga_gfx::RutabagaDebugHandler;
 use rutabaga_gfx::RutabagaDescriptor;
@@ -267,7 +268,13 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
             _ => return -EINVAL,
         };
 
+        let mut component = RutabagaComponentType::NoneSelected;
+        if builder.capset_mask == 0 {
+            component = RutabagaComponentType::Rutabaga2D;
+        }
+
         let result = RutabagaBuilder::new(builder.capset_mask, fence_handler)
+            .set_default_component(component)
             .set_use_external_blob(false)
             .set_use_egl(true)
             .set_wsi(rutabaga_wsi)
