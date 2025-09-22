@@ -35,6 +35,31 @@ jobs:
           --package rutabaga_gfx_ffi --features=gfxstream
           --target=x86_64-unknown-linux-gnu
 
+  meson-test--with-gfxstream:
+    name: test rutabaga with gfxstream (Linux x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+          components: rust-src
+      - uses: ./.github/actions/install-deps
+      - name: Checkout gfxstream
+        run: git clone --depth 1 https://github.com/google/gfxstream
+      - name: build and install gfxstream
+        run: |
+          cd gfxstream
+          meson setup build
+          ninja -C build
+          sudo ninja -C build install
+      - name: Setup Meson build directory
+        run: meson setup amd64-build -Dfeatures="gfxstream" -Dffi=true -Dkumquat=true -Dbuild-tests=true
+      - name: Run tests
+        run: meson test -C amd64-build
+
   build-windows-x86_64-with-gfxstream:
     name: build rutabaga with gfxstream (windows x86_64)
     runs-on: windows-latest
