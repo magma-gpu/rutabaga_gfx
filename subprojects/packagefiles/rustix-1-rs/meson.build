@@ -4,9 +4,8 @@
 project(
   'rustix-1-rs',
   'rust',
-  meson_version: '>=1.3.0',
-  version: '1.0.7',
-  license: 'Apache-2.0 WITH LLVM-exception OR MIT',
+  version : '1.1.2',
+  license : 'Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT',
 )
 
 errno = subproject('errno-0.3-rs').get_variable('lib')
