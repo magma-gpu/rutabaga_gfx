@@ -45,6 +45,7 @@ lib = static_library(
   override_options : ['rust_std=2021', 'build.rust_std=2021'],
   link_with : [u_ind, quote, pm2],
   rust_abi : 'rust',
+  native: true,
 )
 
 dep_syn = declare_dependency(

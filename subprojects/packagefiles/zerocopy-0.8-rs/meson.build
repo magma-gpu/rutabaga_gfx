@@ -22,5 +22,5 @@ lib = static_library(
 )
 
 dep_zerocopy = declare_dependency(
-  link_with : [lib, zerocopy_derive]
+  link_with : [lib]
 )

@@ -29,4 +29,5 @@ lib = static_library(
   override_options : ['rust_std=2018', 'build.rust_std=2018'],
   link_with : pm2,
   rust_abi : 'rust',
+  native: true,
 )
