@@ -7,7 +7,6 @@ use std::num::TryFromIntError;
 use std::str::Utf8Error;
 
 use remain::sorted;
-#[cfg(any(target_os = "android", target_os = "linux"))]
 use rustix::io::Errno as RustixError;
 use thiserror::Error;
 
@@ -25,7 +24,6 @@ pub enum MesaError {
     #[error("Nul Error occurred {0}")]
     NulError(NulError),
     /// Rustix crate error.
-    #[cfg(any(target_os = "android", target_os = "linux"))]
     #[error("The errno is {0}")]
     RustixError(RustixError),
     /// An attempted integer conversion failed.
