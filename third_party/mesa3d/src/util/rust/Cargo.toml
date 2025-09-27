@@ -17,6 +17,7 @@ remain = "0.2"
 thiserror = "1.0.23"
 zerocopy = { version = "0.8.13", features = ["derive"] }
 log = "0.4"
+rustix = "1.0.7"
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 rustix = { version = "1.0.7", features = ["event", "fs", "mm", "net", "param", "pipe", "use-libc", "use-libc-auxv", "libc_errno"] }
