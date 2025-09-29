@@ -176,3 +176,51 @@ jobs:
           components: clippy, rust-src
       - name: Run clippy
         run: cargo clippy --workspace -- -D warnings
+
+  cross-compile-windows:
+    name: Cross-compile for Windows (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            meson \
+            ninja-build \
+            pkg-config \
+            mingw-w64 \
+            mingw-w64-tools \
+            bindgen
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.81.0"
+          targets: x86_64-pc-windows-gnu
+
+      - name: Create Meson cross file
+        run: |
+          cat <<EOF > cross_file_x86_64_linux_mingw.txt
+          [binaries]
+          c = '/usr/bin/x86_64-w64-mingw32-gcc'
+          cpp = '/usr/bin/x86_64-w64-mingw32-g++'
+          ar = '/usr/bin/x86_64-w64-mingw32-ar'
+          strip = '/usr/bin/x86_64-w64-mingw32-strip'
+          pkg-config = '/usr/bin/x86_64-w64-mingw32-pkg-config'
+          rust = ['rustc', '--target', 'x86_64-pc-windows-gnu']
+
+          [host_machine]
+          system = 'windows'
+          cpu_family = 'x86_64'
+          cpu = 'i686'
+          endian = 'little'
+          EOF
+
+      - name: Setup Meson build directory
+        run: meson setup build-mingw --cross-file cross_file_x86_64_linux_mingw.txt
+
+      - name: Compile
+        run: ninja -C build-mingw

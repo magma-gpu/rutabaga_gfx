@@ -15,5 +15,6 @@ runs:
           pkg-config \
           libx11-dev \
           libdrm-dev \
-          libepoxy-dev
+          libepoxy-dev \
+          bindgen
       shell: bash
