@@ -5,6 +5,8 @@ members = [
     "kumquat/server",
     "third_party/mesa3d/src/util/rust",
     "third_party/mesa3d/src/virtio/protocols",
+    "third_party/mesa3d/src/virtio/virtgpu_kumquat",
+    "third_party/mesa3d/src/magma",
 ]
 
 [package]

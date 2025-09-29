@@ -14,6 +14,9 @@ project(
   ],
 )
 
+rust = import('rust')
+null_dep = dependency('', required : false)
+
 features = get_option('features')
 with_ffi = get_option('ffi')
 with_kumquat = get_option('kumquat')
