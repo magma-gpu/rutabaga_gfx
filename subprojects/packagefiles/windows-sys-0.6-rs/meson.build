@@ -10,6 +10,9 @@ project(
 
 windows_link = subproject('windows-link-0.2-rs').get_variable('lib')
 windows_sys_args = [
+  '--cfg', 'feature="Wdk"',
+  '--cfg', 'feature="Wdk_Graphics"',
+  '--cfg', 'feature="Wdk_Graphics_Direct3D"',
   '--cfg', 'feature="Win32"',
   '--cfg', 'feature="Win32_Networking"',
   '--cfg', 'feature="Win32_Networking_WinSock"',
