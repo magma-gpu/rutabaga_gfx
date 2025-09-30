@@ -20,5 +20,5 @@ lib = static_library(
 )
 
 dep_thiserror = declare_dependency(
-  link_with : [lib]
+  link_with : [lib, thiserror_impl]
 )
