@@ -439,6 +439,7 @@ impl Gfxstream {
             render_server_fd: None,
             fence_handler: Some(fence_handler),
             debug_handler,
+            rutabaga_paths: None,
         });
 
         let mut stream_renderer_params = Vec::from([

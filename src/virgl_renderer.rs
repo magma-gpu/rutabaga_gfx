@@ -8,14 +8,18 @@
 #![cfg(feature = "virgl_renderer")]
 
 use std::ffi::CStr;
+use std::fs::canonicalize;
+use std::fs::OpenOptions;
 use std::io::Error as SysError;
 use std::io::IoSlice;
 use std::io::IoSliceMut;
 use std::mem::size_of;
 use std::mem::ManuallyDrop;
+use std::os::fd::IntoRawFd;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
 use std::os::raw::c_void;
+use std::os::unix::fs::OpenOptionsExt;
 use std::panic::catch_unwind;
 use std::process::abort;
 use std::ptr::null_mut;
@@ -24,6 +28,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use log::error;
+use log::info;
 use log::log;
 use log::warn;
 use log::Level;
@@ -59,8 +64,26 @@ use crate::rutabaga_utils::VirglRendererFlags;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE;
 use crate::rutabaga_utils::RUTABAGA_FLAG_INFO_RING_IDX;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
+use crate::RutabagaPath;
+use crate::RutabagaPaths;
+use crate::RUTABAGA_PATH_TYPE_GPU;
 
 type Query = virgl_renderer_export_query;
+
+/// Default drm fd, returning this indicates that virglrenderer should
+/// find an available GPU itself.
+const DEFAULT_DRM_FD: i32 = -1;
+
+/// Check if the given rutabaga path is a valid GPU path.
+fn is_valid_gpu_path(rpath: &RutabagaPath) -> bool {
+    if rpath.path_type != RUTABAGA_PATH_TYPE_GPU {
+        return false;
+    }
+
+    canonicalize(&rpath.path)
+        .map(|path| path.starts_with("/dev/dri/renderD") && path.exists())
+        .unwrap_or_default()
+}
 
 fn dup(rd: RawDescriptor) -> RutabagaResult<OwnedDescriptor> {
     // SAFETY:
@@ -245,11 +268,50 @@ extern "C" fn log_callback(
     log!(level, "{}", message_str.to_string_lossy());
 }
 
+extern "C" fn get_drm_fd(cookie: *mut c_void) -> c_int {
+    catch_unwind(|| {
+        assert!(!cookie.is_null());
+        // SAFETY:
+        // The assert above ensures it's not null, and virglrenderer ensures the pointer
+        // is valid for the duration of this callback.
+        let cookie = unsafe { &mut *(cookie as *mut RutabagaCookie) };
+
+        // Find the first valid GPU path from rutabaga paths
+        let gpu_path = cookie.rutabaga_paths.as_ref().and_then(|rpaths| {
+            rpaths
+                .iter()
+                .find(|rpath| is_valid_gpu_path(rpath))
+                .map(|rpath| rpath.path.clone())
+        });
+
+        // Try to open the path and return its fd
+        gpu_path
+            .and_then(|path| {
+                info!("virglrenderer: using GPU path {path:?}");
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .custom_flags(libc::O_CLOEXEC | libc::O_NONBLOCK | libc::O_NOCTTY)
+                    .open(path)
+                    .inspect_err(|err| error!("failed to open GPU path: {err}"))
+                    .ok()
+            })
+            // Convert file to raw fd, the ownership of the fd is
+            // transferred to virglrenderer.
+            .map(|file| file.into_raw_fd())
+            // If no path was provided or opening it failed, use the
+            // default drm fd.
+            .unwrap_or(DEFAULT_DRM_FD)
+    })
+    .unwrap_or_else(|_| abort())
+}
+
 extern "C" fn write_context_fence(cookie: *mut c_void, ctx_id: u32, ring_idx: u32, fence_id: u64) {
     catch_unwind(|| {
         assert!(!cookie.is_null());
-        // TODO(b/315870313): Add safety comment
-        #[allow(clippy::undocumented_unsafe_blocks)]
+        // SAFETY:
+        // The assert above ensures it's not null, and virglrenderer ensures the pointer
+        // is valid for the duration of this callback.
         let cookie = unsafe { &*(cookie as *mut RutabagaCookie) };
 
         // Call fence completion callback
@@ -265,12 +327,13 @@ extern "C" fn write_context_fence(cookie: *mut c_void, ctx_id: u32, ring_idx: u3
     .unwrap_or_else(|_| abort())
 }
 
-// TODO(b/315870313): Add safety comment
-#[allow(clippy::undocumented_unsafe_blocks)]
-unsafe extern "C" fn write_fence(cookie: *mut c_void, fence: u32) {
+extern "C" fn write_fence(cookie: *mut c_void, fence: u32) {
     catch_unwind(|| {
         assert!(!cookie.is_null());
-        let cookie = &*(cookie as *mut RutabagaCookie);
+        // SAFETY:
+        // The assert above ensures it's not null, and virglrenderer ensures the pointer
+        // is valid for the duration of this callback.
+        let cookie = unsafe { &*(cookie as *mut RutabagaCookie) };
 
         // Call fence completion callback
         if let Some(handler) = &cookie.fence_handler {
@@ -285,12 +348,13 @@ unsafe extern "C" fn write_fence(cookie: *mut c_void, fence: u32) {
     .unwrap_or_else(|_| abort())
 }
 
-// TODO(b/315870313): Add safety comment
-#[allow(clippy::undocumented_unsafe_blocks)]
-unsafe extern "C" fn get_server_fd(cookie: *mut c_void, version: u32) -> c_int {
+extern "C" fn get_server_fd(cookie: *mut c_void, version: u32) -> c_int {
     catch_unwind(|| {
         assert!(!cookie.is_null());
-        let cookie = &mut *(cookie as *mut RutabagaCookie);
+        // SAFETY:
+        // The assert above ensures it's not null, and virglrenderer ensures the pointer
+        // is valid for the duration of this callback.
+        let cookie = unsafe { &mut *(cookie as *mut RutabagaCookie) };
 
         if version != 0 {
             return -1;
@@ -312,7 +376,7 @@ const VIRGL_RENDERER_CALLBACKS: &virgl_renderer_callbacks = &virgl_renderer_call
     create_gl_context: None,
     destroy_gl_context: None,
     make_current: None,
-    get_drm_fd: None,
+    get_drm_fd: Some(get_drm_fd),
     write_context_fence: Some(write_context_fence),
     get_server_fd: Some(get_server_fd),
     get_egl_display: None,
@@ -342,6 +406,7 @@ impl VirglRenderer {
         virglrenderer_flags: VirglRendererFlags,
         fence_handler: RutabagaFenceHandler,
         render_server_fd: Option<OwnedDescriptor>,
+        rutabaga_paths: Option<RutabagaPaths>,
     ) -> RutabagaResult<Box<dyn RutabagaComponent>> {
         if cfg!(debug_assertions) {
             // TODO(b/315870313): Add safety comment
@@ -380,6 +445,7 @@ impl VirglRenderer {
             render_server_fd,
             fence_handler: Some(fence_handler),
             debug_handler: None,
+            rutabaga_paths,
         }));
 
         // SAFETY:

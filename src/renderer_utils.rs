@@ -10,6 +10,7 @@ use crate::rutabaga_utils::RutabagaDebugHandler;
 use crate::rutabaga_utils::RutabagaError;
 use crate::rutabaga_utils::RutabagaFenceHandler;
 use crate::rutabaga_utils::RutabagaResult;
+use crate::RutabagaPaths;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -35,4 +36,5 @@ pub struct RutabagaCookie {
     pub fence_handler: Option<RutabagaFenceHandler>,
     #[allow(dead_code)]
     pub debug_handler: Option<RutabagaDebugHandler>,
+    pub rutabaga_paths: Option<RutabagaPaths>,
 }
