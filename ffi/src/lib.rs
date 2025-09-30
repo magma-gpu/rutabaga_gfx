@@ -32,7 +32,6 @@ use rutabaga_gfx::ResourceCreate3D;
 use rutabaga_gfx::ResourceCreateBlob;
 use rutabaga_gfx::Rutabaga;
 use rutabaga_gfx::RutabagaBuilder;
-use rutabaga_gfx::RutabagaChannel;
 use rutabaga_gfx::RutabagaComponentType;
 use rutabaga_gfx::RutabagaDebug;
 use rutabaga_gfx::RutabagaDebugHandler;
@@ -44,6 +43,7 @@ use rutabaga_gfx::RutabagaHandle;
 use rutabaga_gfx::RutabagaImportData;
 use rutabaga_gfx::RutabagaIntoRawDescriptor;
 use rutabaga_gfx::RutabagaIovec;
+use rutabaga_gfx::RutabagaPath;
 use rutabaga_gfx::RutabagaRawDescriptor;
 use rutabaga_gfx::RutabagaResult;
 use rutabaga_gfx::RutabagaWsi;
@@ -232,10 +232,10 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
             debug_handler_opt = Some(debug_handler);
         }
 
-        let mut rutabaga_channels_opt = None;
-        if let Some(channels) = builder.channels {
-            let mut rutabaga_channels: Vec<RutabagaChannel> = Vec::new();
-            let channels_slice = from_raw_parts(channels.channels, channels.num_channels);
+        let mut rutabaga_paths_opt = None;
+        if let Some(paths) = builder.channels {
+            let mut rutabaga_paths: Vec<RutabagaPath> = Vec::new();
+            let channels_slice = from_raw_parts(paths.channels, paths.num_channels);
 
             for channel in channels_slice {
                 let c_str_slice = CStr::from_ptr(channel.channel_name);
@@ -244,13 +244,13 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
                 let string = str_slice.to_owned();
                 let path = PathBuf::from(&string);
 
-                rutabaga_channels.push(RutabagaChannel {
-                    base_channel: path,
-                    channel_type: channel.channel_type,
+                rutabaga_paths.push(RutabagaPath {
+                    path,
+                    path_type: channel.channel_type,
                 });
             }
 
-            rutabaga_channels_opt = Some(rutabaga_channels);
+            rutabaga_paths_opt = Some(rutabaga_paths);
         }
 
         let mut renderer_features_opt = None;
@@ -279,7 +279,7 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
             .set_use_egl(true)
             .set_wsi(rutabaga_wsi)
             .set_debug_handler(debug_handler_opt)
-            .set_rutabaga_channels(rutabaga_channels_opt)
+            .set_rutabaga_paths(rutabaga_paths_opt)
             .set_renderer_features(renderer_features_opt)
             .build();
 

@@ -43,12 +43,12 @@ use crate::rutabaga_core::RutabagaContext;
 use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::Resource3DInfo;
 use crate::rutabaga_utils::ResourceCreateBlob;
-use crate::rutabaga_utils::RutabagaChannel;
 use crate::rutabaga_utils::RutabagaComponentType;
 use crate::rutabaga_utils::RutabagaError;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaFenceHandler;
 use crate::rutabaga_utils::RutabagaIovec;
+use crate::rutabaga_utils::RutabagaPath;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::RUTABAGA_BLOB_FLAG_USE_MAPPABLE;
 use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
@@ -117,7 +117,7 @@ struct CrossDomainWorker {
 }
 
 struct CrossDomainContext {
-    channels: Option<Vec<RutabagaChannel>>,
+    paths: Option<Vec<RutabagaPath>>,
     gralloc: Arc<Mutex<RutabagaGralloc>>,
     state: Option<Arc<CrossDomainState>>,
     context_resources: ContextResources,
@@ -128,10 +128,10 @@ struct CrossDomainContext {
     kill_evt: Option<Event>,
 }
 
-/// The CrossDomain component contains a list of channels that the guest may connect to and the
+/// The CrossDomain component contains a list of paths that the guest may connect to and the
 /// ability to allocate memory.
 pub struct CrossDomain {
-    channels: Option<Vec<RutabagaChannel>>,
+    paths: Option<Vec<RutabagaPath>>,
     gralloc: Arc<Mutex<RutabagaGralloc>>,
     fence_handler: RutabagaFenceHandler,
 }
@@ -491,15 +491,15 @@ impl CrossDomainWorker {
 }
 
 impl CrossDomain {
-    /// Initializes the cross-domain component by taking the the rutabaga channels (if any) and
+    /// Initializes the cross-domain component by taking the the rutabaga paths (if any) and
     /// initializing rutabaga gralloc.
     pub fn init(
-        channels: Option<Vec<RutabagaChannel>>,
+        paths: Option<Vec<RutabagaPath>>,
         fence_handler: RutabagaFenceHandler,
     ) -> RutabagaResult<Box<dyn RutabagaComponent>> {
         let gralloc = RutabagaGralloc::new(RutabagaGrallocBackendFlags::new())?;
         Ok(Box::new(CrossDomain {
-            channels,
+            paths,
             gralloc: Arc::new(Mutex::new(gralloc)),
             fence_handler,
         }))
@@ -508,17 +508,17 @@ impl CrossDomain {
 
 impl CrossDomainContext {
     fn get_connection(&mut self, cmd_init: &CrossDomainInit) -> RutabagaResult<Tube> {
-        let channels = self
-            .channels
+        let paths = self
+            .paths
             .take()
             .ok_or(RutabagaError::InvalidCrossDomainChannel)?;
-        let base_channel = &channels
+        let path = &paths
             .iter()
-            .find(|channel| channel.channel_type == cmd_init.channel_type)
+            .find(|path| path.path_type == cmd_init.channel_type)
             .ok_or(RutabagaError::InvalidCrossDomainChannel)?
-            .base_channel;
+            .path;
 
-        let tube = Tube::new(base_channel.clone(), TubeType::Stream)?;
+        let tube = Tube::new(path.clone(), TubeType::Stream)?;
         Ok(tube)
     }
 
@@ -1040,9 +1040,9 @@ impl RutabagaComponent for CrossDomain {
 
     fn get_capset(&self, _capset_id: u32, _version: u32) -> Vec<u8> {
         let mut caps: CrossDomainCapabilities = Default::default();
-        if let Some(ref channels) = self.channels {
-            for channel in channels {
-                caps.supported_channels |= 1 << channel.channel_type;
+        if let Some(ref paths) = self.paths {
+            for path in paths {
+                caps.supported_channels |= 1 << path.path_type;
             }
         }
 
@@ -1099,7 +1099,7 @@ impl RutabagaComponent for CrossDomain {
         fence_handler: RutabagaFenceHandler,
     ) -> RutabagaResult<Box<dyn RutabagaContext>> {
         Ok(Box::new(CrossDomainContext {
-            channels: self.channels.clone(),
+            paths: self.paths.clone(),
             gralloc: self.gralloc.clone(),
             state: None,
             context_resources: Arc::new(Mutex::new(Default::default())),
