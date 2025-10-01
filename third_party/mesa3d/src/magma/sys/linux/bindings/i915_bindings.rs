@@ -7,8 +7,8 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-#[cfg(not(use_meson))]
-include!(concat!(env!("OUT_DIR"), "/i915_bindings.rs"));
+#[cfg(avoid_cargo)]
+pub use mesa3d_magma_i915_bindgen::*;
 
-#[cfg(use_meson)]
-pub use i915_bindings::*;
+#[cfg(not(avoid_cargo))]
+include!(concat!(env!("OUT_DIR"), "/mesa3d_magma_i915_bindgen.rs"));
