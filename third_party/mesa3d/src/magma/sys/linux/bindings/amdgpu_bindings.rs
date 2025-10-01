@@ -7,8 +7,8 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 
-#[cfg(not(use_meson))]
-include!(concat!(env!("OUT_DIR"), "/amdgpu_bindings.rs"));
+#[cfg(avoid_cargo)]
+pub use mesa3d_magma_amdgpu_bindgen::*;
 
-#[cfg(use_meson)]
-pub use amdgpu_bindings::*;
+#[cfg(not(avoid_cargo))]
+include!(concat!(env!("OUT_DIR"), "/mesa3d_magma_amdgpu_bindgen.rs"));

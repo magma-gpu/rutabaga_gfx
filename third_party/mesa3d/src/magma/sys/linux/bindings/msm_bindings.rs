@@ -5,8 +5,8 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 
-#[cfg(not(use_meson))]
-include!(concat!(env!("OUT_DIR"), "/msm_bindings.rs"));
+#[cfg(avoid_cargo)]
+pub use mesa3d_magma_msm_bindgen::*;
 
-#[cfg(use_meson)]
-pub use msm_bindings::*;
+#[cfg(not(avoid_cargo))]
+include!(concat!(env!("OUT_DIR"), "/mesa3d_magma_msm_bindgen.rs"));

@@ -4,10 +4,10 @@
 use std::env;
 use std::path::PathBuf;
 
-fn generate_linux_bindings(source_dir: PathBuf, out_dir: PathBuf) {
-    println!("cargo::rustc-check-cfg=cfg(use_meson)");
+fn generate_linux_bindgen(source_dir: PathBuf, out_dir: PathBuf) {
+    println!("cargo::rustc-check-cfg=cfg(avoid_cargo)");
 
-    let generated_path = std::path::Path::new(&out_dir).join("drm_bindings.rs");
+    let generated_path = std::path::Path::new(&out_dir).join("mesa3d_magma_drm_bindgen.rs");
     if generated_path.exists() {
         return;
     }
@@ -30,7 +30,7 @@ fn generate_linux_bindings(source_dir: PathBuf, out_dir: PathBuf) {
         .layout_tests(false)
         .generate()
         .expect("Unable to generate drm bindings")
-        .write_to_file(out_dir.join("drm_bindings.rs"))
+        .write_to_file(out_dir.join("mesa3d_magma_drm_bindgen.rs"))
         .expect("Unable to generate bindings");
 
     bindgen::Builder::default()
@@ -45,7 +45,7 @@ fn generate_linux_bindings(source_dir: PathBuf, out_dir: PathBuf) {
         .layout_tests(false)
         .generate()
         .expect("Unable to generate i915 bindings")
-        .write_to_file(out_dir.join("i915_bindings.rs"))
+        .write_to_file(out_dir.join("mesa3d_magma_i915_bindgen.rs"))
         .expect("Unable to generate bindings");
 
     bindgen::Builder::default()
@@ -60,7 +60,7 @@ fn generate_linux_bindings(source_dir: PathBuf, out_dir: PathBuf) {
         .layout_tests(false)
         .generate()
         .expect("Unable to generate xe bindings")
-        .write_to_file(out_dir.join("xe_bindings.rs"))
+        .write_to_file(out_dir.join("mesa3d_magma_xe_bindgen.rs"))
         .expect("Unable to generate bindings");
 
     bindgen::Builder::default()
@@ -75,7 +75,7 @@ fn generate_linux_bindings(source_dir: PathBuf, out_dir: PathBuf) {
         .layout_tests(false)
         .generate()
         .expect("Unable to generate amdgpu bindings")
-        .write_to_file(out_dir.join("amdgpu_bindings.rs"))
+        .write_to_file(out_dir.join("mesa3d_magma_amdgpu_bindgen.rs"))
         .expect("Unable to generate bindings");
 
     bindgen::Builder::default()
@@ -90,7 +90,7 @@ fn generate_linux_bindings(source_dir: PathBuf, out_dir: PathBuf) {
         .layout_tests(false)
         .generate()
         .expect("Unable to generate msm bindings")
-        .write_to_file(out_dir.join("msm_bindings.rs"))
+        .write_to_file(out_dir.join("mesa3d_magma_msm_bindgen.rs"))
         .expect("Unable to generate bindings");
 
     bindgen::Builder::default()
@@ -105,7 +105,7 @@ fn generate_linux_bindings(source_dir: PathBuf, out_dir: PathBuf) {
         .layout_tests(false)
         .generate()
         .expect("Unable to generate virtgpu bindings")
-        .write_to_file(out_dir.join("virtgpu_bindings.rs"))
+        .write_to_file(out_dir.join("mesa3d_magma_virtgpu_bindgen.rs"))
         .expect("Unable to generate virtgpu bindings");
 }
 
@@ -117,6 +117,6 @@ fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR should always be set"));
 
     if target_os.as_str() == "linux" {
-        generate_linux_bindings(source_dir, out_dir)
+        generate_linux_bindgen(source_dir, out_dir)
     }
 }
