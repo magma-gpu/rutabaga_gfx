@@ -42,6 +42,7 @@ use mesa3d_util::RawDescriptor;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
+use mesa3d_util::MESA_HANDLE_TYPE_SIGNAL_SYNC_FD;
 
 use crate::generated::virgl_renderer_bindings::*;
 use crate::renderer_utils::ret_to_res;
