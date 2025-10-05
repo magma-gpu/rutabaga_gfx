@@ -364,7 +364,7 @@ impl CrossDomainWorker {
                                     )
                                 }
                                 Ok(DescriptorType::WritePipe) => {
-                                    *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
+                                    *identifier_type = CROSS_DOMAIN_ID_TYPE_WRITE_PIPE;
                                     add_item(
                                         &self.item_state,
                                         CrossDomainItem::WaylandWritePipe(WritePipe::new(
