@@ -11,15 +11,19 @@ use std::io::IoSlice;
 use std::io::IoSliceMut;
 
 use mesa3d_util::MesaError;
+use mesa3d_util::MesaHandle;
 
+use crate::RUTABAGA_BLOB_MEM_GUEST;
 use crate::rutabaga_core::Rutabaga2DInfo;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::ResourceCreate3D;
+use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;
 use crate::rutabaga_utils::RutabagaError;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaFenceHandler;
+use crate::rutabaga_utils::RutabagaIovec;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::snapshot::RutabagaSnapshotReader;
@@ -180,7 +184,8 @@ impl RutabagaComponent for Rutabaga2D {
         let info_2d = Rutabaga2DInfo {
             width: resource_create_3d.width,
             height: resource_create_3d.height,
-            host_mem: vec![0; resource_size],
+            host_mem: Some(vec![0; resource_size]),
+            scanout_stride: None,
         };
 
         Ok(RutabagaResource {
@@ -196,6 +201,44 @@ impl RutabagaComponent for Rutabaga2D {
             backing_iovecs: None,
             component_mask: 1 << (RutabagaComponentType::Rutabaga2D as u8),
             size: resource_size as u64,
+            mapping: None,
+            guest_cpu_mappable: false,
+        })
+    }
+
+    // Blob resources may be used for scanout of images with non-packed stride.
+    fn create_blob(
+        &mut self,
+        _ctx_id: u32,
+        resource_id: u32,
+        resource_create_blob: ResourceCreateBlob,
+        iovec_opt: Option<Vec<RutabagaIovec>>,
+        _handle_opt: Option<MesaHandle>,
+    ) -> RutabagaResult<RutabagaResource> {
+        if resource_create_blob.blob_mem != RUTABAGA_BLOB_MEM_GUEST {
+            return Err(MesaError::Unsupported.into());
+        }
+
+        let info_2d = Rutabaga2DInfo {
+            width: 0,
+            height: 0,
+            host_mem: None,
+            scanout_stride: None,
+        };
+
+        Ok(RutabagaResource {
+            resource_id,
+            handle: None,
+            blob: true,
+            blob_mem: resource_create_blob.blob_mem,
+            blob_flags: resource_create_blob.blob_flags,
+            map_info: None,
+            info_2d: Some(info_2d),
+            info_3d: None,
+            vulkan_info: None,
+            backing_iovecs: iovec_opt,
+            component_mask: 1 << (RutabagaComponentType::Rutabaga2D as u8),
+            size: resource_create_blob.size,
             mapping: None,
             guest_cpu_mappable: false,
         })
@@ -251,7 +294,7 @@ impl RutabagaComponent for Rutabaga2D {
             transfer.h,
             dst_stride,
             dst_offset,
-            IoSliceMut::new(info_2d.host_mem.as_mut_slice()),
+            IoSliceMut::new(info_2d.host_mem.as_mut().unwrap().as_mut_slice()),
             src_stride,
             src_offset,
             &src_slices,
@@ -269,14 +312,6 @@ impl RutabagaComponent for Rutabaga2D {
         transfer: Transfer3D,
         buf: Option<IoSliceMut>,
     ) -> RutabagaResult<()> {
-        let mut info_2d = resource
-            .info_2d
-            .take()
-            .ok_or(RutabagaError::Invalid2DInfo)?;
-
-        // All official virtio_gpu formats are 4 bytes per pixel.
-        let resource_bpp = 4;
-        let src_stride = resource_bpp * info_2d.width;
         let src_offset = 0;
         let dst_offset = 0;
 
@@ -284,9 +319,42 @@ impl RutabagaComponent for Rutabaga2D {
             "need a destination slice for transfer read",
         ))?;
 
+        let info_2d = resource
+            .info_2d
+            .as_mut()
+            .ok_or(RutabagaError::Invalid2DInfo)?;
+
+        let (width, height, src_slices, src_stride) = if info_2d.host_mem.is_none() {
+            // Blob (guest only) provides stride in the scanout command.
+            let Some(scanout_stride) = info_2d.scanout_stride else {
+                return Err(RutabagaError::InvalidResourceId);
+            };
+
+            let iovecs = resource
+                .backing_iovecs
+                .as_ref()
+                .ok_or(RutabagaError::InvalidIovec)?;
+
+            let mut src_slices = Vec::with_capacity(iovecs.len());
+            for iovec in iovecs {
+                // SAFETY:
+                // Safe because Rutabaga users should have already checked the iovecs.
+                let slice = unsafe { std::slice::from_raw_parts(iovec.base as *mut u8, iovec.len) };
+                src_slices.push(slice);
+            }
+
+            (transfer.w, transfer.h, src_slices, scanout_stride)
+        } else {
+            // All official virtio_gpu formats are 4 bytes per pixel.
+            let resource_bpp = 4;
+            let src_stride = resource_bpp * info_2d.width;
+
+            (info_2d.width, info_2d.height, vec![info_2d.host_mem.as_mut().unwrap().as_slice()], src_stride)
+        };
+
         transfer_2d(
-            info_2d.width,
-            info_2d.height,
+            width,
+            height,
             transfer.x,
             transfer.y,
             transfer.w,
@@ -296,10 +364,9 @@ impl RutabagaComponent for Rutabaga2D {
             dst_slice,
             src_stride,
             src_offset,
-            &[info_2d.host_mem.as_mut_slice()],
+            &src_slices,
         )?;
 
-        resource.info_2d = Some(info_2d);
         Ok(())
     }
 

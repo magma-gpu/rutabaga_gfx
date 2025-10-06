@@ -70,7 +70,8 @@ const RUTABAGA_DEFAULT_HEIGHT: u32 = 1024;
 pub struct Rutabaga2DInfo {
     pub width: u32,
     pub height: u32,
-    pub host_mem: Vec<u8>,
+    pub host_mem: Option<Vec<u8>>,
+    pub scanout_stride: Option<u32>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -164,7 +165,8 @@ impl TryFrom<RutabagaResourceSnapshot> for RutabagaResource {
                 Rutabaga2DInfo {
                     width: info.width,
                     height: info.height,
-                    host_mem: vec![0; usize::try_from(size).unwrap()],
+                    host_mem: Some(vec![0; usize::try_from(size).unwrap()]),
+                    scanout_stride: None,
                 }
             }),
             info_3d: snapshot.info_3d,
@@ -869,7 +871,7 @@ impl Rutabaga {
         component.transfer_write(ctx_id, resource, transfer, buf)
     }
 
-    /// 1) If specified, copies to `buf` from the host resource.
+    /// 1) If specified, copies to `buf` from the resource (host or guest).
     /// 2) Otherwise, for HOST3D_GUEST resources, copies to the attached iovecs from the host
     ///    resource.  For HOST3D resources, this may invalidate caches, though this feature is
     ///    unused by guest userspace.
@@ -905,6 +907,29 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidResourceId)?;
 
         component.resource_flush(resource)
+    }
+
+    pub fn set_scanout(
+        &mut self,
+        _scanout_id: u32,
+        resource_id: u32,
+        info: Option<Resource3DInfo>)
+    -> RutabagaResult<()> {
+        let resource = self
+            .resources
+            .get_mut(&resource_id)
+            .ok_or(RutabagaError::InvalidResourceId)?;
+
+        if let Some(info_val) = info {
+            let info_2d = resource
+                .info_2d
+                .as_mut()
+                .ok_or(RutabagaError::Invalid2DInfo)?;
+
+           info_2d.scanout_stride = Some(info_val.strides[0]);
+        }
+
+        Ok(())
     }
 
     /// Creates a blob resource with the `ctx_id` and `resource_create_blob` metadata.
