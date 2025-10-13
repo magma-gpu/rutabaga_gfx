@@ -6,7 +6,6 @@
 
 extern crate rutabaga_gfx;
 
-use std::cell::RefCell;
 use std::convert::TryInto;
 use std::ffi::CStr;
 use std::ffi::CString;
@@ -23,6 +22,8 @@ use std::ptr::copy_nonoverlapping;
 use std::ptr::null_mut;
 use std::slice::from_raw_parts;
 use std::slice::from_raw_parts_mut;
+use std::sync::Mutex;
+use std::sync::OnceLock;
 
 #[cfg(unix)]
 use libc::iovec;
@@ -60,23 +61,20 @@ pub struct iovec {
 const NO_ERROR: i32 = 0;
 const RUTABAGA_WSI_SURFACELESS: u64 = 1;
 
-thread_local! {
-    static S_DEBUG_HANDLER: RefCell<Option<RutabagaDebugHandler>> = const { RefCell::new(None) };
-}
+static S_DEBUG_HANDLER: OnceLock<Mutex<RutabagaDebugHandler>> = OnceLock::new();
 
 fn log_error(debug_string: String) {
-    S_DEBUG_HANDLER.with(|handler_cell| {
-        if let Some(handler) = &*handler_cell.borrow() {
-            let cstring = CString::new(debug_string.as_str()).expect("CString creation failed");
+    if let Some(handler_mutex) = S_DEBUG_HANDLER.get() {
+        let cstring = CString::new(debug_string.as_str()).expect("CString creation failed");
 
-            let debug = RutabagaDebug {
-                debug_type: RUTABAGA_DEBUG_ERROR,
-                message: cstring.as_ptr(),
-            };
+        let debug = RutabagaDebug {
+            debug_type: RUTABAGA_DEBUG_ERROR,
+            message: cstring.as_ptr(),
+        };
 
-            handler.call(debug);
-        }
-    });
+        let handler = handler_mutex.lock().unwrap();
+        handler.call(debug);
+    }
 }
 
 fn return_result<T>(result: RutabagaResult<T>) -> i32 {
@@ -226,9 +224,7 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
 
         if let Some(func) = builder.debug_cb {
             let debug_handler = create_ffi_debug_handler(builder.user_data, func);
-            S_DEBUG_HANDLER.with(|handler_cell| {
-                *handler_cell.borrow_mut() = Some(debug_handler.clone());
-            });
+            let _ = S_DEBUG_HANDLER.set(Mutex::new(debug_handler.clone()));
             debug_handler_opt = Some(debug_handler);
         }
 
