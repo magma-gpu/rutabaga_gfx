@@ -35,7 +35,7 @@ jobs:
           --package rutabaga_gfx_ffi --features=gfxstream
           --target=x86_64-unknown-linux-gnu
 
-  meson-test--with-gfxstream:
+  meson-test-with-gfxstream:
     name: test rutabaga with gfxstream (Linux x86_64)
     runs-on: ubuntu-latest
     steps:
@@ -136,20 +136,6 @@ jobs:
           cargo build --package rutabaga_gfx --features=virgl_renderer,gbm
           --target=x86_64-unknown-linux-gnu
 
-  build-linux-aarch64:
-    name: Build for aarch64 on Linux
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rust-src
-      - name: Build Project
-        run: >
-          cargo build --package rutabaga_gfx --package kumquat_virtio
-
   build-macos:
     name: Build on macOS
     runs-on: macos-latest
@@ -160,9 +146,12 @@ jobs:
         with:
           toolchain: stable
           components: rust-src
-      - name: Build Project
-        run: >
-          cargo build --package rutabaga_gfx --package kumquat_virtio
+      - name: Install homebrew dependencies
+        run: brew install meson ninja pkg-config
+      - name: Setup Meson build directory
+        run: meson setup build -Dffi=true -Dkumquat=true
+      - name: Compile
+        run: ninja -C build
 
   clippy:
     name: Clippy Check
