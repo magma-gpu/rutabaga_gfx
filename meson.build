@@ -6,7 +6,7 @@ project(
   ['rust', 'c'],
   meson_version: '>=1.3.0',
   license : 'BSD-3-Clause AND MIT',
-  version: '0.1.71',
+  version: '0.1.75',
   meson_version: '>=1.3.0',
   default_options : [
     'rust_std=2021',

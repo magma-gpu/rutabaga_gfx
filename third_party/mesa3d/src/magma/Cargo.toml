@@ -1,6 +1,6 @@
 [package]
 name = "mesa3d_magma"
-version = "0.1.6"
+version = "0.1.75"
 authors = ["Mesa3D Authors"]
 edition = "2021"
 description = "This is a GPU system call abstraction crate"
@@ -11,9 +11,9 @@ name = "mesa3d_magma"
 path = "lib.rs"
 
 [dependencies]
-mesa3d_util = {path = "../util/rust", version = "0.1.6"}
-mesa3d_protocols = {path = "../virtio/protocols", version = "0.1.6"}
-virtgpu_kumquat = {path = "../virtio/virtgpu_kumquat", version = "0.1.6"}
+mesa3d_util = {path = "../util/rust", version = "0.1.75"}
+mesa3d_protocols = {path = "../virtio/protocols", version = "0.1.75"}
+virtgpu_kumquat = {path = "../virtio/virtgpu_kumquat", version = "0.1.75"}
 cfg-if = "1.0.0"
 libc = "0.2.116"
 remain = "0.2"

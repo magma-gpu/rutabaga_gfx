@@ -1,6 +1,6 @@
 [package]
 name = "rutabaga_gfx_ffi"
-version = "0.1.71"
+version = "0.1.75"
 authors = ["Magma GPU project"]
 edition = "2021"
 description = "FFI interface to rutabaga_gfx"

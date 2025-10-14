@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.1.75](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.75)
+
+### API and dependencies
+
+- `rutabaga_gfx`
+  - `RutabagaBuilder`
+    - `rutabaga_channels` is `rutabaga_paths`
+  - `Rutabaga`
+    - `set_scanout` function added to support guest-assigned strides
+
+### Development
+
+- third_party/mesa3d/magma ported here until upstreamed
+- Builds on Linux/Windows, feel free to add patches
+- a proper FFI meson build, that doesn't invoke cargo
+
 ## [v0.1.71](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.71)
 
 ### API and dependencies
@@ -27,7 +43,7 @@
 
 ### Development
 
-- Github migration large complete
+- Github migration largely complete
 - Github CI/CD
 - Initial stub Magma context type
 - Support for vendored Mesa3D crates

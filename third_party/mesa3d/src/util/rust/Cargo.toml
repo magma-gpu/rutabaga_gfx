@@ -1,6 +1,6 @@
 [package]
 name = "mesa3d_util"
-version = "0.1.71"
+version = "0.1.75"
 authors = ["Mesa3D authors"]
 edition = "2021"
 description = "Utility crate part of Mesa3D project"
