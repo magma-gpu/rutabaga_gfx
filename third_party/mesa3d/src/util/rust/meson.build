@@ -34,7 +34,10 @@ dep_zerocopy_derive = dependency('zerocopy-derive',
 dep_mesa3d_util = [dep_cfg_if, dep_thiserror, dep_remain, dep_zerocopy,
                    dep_zerocopy_derive]
 
-if host_machine.system() == 'linux' or host_machine.system() == 'windows'
+supported_systems = ['linux', 'windows', 'darwin', 'macos']
+supported_host_machine = host_machine.system() in supported_systems
+
+if supported_host_machine
   dep_rustix = dependency('rustix',
     version: '>= 0.38.31',
     fallback: ['rustix-1-rs', 'dep_rustix'],

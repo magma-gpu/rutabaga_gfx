@@ -18,9 +18,9 @@ memchr = subproject('memchr-2-rs').get_variable('lib')
 
 rust_args = ['--cfg=feature="default"', '--cfg=feature="std"']
 
-if host_machine.cpu_family() == 'x86_64'
+if host_machine.cpu_family() == 'x86_64' or host_machine.cpu_family() == 'aarch64':
     rust_args += '--cfg=fast_arithmetic="64"'
-elif host_machine.cpu_family() == 'x86'
+elif host_machine.cpu_family() == 'x86' or host_machine.cpu_family() == 'arm'
     rust_args += '--cfg=fast_arithmetic="32"'
 endif
 

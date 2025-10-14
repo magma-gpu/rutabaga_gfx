@@ -12,14 +12,13 @@ errno = subproject('errno-0.3-rs').get_variable('lib')
 libc = subproject('libc-0.2-rs').get_variable('lib')
 bitflags = subproject('bitflags-2-rs').get_variable('lib')
 
-rustix_args = [
-  '--cfg', 'libc',
-  '--cfg', 'feature="use-libc"',
-]
-
+rustix_args = []
 os_deps = []
+
 if host_machine.system() == 'linux' or host_machine.system() == 'android'
   rustix_args += [
+  '--cfg', 'libc',
+  '--cfg', 'feature="use-libc"',
   '--cfg', 'linux_like',
   '--cfg', 'linux_kernel',
   '--cfg', 'feature="std"',
@@ -30,8 +29,24 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
   '--cfg', 'feature="net"',
   '--cfg', 'feature="param"',
   '--cfg', 'feature="pipe"',
-]
+  ]
+elif host_machine.system() == 'darwin' or host_machine.system() == 'macos'
+  rustix_args += [
+  '--cfg', 'apple',
+  '--cfg', 'bsd',
+  '--cfg', 'libc',
+  '--cfg', 'feature="use-libc"',
+  '--cfg', 'feature="std"',
+  '--cfg', 'feature="alloc"',
+  '--cfg', 'feature="fs"',
+  '--cfg', 'feature="net"',
+  '--cfg', 'feature="pipe"',
+  ]
 elif host_machine.system() == 'windows'
+  rustix_args += [
+  '--cfg', 'libc',
+  '--cfg', 'feature="use-libc"',
+  ]
   os_deps += subproject('windows-sys-0.6-rs').get_variable('lib')
 endif
 
