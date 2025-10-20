@@ -29,6 +29,7 @@ use crate::rutabaga_utils::Resource3DInfo;
 use crate::rutabaga_utils::ResourceCreate3D;
 use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaChannel;
+use crate::rutabaga_utils::RutabagaPath;
 use crate::rutabaga_utils::RutabagaComponentType;
 use crate::rutabaga_utils::RutabagaDebugHandler;
 use crate::rutabaga_utils::RutabagaError;
@@ -1226,6 +1227,15 @@ impl Rutabaga {
 
         Ok(())
     }
+
+    pub fn set_scanout(
+        &mut self,
+        _scanout_id: u32,
+        _resource_id: u32,
+        _info: Option<Resource3DInfo>,
+    ) -> RutabagaResult<()> {
+        Ok(())
+    }
 }
 
 /// Rutabaga Builder, following the Rust builder pattern.
@@ -1333,6 +1343,11 @@ impl RutabagaBuilder {
     /// Use the Vulkan swapchain to draw on the host window for gfxstream.
     pub fn set_wsi(mut self, v: RutabagaWsi) -> RutabagaBuilder {
         self.gfxstream_flags = self.gfxstream_flags.set_wsi(v);
+        self
+    }
+
+    /// Set rutabaga paths for the RutabagaBuilder
+    pub fn set_rutabaga_paths(mut self, _paths: Option<Vec<RutabagaPath>>) -> RutabagaBuilder {
         self
     }
 

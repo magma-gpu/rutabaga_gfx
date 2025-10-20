@@ -606,6 +606,17 @@ impl Transfer3D {
 }
 
 /// Rutabaga channel types
+pub const RUTABAGA_PATH_TYPE_WAYLAND: u32 = 0x0001;
+
+/// Information needed to open an OS-specific RutabagaConnection (TBD).  Only Linux hosts are
+/// considered at the moment.
+#[derive(Clone)]
+pub struct RutabagaPath {
+    pub path: PathBuf,
+    pub path_type: u32,
+}
+
+/// Rutabaga channel types
 pub const RUTABAGA_CHANNEL_TYPE_WAYLAND: u32 = 0x0001;
 pub const RUTABAGA_CHANNEL_TYPE_CAMERA: u32 = 0x0002;
 

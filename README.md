@@ -1,151 +1,50 @@
 <div align="center">
-  <img src="https://github.com/magma-gpu/rutabaga_gfx/raw/main/images/rutabaga_gfx_logo.png" alt="" width=320>
-  <p><strong>The Rutabaga Virtual Graphics Interface (VGI): Cross-platform, Rust-based GPU paravirtualization</strong></p>
-
-[![License](https://img.shields.io/github/license/magma-gpu/rutabaga_gfx)](https://github.com/magma-gpu/rutabaga_gfx/blob/main/LICENSE)
-[![Crates.io](https://img.shields.io/crates/d/rutabaga_gfx.svg)](https://crates.io/crates/rutabaga_gfx)
-[![rustc 1.81.0](https://img.shields.io/badge/rust-1.81%2B-orange.svg)](https://img.shields.io/badge/rust-1.81%2B-orange.svg)
-[![Documentation](https://docs.rs/rutabaga_gfx/badge.svg)](https://docs.rs/rutabaga_gfx)
-
+  <img src="https://github.com/magma-gpu/rutabaga_gfx/raw/chromeos/images/rutabaga_department_releases.png" alt="">
 </div>
 
-The Rutabaga Virtual Graphics Interface (VGI) is a cross-platform abstraction for GPU and display
-virtualization. The virtio-gpu
-[context type](https://www.phoronix.com/news/VirtIO-Linux-5.16-Ctx-Type) feature is used to dispatch
-commands between various Rust, C++, and C implementations. The diagram below does not exhaustively
-depict all available context types.
+**WASHINGTON, DC** -- Today, the Rutabaga Department of Releases and Maintainence proposed a new
+strategy to ensure stability for crosvm-on-ChromeOS.
 
-![rutabaga diagram](https://github.com/magma-gpu/rutabaga_gfx/raw/main/images/rutabaga_gfx.png)
+The proposal is due to the recent
+[focus on Android Desktop](https://www.theregister.com/2025/09/25/google_android_chromeos/), which
+has reduced interest in work related to ChromeOS virtualization. However, many ChromeOS devices will
+not migrate to Android Desktop, and will require
+[10-years of updates](https://support.google.com/chrome/a/answer/6220366).
 
-## Rust API
+The crosvm team has chosen to continue updating crosvm in ChromeOS, and as a consequence, rutabaga
+must be updated there too.
 
-The Rutabaga VGI is designed to be portable across VMM implementations. The Rust API is available on
-[crates.io](https://crates.io/crates/rutabaga_gfx).
+This presents several maintainence challenges for rutabaga:
 
-## Rutabaga C API
+1. A subtle change in rutabaga might break ChromeOS, and nobody has bandwidth to test refactors on a
+   ChromeOS device
+1. rutabaga would have to support features that need be deprecated (OpenGL, minigbm rather Mesa GBM)
+   on account of ChromeOS.
+1. New rutabaga features wouldn't be useful for ChromeOS, but would bring-in dependencies
 
-The following documentation shows how to build Rutabaga's C API with gfxstream enabled, which is the
-common use case.
+Taking inspiration from Mesa3D's [Amber branch](https://docs.mesa3d.org/amber.html), the
+department's proposal would _functionally_ freeze the rutabaga version used by ChromeOS via the
+**chromeos** branch. The API would be the same for the *main* and *chromeos* branch.
 
-### Build dependencies
+The procedure is described as follows:
 
-```sh
-sudo apt install libdrm libglm-dev libstb-dev
-```
+1. A new API is introduced in rutabaga *main*
+1. A new *main* release is desired (say, *v0.4.2*)
+1. A change is landed in rutabaga *chromeos* that stubs out the new API. The API would always return
+   success or something else acceptable to crosvm.
+1. *v0.4.2* and *0.4.2-chromeos* released at the same time on crates.io
+1. Upstream crosvm uses *v0.4.2*, ChromeOS crosvm uses *v0.4.2-chromeos*.
 
-### Install gfxstream host
+This does require a small downstream changes to crosvm-on-ChromeOS's Cargo.toml file. A prototype
+was done, which passes the
+[ChromeOS CI](https://chromium-review.googlesource.com/q/topic:%22rutabaga-chromeos-attempt%22).
 
-```sh
-git clone https://github.com/google/gfxstream
-cd gfxstream/
-meson setup host-build/
-meson install -C host-build/
-```
+The proposal keeps ChromeOS stable, but always allows evolution of *main*.
 
-### Install FFI bindings to Rutabaga
+In these bitterly-divided times, leaders on both sides of the aisle praised the prosposal. President
+Donald Trump said removing ChromeOS code in rutabaga *main* would allow space for new luxury
+ballrooms, and claimed he deserved a Github award for the effort. Former Vice President Kamala
+Harris also welcomed the move, saying it presents a vision for
+"[what rutabaga can be, unburdened by what has been](https://www.youtube.com/shorts/kFkchOYayUE)".
 
-```sh
-cd $(rutabaga_gfx_dir)/ffi/
-meson setup rutabaga-ffi-build/
-meson install -C rutabaga-ffi-build/
-```
-
-### Install virglrenderer host
-
-Rutabaga's C API can also be built with virglrenderer enabled. To use virglrenderer feature first
-install virglrenderer on the host.
-
-```sh
-git clone https://gitlab.freedesktop.org/virgl/virglrenderer.git
-cd virglrenderer/
-git checkout virglrenderer-1.0.1
-meson setup build/
-meson install -C build/
-```
-
-### Latest releases for potential packaging
-
-- [Rutabaga FFI v0.1.2](https://crates.io/crates/rutabaga_gfx_ffi)
-- [gfxstream v0.1.2](https://android.googlesource.com/platform/hardware/google/gfxstream/+/refs/tags/v0.1.2-gfxstream-release)
-- [AEMU v0.1.2](https://android.googlesource.com/platform/hardware/google/aemu/+/refs/tags/v0.1.2-aemu-release)
-- [virglrenderer v1.0.1](https://gitlab.freedesktop.org/virgl/virglrenderer/-/tree/virglrenderer-1.0.1)
-
-# Kumquat Media Server
-
-The Kumquat Media server provides a way to test virtio multi-media protocols without a virtual
-machine. The following example shows how to run GL and Vulkan apps with `virtio-gpu` +
-`gfxstream-vulkan`. Full windowing will only work on platforms that support `dma_buf` and
-`dma_fence`.
-
-Only headless apps are likely to work on Nvidia, and requires
-[this change](https://crrev.com/c/5698371).
-
-## Build GPU-enabled server
-
-First install the [gfxstream-host](#install-gfxstream-host), then:
-
-```sh
-cd $(rutabaga_gfx_dir)/kumquat/server/
-cargo build --features=gfxstream
-```
-
-## Build gfxstream guest
-
-Mesa provides gfxstream vulkan guest libraries.
-
-```sh
-git clone https://gitlab.freedesktop.org/mesa/mesa.git
-cd mesa
-meson setup guest-build -Dvulkan-drivers="gfxstream" -Dgallium-drivers="" -Dvirtgpu_kumquat=true -Dopengl=false -Drust_std=2021
-ninja -C guest-build/
-```
-
-## Run apps
-
-In one terminal:
-
-```sh
-cd $(rutabaga_gfx_dir)/kumquat/server/
-./target/debug/kumquat
-```
-
-In another terminal, run:
-
-```sh
-export MESA_LOADER_DRIVER_OVERRIDE=zink
-export VIRTGPU_KUMQUAT=1
-export VK_ICD_FILENAMES=$(mesa_dir)/guest-build/src/gfxstream/guest/vulkan/gfxstream_vk_devenv_icd.x86_64.json
-vkcube
-```
-
-# Linux guests
-
-To test gfxstream with Debian guests, make sure your display environment is headless.
-
-```
-systemctl set-default multi-user.target
-```
-
-Build gfxstream guest as previously and start the compositor. The `VIRTGPU_KUMQUAT` variable is no
-longer needed:
-
-```sh
-export MESA_LOADER_DRIVER_OVERRIDE=zink
-export VK_ICD_FILENAMES=$(mesa_dir)/guest-build/src/gfxstream/guest/vulkan/gfxstream_vk_devenv_icd.x86_64.json
-weston --backend=drm
-```
-
-# Magma
-
-Magma is an effort to standardize GPU system call interfaces, in a way that is optimized for
-remoting and microkernels. This takes direct inspiration from the
-[Fuchsia Magma interface](https://fuchsia.dev/fuchsia-src/development/graphics/magma): in that
-design, the library interface and protocol are OS-agnostic. An OS-specific virtgpu implementation
-handles paravirtualization.
-
-Follow along with the [Mesa MR](https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/33190) to see
-if it works or we fall flat on our face.
-
-<!-- Image from Mesa MR -->
-
-![magma diagram](https://github.com/magma-gpu/rutabaga_gfx/raw/main/images/magma.png)
+The proposal goes to crosvm maintainers for review, before a Congressional vote is held.
