@@ -264,6 +264,11 @@ impl RutabagaComponent for Rutabaga2D {
             .take()
             .ok_or(RutabagaError::Invalid2DInfo)?;
 
+        // For guest-only blobs, transfer_write to host_mem is a no-op.
+        if info_2d.host_mem.is_none() && resource.blob_mem == RUTABAGA_BLOB_MEM_GUEST {
+            return Ok(())
+        }
+
         let iovecs = resource
             .backing_iovecs
             .take()
