@@ -259,9 +259,9 @@ impl RutabagaComponent for Rutabaga2D {
             return Err(MesaError::Unsupported.into());
         }
 
-        let mut info_2d = resource
+        let info_2d = resource
             .info_2d
-            .take()
+            .as_mut()
             .ok_or(RutabagaError::Invalid2DInfo)?;
 
         // For guest-only blobs, transfer_write to host_mem is a no-op.
@@ -271,13 +271,13 @@ impl RutabagaComponent for Rutabaga2D {
 
         let iovecs = resource
             .backing_iovecs
-            .take()
+            .as_ref()
             .ok_or(RutabagaError::InvalidIovec)?;
 
         // All official virtio_gpu formats are 4 bytes per pixel.
         let resource_bpp = 4;
         let mut src_slices = Vec::with_capacity(iovecs.len());
-        for iovec in &iovecs {
+        for iovec in iovecs {
             // SAFETY:
             // Safe because Rutabaga users should have already checked the iovecs.
             let slice = unsafe { std::slice::from_raw_parts(iovec.base as *mut u8, iovec.len) };
@@ -305,8 +305,6 @@ impl RutabagaComponent for Rutabaga2D {
             &src_slices,
         )?;
 
-        resource.info_2d = Some(info_2d);
-        resource.backing_iovecs = Some(iovecs);
         Ok(())
     }
 
