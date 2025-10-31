@@ -42,6 +42,7 @@ use mesa3d_util::RawDescriptor;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
+#[cfg(virgl_renderer_unstable)]
 use mesa3d_util::MESA_HANDLE_TYPE_SIGNAL_SYNC_FD;
 
 use crate::generated::virgl_renderer_bindings::*;
@@ -82,7 +83,12 @@ fn is_valid_gpu_path(rpath: &RutabagaPath) -> bool {
     }
 
     canonicalize(&rpath.path)
-        .map(|path| path.starts_with("/dev/dri/renderD") && path.exists())
+        .map(|path| {
+            path.to_string_lossy()
+                .to_string()
+                .starts_with("/dev/dri/renderD")
+                && path.exists()
+        })
         .unwrap_or_default()
 }
 
@@ -285,10 +291,9 @@ extern "C" fn get_drm_fd(cookie: *mut c_void) -> c_int {
                 .map(|rpath| rpath.path.clone())
         });
 
-        // Try to open the path and return its fd
-        gpu_path
-            .and_then(|path| {
-                info!("virglrenderer: using GPU path {path:?}");
+        match gpu_path {
+            Some(path) => {
+                info!("using provided GPU path {path:?}");
                 OpenOptions::new()
                     .read(true)
                     .write(true)
@@ -296,13 +301,16 @@ extern "C" fn get_drm_fd(cookie: *mut c_void) -> c_int {
                     .open(path)
                     .inspect_err(|err| error!("failed to open GPU path: {err}"))
                     .ok()
-            })
-            // Convert file to raw fd, the ownership of the fd is
-            // transferred to virglrenderer.
-            .map(|file| file.into_raw_fd())
-            // If no path was provided or opening it failed, use the
-            // default drm fd.
-            .unwrap_or(DEFAULT_DRM_FD)
+                    // Convert file to raw fd, the ownership of the fd is
+                    // transferred to virglrenderer.
+                    .map(|file| file.into_raw_fd())
+                    .unwrap_or(DEFAULT_DRM_FD)
+            }
+            None => {
+                info!("no valid GPU path provided");
+                DEFAULT_DRM_FD
+            }
+        }
     })
     .unwrap_or_else(|_| abort())
 }
