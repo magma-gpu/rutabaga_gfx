@@ -39,6 +39,8 @@ use mesa3d_util::MesaHandle;
 use mesa3d_util::MesaMapping;
 use mesa3d_util::OwnedDescriptor;
 use mesa3d_util::RawDescriptor;
+#[cfg(target_os = "macos")]
+use mesa3d_util::MESA_HANDLE_TYPE_MEM_APPLE;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
@@ -518,7 +520,17 @@ impl VirglRenderer {
         let handle_type = match fd_type {
             VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF => MESA_HANDLE_TYPE_MEM_DMABUF,
             VIRGL_RENDERER_BLOB_FD_TYPE_SHM => MESA_HANDLE_TYPE_MEM_SHM,
-            VIRGL_RENDERER_BLOB_FD_TYPE_OPAQUE => MESA_HANDLE_TYPE_MEM_OPAQUE_FD,
+            VIRGL_RENDERER_BLOB_FD_TYPE_OPAQUE => {
+                // On macOS, mark opaque FDs as Apple handles for hypervisor mapping
+                #[cfg(target_os = "macos")]
+                {
+                    MESA_HANDLE_TYPE_MEM_APPLE
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    MESA_HANDLE_TYPE_MEM_OPAQUE_FD
+                }
+            }
             _ => {
                 return Err(MesaError::Unsupported.into());
             }
