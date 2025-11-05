@@ -118,6 +118,7 @@ fn import_resource(resource: &mut RutabagaResource) -> RutabagaResult<()> {
     }
 
     if let Some(handle) = &resource.handle {
+        #[cfg(target_os = "linux")]
         if handle.handle_type == MESA_HANDLE_TYPE_MEM_DMABUF {
             let dmabuf_fd = handle
                 .os_handle
