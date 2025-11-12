@@ -169,7 +169,7 @@ impl RutabagaContext for VirglRendererContext {
         if !fence_ids.is_empty() {
             return Err(MesaError::Unsupported.into());
         }
-        if commands.len() % size_of::<u32>() != 0 {
+        if !commands.len().is_multiple_of(size_of::<u32>()) {
             return Err(RutabagaError::InvalidCommandSize(commands.len()));
         }
         let dword_count = (commands.len() / size_of::<u32>()) as i32;
