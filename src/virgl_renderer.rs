@@ -39,6 +39,8 @@ use mesa3d_util::MesaHandle;
 use mesa3d_util::MesaMapping;
 use mesa3d_util::OwnedDescriptor;
 use mesa3d_util::RawDescriptor;
+#[cfg(target_os = "macos")]
+use mesa3d_util::MESA_HANDLE_TYPE_MEM_APPLE;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
@@ -118,6 +120,7 @@ fn import_resource(resource: &mut RutabagaResource) -> RutabagaResult<()> {
     }
 
     if let Some(handle) = &resource.handle {
+        #[cfg(target_os = "linux")]
         if handle.handle_type == MESA_HANDLE_TYPE_MEM_DMABUF {
             let dmabuf_fd = handle
                 .os_handle
@@ -166,7 +169,7 @@ impl RutabagaContext for VirglRendererContext {
         if !fence_ids.is_empty() {
             return Err(MesaError::Unsupported.into());
         }
-        if commands.len() % size_of::<u32>() != 0 {
+        if !commands.len().is_multiple_of(size_of::<u32>()) {
             return Err(RutabagaError::InvalidCommandSize(commands.len()));
         }
         let dword_count = (commands.len() / size_of::<u32>()) as i32;
@@ -502,7 +505,7 @@ impl VirglRenderer {
 
     fn export_blob(&self, resource_id: u32) -> RutabagaResult<Arc<MesaHandle>> {
         let mut fd_type = 0;
-        let mut fd = 0;
+        let mut fd = -1;
         // TODO(b/315870313): Add safety comment
         #[allow(clippy::undocumented_unsafe_blocks)]
         let ret =
@@ -517,7 +520,17 @@ impl VirglRenderer {
         let handle_type = match fd_type {
             VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF => MESA_HANDLE_TYPE_MEM_DMABUF,
             VIRGL_RENDERER_BLOB_FD_TYPE_SHM => MESA_HANDLE_TYPE_MEM_SHM,
-            VIRGL_RENDERER_BLOB_FD_TYPE_OPAQUE => MESA_HANDLE_TYPE_MEM_OPAQUE_FD,
+            VIRGL_RENDERER_BLOB_FD_TYPE_OPAQUE => {
+                // On macOS, mark opaque FDs as Apple handles for hypervisor mapping
+                #[cfg(target_os = "macos")]
+                {
+                    MESA_HANDLE_TYPE_MEM_APPLE
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    MESA_HANDLE_TYPE_MEM_OPAQUE_FD
+                }
+            }
             _ => {
                 return Err(MesaError::Unsupported.into());
             }
