@@ -13,7 +13,6 @@ use std::io::IoSliceMut;
 use mesa3d_util::MesaError;
 use mesa3d_util::MesaHandle;
 
-use crate::RUTABAGA_BLOB_MEM_GUEST;
 use crate::rutabaga_core::Rutabaga2DInfo;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaResource;
@@ -28,6 +27,7 @@ use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::snapshot::RutabagaSnapshotReader;
 use crate::snapshot::RutabagaSnapshotWriter;
+use crate::RUTABAGA_BLOB_MEM_GUEST;
 
 /// Transfers a resource from potentially many chunked src slices to a dst slice.
 #[allow(clippy::too_many_arguments)]
@@ -202,7 +202,6 @@ impl RutabagaComponent for Rutabaga2D {
             component_mask: 1 << (RutabagaComponentType::Rutabaga2D as u8),
             size: resource_size as u64,
             mapping: None,
-            guest_cpu_mappable: false,
         })
     }
 
@@ -240,7 +239,6 @@ impl RutabagaComponent for Rutabaga2D {
             component_mask: 1 << (RutabagaComponentType::Rutabaga2D as u8),
             size: resource_create_blob.size,
             mapping: None,
-            guest_cpu_mappable: false,
         })
     }
 
@@ -266,7 +264,7 @@ impl RutabagaComponent for Rutabaga2D {
 
         // For guest-only blobs, transfer_write to host_mem is a no-op.
         if info_2d.host_mem.is_none() && resource.blob_mem == RUTABAGA_BLOB_MEM_GUEST {
-            return Ok(())
+            return Ok(());
         }
 
         let iovecs = resource
@@ -352,7 +350,12 @@ impl RutabagaComponent for Rutabaga2D {
             let resource_bpp = 4;
             let src_stride = resource_bpp * info_2d.width;
 
-            (info_2d.width, info_2d.height, vec![info_2d.host_mem.as_mut().unwrap().as_slice()], src_stride)
+            (
+                info_2d.width,
+                info_2d.height,
+                vec![info_2d.host_mem.as_mut().unwrap().as_slice()],
+                src_stride,
+            )
         };
 
         transfer_2d(
