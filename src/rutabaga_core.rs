@@ -97,7 +97,6 @@ pub struct RutabagaResource {
     pub component_mask: u8,
     pub size: u64,
     pub mapping: Option<MemoryMapping>,
-    pub guest_cpu_mappable: bool,
 }
 
 /// The preserved fields of `RutabagaResource` that are saved and loaded across snapshot and
@@ -175,7 +174,6 @@ impl TryFrom<RutabagaResourceSnapshot> for RutabagaResource {
             size: snapshot.size,
             component_mask: snapshot.component_mask,
             mapping: None,
-            guest_cpu_mappable: false,
         })
     }
 }
@@ -240,7 +238,6 @@ pub trait RutabagaComponent {
             component_mask: 0,
             size: 0,
             mapping: None,
-            guest_cpu_mappable: false,
         })
     }
 
@@ -913,8 +910,8 @@ impl Rutabaga {
         &mut self,
         _scanout_id: u32,
         resource_id: u32,
-        info: Option<Resource3DInfo>)
-    -> RutabagaResult<()> {
+        info: Option<Resource3DInfo>,
+    ) -> RutabagaResult<()> {
         let resource = self
             .resources
             .get_mut(&resource_id)
@@ -926,7 +923,7 @@ impl Rutabaga {
                 .as_mut()
                 .ok_or(RutabagaError::Invalid2DInfo)?;
 
-           info_2d.scanout_stride = Some(info_val.strides[0]);
+            info_2d.scanout_stride = Some(info_val.strides[0]);
         }
 
         Ok(())
@@ -1087,13 +1084,9 @@ impl Rutabaga {
     }
 
     /// Returns true if the resource is mappable by the guest CPU.
-    pub fn guest_cpu_mappable(&self, resource_id: u32) -> RutabagaResult<bool> {
-        let resource = self
-            .resources
-            .get(&resource_id)
-            .ok_or(RutabagaError::InvalidResourceId)?;
-
-        Ok(resource.guest_cpu_mappable)
+    #[deprecated(since = "0.1.75", note = "ChromeOS specific API, do not use")]
+    pub fn guest_cpu_mappable(&self, _resource_id: u32) -> RutabagaResult<bool> {
+        unimplemented!();
     }
 
     /// Exports a blob resource.  See virtio-gpu spec for blob flag use flags.

@@ -857,9 +857,6 @@ impl RutabagaContext for CrossDomainContext {
                         component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
                         size: resource_create_blob.size,
                         mapping: None,
-                        guest_cpu_mappable: (resource_create_blob.blob_flags
-                            & RUTABAGA_BLOB_FLAG_USE_MAPPABLE)
-                            != 0,
                     })
                 }
                 _ => Err(RutabagaError::InvalidCrossDomainItemType),
@@ -894,7 +891,6 @@ impl RutabagaContext for CrossDomainContext {
                         component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
                         size: resource_create_blob.size,
                         mapping: None,
-                        guest_cpu_mappable: false,
                     })
                 }
                 _ => Err(RutabagaError::InvalidCrossDomainItemType),
@@ -1087,7 +1083,6 @@ impl RutabagaComponent for CrossDomain {
             component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
             size: resource_create_blob.size,
             mapping: None,
-            guest_cpu_mappable: false,
         })
     }
 
