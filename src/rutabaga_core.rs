@@ -5,10 +5,11 @@
 //! rutabaga_core: Cross-platform, Rust-based, Wayland and Vulkan centric GPU virtualization.
 use std::collections::BTreeMap as Map;
 use std::convert::TryInto;
+use std::fs::File;
 use std::io::IoSlice;
 use std::io::IoSliceMut;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use mesa3d_util::MemoryMapping;
 use mesa3d_util::MesaError;
@@ -62,6 +63,8 @@ use crate::snapshot::RutabagaSnapshotWriter;
 #[cfg(feature = "virgl_renderer")]
 use crate::virgl_renderer::VirglRenderer;
 use crate::RutabagaPaths;
+
+pub type VirtioFsTable = Arc<Mutex<Map<(u64, u64), File>>>;
 
 const RUTABAGA_DEFAULT_WIDTH: u32 = 1280;
 const RUTABAGA_DEFAULT_HEIGHT: u32 = 1024;
@@ -1266,6 +1269,7 @@ pub struct RutabagaBuilder {
     debug_handler: Option<RutabagaDebugHandler>,
     renderer_features: Option<String>,
     server_descriptor: Option<OwnedDescriptor>,
+    virtiofs_table: Option<VirtioFsTable>,
 }
 
 impl RutabagaBuilder {
@@ -1287,6 +1291,7 @@ impl RutabagaBuilder {
             debug_handler: None,
             renderer_features: None,
             server_descriptor: None,
+            virtiofs_table: None,
         }
     }
 
@@ -1388,6 +1393,12 @@ impl RutabagaBuilder {
         server_descriptor: Option<OwnedDescriptor>,
     ) -> RutabagaBuilder {
         self.server_descriptor = server_descriptor;
+        self
+    }
+
+    /// Set export table for the RutabagaBuilder
+    pub fn set_export_table(mut self, virtiofs_table: VirtioFsTable) -> RutabagaBuilder {
+        self.virtiofs_table = Some(virtiofs_table);
         self
     }
 
@@ -1505,7 +1516,11 @@ impl RutabagaBuilder {
                 rutabaga_components.insert(RutabagaComponentType::Magma, magma);
             }
 
-            let cross_domain = CrossDomain::init(self.paths.clone(), self.fence_handler.clone())?;
+            let cross_domain = CrossDomain::init(
+                self.paths.clone(),
+                self.fence_handler.clone(),
+                self.virtiofs_table.clone(),
+            )?;
             rutabaga_components.insert(RutabagaComponentType::CrossDomain, cross_domain);
             push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
         }
