@@ -41,6 +41,7 @@ use crate::handle::RutabagaHandle;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
 use crate::rutabaga_core::RutabagaResource;
+use crate::rutabaga_core::VirtioFsTable;
 use crate::rutabaga_utils::Resource3DInfo;
 use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;
@@ -124,6 +125,7 @@ struct CrossDomainContext {
     worker_thread: Option<thread::JoinHandle<RutabagaResult<()>>>,
     resample_evt: Option<Event>,
     kill_evt: Option<Event>,
+    virtiofs_table: Option<VirtioFsTable>,
 }
 
 /// The CrossDomain component contains a list of paths that the guest may connect to and the
@@ -132,6 +134,7 @@ pub struct CrossDomain {
     paths: Option<Vec<RutabagaPath>>,
     gralloc: Arc<Mutex<RutabagaGralloc>>,
     fence_handler: RutabagaFenceHandler,
+    virtiofs_table: Option<VirtioFsTable>,
 }
 
 // TODO(gurchetansingh): optimize the item tracker.  Each requirements blob is long-lived and can
@@ -496,12 +499,14 @@ impl CrossDomain {
     pub fn init(
         paths: Option<Vec<RutabagaPath>>,
         fence_handler: RutabagaFenceHandler,
+        virtiofs_table: Option<VirtioFsTable>,
     ) -> RutabagaResult<Box<dyn RutabagaComponent>> {
         let gralloc = RutabagaGralloc::new(RutabagaGrallocBackendFlags::new())?;
         Ok(Box::new(CrossDomain {
             paths,
             gralloc: Arc::new(Mutex::new(gralloc)),
             fence_handler,
+            virtiofs_table,
         }))
     }
 }
@@ -1104,6 +1109,7 @@ impl RutabagaComponent for CrossDomain {
             worker_thread: None,
             resample_evt: None,
             kill_evt: None,
+            virtiofs_table: self.virtiofs_table.clone(),
         }))
     }
 
