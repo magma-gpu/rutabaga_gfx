@@ -25,7 +25,7 @@ pub use mesa3d_util::FromRawDescriptor as RutabagaFromRawDescriptor;
 pub use mesa3d_util::IntoRawDescriptor as RutabagaIntoRawDescriptor;
 pub use mesa3d_util::MappedRegion as RutabagaMappedRegion;
 pub use mesa3d_util::MesaError::Unsupported as RutabagaUnsupported;
-pub use mesa3d_util::MesaHandle as RutabagaHandle;
+pub use mesa3d_util::MesaHandle as RutabagaMesaHandle;
 pub use mesa3d_util::OwnedDescriptor as RutabagaDescriptor;
 pub use mesa3d_util::RawDescriptor as RutabagaRawDescriptor;
 pub use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF as RUTABAGA_HANDLE_TYPE_MEM_DMABUF;
@@ -34,6 +34,7 @@ pub use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD as RUTABAGA_HANDLE_TYPE_MEM_
 pub use crate::rutabaga_core::calculate_capset_mask;
 pub use crate::rutabaga_core::calculate_capset_names;
 pub use crate::rutabaga_core::Rutabaga;
+pub use crate::rutabaga_core::RutabagaHandle;
 pub use crate::rutabaga_core::RutabagaBuilder;
 pub use crate::rutabaga_gralloc::DrmFormat;
 pub use crate::rutabaga_gralloc::ImageAllocationInfo;
