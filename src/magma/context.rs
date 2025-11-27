@@ -11,6 +11,7 @@ use mesa3d_util::MesaHandle;
 use crate::context_common::ContextResource;
 use crate::context_common::ContextResources;
 use crate::rutabaga_core::RutabagaContext;
+use crate::rutabaga_core::RutabagaHandle;
 use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;
@@ -38,7 +39,7 @@ impl RutabagaContext for MagmaVirtioGpuContext {
         &mut self,
         _resource_id: u32,
         _resource_create_blob: ResourceCreateBlob,
-        _handle_opt: Option<MesaHandle>,
+        _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         Err(MesaError::Unsupported.into())
     }

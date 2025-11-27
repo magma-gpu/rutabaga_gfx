@@ -6,12 +6,12 @@ use std::collections::BTreeMap as Map;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use mesa3d_util::MesaHandle;
+use crate::rutabaga_core::RutabagaHandle;
 
 use crate::rutabaga_utils::RutabagaIovec;
 
 pub struct ContextResource {
-    pub handle: Option<Arc<MesaHandle>>,
+    pub handle: Option<Arc<RutabagaHandle>>,
     pub backing_iovecs: Option<Vec<RutabagaIovec>>,
 }
 
