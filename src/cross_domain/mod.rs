@@ -40,6 +40,7 @@ use crate::context_common::ContextResources;
 use crate::cross_domain::cross_domain_protocol::*;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
+use crate::rutabaga_core::RutabagaHandle;
 use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::Resource3DInfo;
 use crate::rutabaga_utils::ResourceCreateBlob;
@@ -677,7 +678,11 @@ impl CrossDomainContext {
                     .ok_or(RutabagaError::InvalidResourceId)?;
 
                 if let Some(ref handle) = context_resource.handle {
-                    descriptors.push(handle.os_handle.try_clone().map_err(MesaError::IoError)?);
+                    if let RutabagaHandle::MesaHandle(mesa_handle) = &**handle {
+                        descriptors.push(mesa_handle.os_handle.try_clone().map_err(MesaError::IoError)?);
+                    } else {
+                        return Err(MesaError::InvalidMesaHandle.into());
+                    }
                 } else {
                     return Err(MesaError::InvalidMesaHandle.into());
                 }
@@ -804,7 +809,7 @@ impl RutabagaContext for CrossDomainContext {
         &mut self,
         resource_id: u32,
         resource_create_blob: ResourceCreateBlob,
-        handle_opt: Option<MesaHandle>,
+        handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         let item_id = resource_create_blob.blob_id as u32;
 
@@ -831,7 +836,7 @@ impl RutabagaContext for CrossDomainContext {
                     // cross-domain use case, so whatever.
                     let hnd = match handle_opt {
                         Some(handle) => handle,
-                        None => self.gralloc.lock().unwrap().allocate_memory(*reqs)?,
+                        None => RutabagaHandle::MesaHandle(self.gralloc.lock().unwrap().allocate_memory(*reqs)?),
                     };
 
                     let info_3d = Resource3DInfo {
@@ -882,7 +887,7 @@ impl RutabagaContext for CrossDomainContext {
 
                     Ok(RutabagaResource {
                         resource_id,
-                        handle: Some(Arc::new(hnd)),
+                        handle: Some(Arc::new(RutabagaHandle::MesaHandle(hnd))),
                         blob: true,
                         blob_mem: resource_create_blob.blob_mem,
                         blob_flags: resource_create_blob.blob_flags,
@@ -1065,7 +1070,7 @@ impl RutabagaComponent for CrossDomain {
         resource_id: u32,
         resource_create_blob: ResourceCreateBlob,
         iovec_opt: Option<Vec<RutabagaIovec>>,
-        _handle_opt: Option<MesaHandle>,
+        _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         if resource_create_blob.blob_mem != RUTABAGA_BLOB_MEM_GUEST
             && resource_create_blob.blob_flags != RUTABAGA_BLOB_FLAG_USE_MAPPABLE
