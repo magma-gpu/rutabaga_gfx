@@ -11,9 +11,9 @@ use std::io::IoSlice;
 use std::io::IoSliceMut;
 
 use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
 
 use crate::rutabaga_core::Rutabaga2DInfo;
+use crate::RutabagaHandle;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::ResourceCreate3D;
@@ -212,7 +212,7 @@ impl RutabagaComponent for Rutabaga2D {
         resource_id: u32,
         resource_create_blob: ResourceCreateBlob,
         iovec_opt: Option<Vec<RutabagaIovec>>,
-        _handle_opt: Option<MesaHandle>,
+        _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         if resource_create_blob.blob_mem != RUTABAGA_BLOB_MEM_GUEST {
             return Err(MesaError::Unsupported.into());
