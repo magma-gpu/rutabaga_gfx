@@ -15,7 +15,6 @@ use mesa3d_protocols::ipc::KumquatStream;
 use mesa3d_protocols::protocols::kumquat_gpu_protocol::*;
 use mesa3d_util::AsBorrowedDescriptor;
 use mesa3d_util::Event;
-use mesa3d_util::FromRawDescriptor;
 use mesa3d_util::MemoryMapping;
 use mesa3d_util::MesaError;
 use mesa3d_util::MesaHandle;
@@ -32,8 +31,6 @@ use rutabaga_gfx::RutabagaBuilder;
 use rutabaga_gfx::RutabagaError;
 use rutabaga_gfx::RutabagaFence;
 use rutabaga_gfx::RutabagaFenceHandler;
-use rutabaga_gfx::RutabagaHandle;
-use rutabaga_gfx::RutabagaIntoRawDescriptor;
 use rutabaga_gfx::RutabagaIovec;
 use rutabaga_gfx::RutabagaWsi;
 use rutabaga_gfx::Transfer3D;
@@ -69,16 +66,6 @@ impl From<RutabagaError> for KumquatGpuError {
 }
 
 pub type KumquatGpuResult<T> = std::result::Result<T, KumquatGpuError>;
-
-fn to_mesa_handle(handle: RutabagaHandle) -> MesaHandle {
-    MesaHandle {
-        // SAFETY: Safe because we own the descriptor
-        os_handle: unsafe {
-            OwnedDescriptor::from_raw_descriptor(handle.os_handle.into_raw_descriptor())
-        },
-        handle_type: handle.handle_type,
-    }
-}
 
 pub struct KumquatGpuConnection {
     stream: KumquatStream,
@@ -406,7 +393,7 @@ impl KumquatGpuConnection {
 
                         if actual_fence {
                             fence_descriptor_opt =
-                                Some(to_mesa_handle(kumquat_gpu.rutabaga.export_fence(fence_id)?));
+                                Some(kumquat_gpu.rutabaga.export_fence(fence_id)?);
                             kumquat_gpu.rutabaga.destroy_fences(&[fence_id])?;
                         }
 
@@ -448,6 +435,7 @@ impl KumquatGpuConnection {
                     )?;
 
                     let handle = kumquat_gpu.rutabaga.export_blob(resource_id)?;
+                    let handle = MesaHandle::try_from(handle)?;
                     let mut vk_info: RutabagaVulkanInfo = Default::default();
                     if let Ok(vulkan_info) = kumquat_gpu.rutabaga.vulkan_info(resource_id) {
                         vk_info = vulkan_info;
@@ -479,7 +467,7 @@ impl KumquatGpuConnection {
 
                     self.stream.write(KumquatGpuProtocolWrite::CmdWithHandle(
                         resp,
-                        to_mesa_handle(handle),
+                        handle,
                     ))?;
 
                     kumquat_gpu

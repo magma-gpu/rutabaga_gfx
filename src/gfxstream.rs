@@ -42,6 +42,7 @@ use crate::renderer_utils::VirglBox;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
 use crate::rutabaga_core::RutabagaResource;
+use crate::rutabaga_core::RutabagaHandle;
 use crate::rutabaga_utils::DeviceId;
 use crate::rutabaga_utils::GfxstreamFlags;
 use crate::rutabaga_utils::ResourceCreate3D;
@@ -520,7 +521,7 @@ impl Gfxstream {
         })
     }
 
-    fn export_blob(&self, resource_id: u32) -> RutabagaResult<Arc<MesaHandle>> {
+    fn export_blob(&self, resource_id: u32) -> RutabagaResult<Arc<RutabagaHandle>> {
         let mut stream_handle: stream_renderer_handle = Default::default();
         // TODO(b/315870313): Add safety comment
         #[allow(clippy::undocumented_unsafe_blocks)]
@@ -536,7 +537,7 @@ impl Gfxstream {
         Ok(Arc::new(MesaHandle {
             os_handle: handle,
             handle_type: stream_handle.handle_type,
-        }))
+        }.into()))
     }
 }
 
@@ -628,9 +629,10 @@ impl RutabagaComponent for Gfxstream {
     fn import(
         &self,
         resource_id: u32,
-        import_handle: MesaHandle,
+        import_handle: RutabagaHandle,
         import_data: RutabagaImportData,
     ) -> RutabagaResult<Option<RutabagaResource>> {
+        let import_handle = MesaHandle::try_from(import_handle)?;
         let stream_handle = stream_renderer_handle {
             os_handle: import_handle.os_handle.into_raw_descriptor() as i64,
             handle_type: import_handle.handle_type,
@@ -842,7 +844,7 @@ impl RutabagaComponent for Gfxstream {
         resource_id: u32,
         resource_create_blob: ResourceCreateBlob,
         mut iovec_opt: Option<Vec<RutabagaIovec>>,
-        handle_opt: Option<MesaHandle>,
+        handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         let mut iovec_ptr = null_mut();
         let mut num_iovecs = 0;
@@ -854,6 +856,7 @@ impl RutabagaComponent for Gfxstream {
         let mut handle_ptr = null();
         let mut stream_handle: stream_renderer_handle = Default::default();
         if let Some(handle) = handle_opt {
+            let handle = MesaHandle::try_from(handle)?;
             stream_handle.handle_type = handle.handle_type;
             stream_handle.os_handle = handle.os_handle.into_raw_descriptor() as i64;
             handle_ptr = &stream_handle;
