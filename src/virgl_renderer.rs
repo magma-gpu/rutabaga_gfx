@@ -46,12 +46,12 @@ use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
 use mesa3d_util::MESA_HANDLE_TYPE_SIGNAL_SYNC_FD;
 
 use crate::generated::virgl_renderer_bindings::*;
+use crate::handle::RutabagaHandle;
 use crate::renderer_utils::ret_to_res;
 use crate::renderer_utils::RutabagaCookie;
 use crate::renderer_utils::VirglBox;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
-use crate::rutabaga_core::RutabagaHandle;
 use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::Resource3DInfo;
 use crate::rutabaga_utils::ResourceCreate3D;
@@ -118,40 +118,40 @@ fn import_resource(resource: &mut RutabagaResource) -> RutabagaResult<()> {
         return Ok(());
     }
 
-    if let Some(handle) = &resource.handle {
-         if let RutabagaHandle::MesaHandle(mesa_handle) = &**handle {
-            #[cfg(target_os = "linux")]
-            if mesa_handle.handle_type == MESA_HANDLE_TYPE_MEM_DMABUF {
-                let dmabuf_fd = mesa_handle
-                    .os_handle
-                    .try_clone()
-                    .map_err(MesaError::IoError)?
-                    .into_raw_descriptor();
-                // SAFETY:
-                // Safe because we are being passed a valid fd
-                unsafe {
-                    let dmabuf_size = libc::lseek64(dmabuf_fd, 0, libc::SEEK_END);
-                    libc::lseek64(dmabuf_fd, 0, libc::SEEK_SET);
-                    let args = virgl_renderer_resource_import_blob_args {
-                        res_handle: resource.resource_id,
-                        blob_mem: resource.blob_mem,
-                        fd_type: VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF,
-                        fd: dmabuf_fd,
-                        size: dmabuf_size as u64,
-                    };
-                    let ret = virgl_renderer_resource_import_blob(&args);
-                    if ret != 0 {
-                        // import_blob can fail if we've previously imported this resource,
-                        // but in any case virglrenderer does not take ownership of the fd
-                        // in error paths
-                        //
-                        // Because of the re-import case we must still fall through to the
-                        // virgl_renderer_ctx_attach_resource() call.
-                        libc::close(dmabuf_fd);
-                        return Ok(());
-                    }
-                    resource.component_mask |= 1 << (RutabagaComponentType::VirglRenderer as u8);
+    if let Some(mesa_handle) = resource.handle.as_ref().and_then(|h| h.as_mesa_handle()) {
+        #[cfg(target_os = "linux")]
+        if mesa_handle.handle_type == MESA_HANDLE_TYPE_MEM_DMABUF {
+            let dmabuf_fd = mesa_handle
+                .os_handle
+                .try_clone()
+                .map_err(MesaError::IoError)?
+                .into_raw_descriptor();
+
+            // SAFETY:
+            // Safe because we are being passed a valid fd
+            unsafe {
+                let dmabuf_size = libc::lseek64(dmabuf_fd, 0, libc::SEEK_END);
+                libc::lseek64(dmabuf_fd, 0, libc::SEEK_SET);
+                let args = virgl_renderer_resource_import_blob_args {
+                    res_handle: resource.resource_id,
+                    blob_mem: resource.blob_mem,
+                    fd_type: VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF,
+                    fd: dmabuf_fd,
+                    size: dmabuf_size as u64,
+                };
+                let ret = virgl_renderer_resource_import_blob(&args);
+                if ret != 0 {
+                    // import_blob can fail if we've previously imported this resource,
+                    // but in any case virglrenderer does not take ownership of the fd
+                    // in error paths
+                    //
+                    // Because of the re-import case we must still fall through to the
+                    // virgl_renderer_ctx_attach_resource() call.
+                    libc::close(dmabuf_fd);
+                    return Ok(());
                 }
+
+                resource.component_mask |= 1 << (RutabagaComponentType::VirglRenderer as u8);
             }
         }
     }
@@ -527,10 +527,13 @@ impl VirglRenderer {
             }
         };
 
-        Ok(Arc::new(MesaHandle {
-            os_handle: handle,
-            handle_type,
-        }.into()))
+        Ok(Arc::new(
+            MesaHandle {
+                os_handle: handle,
+                handle_type,
+            }
+            .into(),
+        ))
     }
 }
 
@@ -662,10 +665,13 @@ impl RutabagaComponent for VirglRenderer {
                     // SAFETY: `fd` is validated to be >= 0 and uniquely owned.
                     let owned_fd = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
 
-                    resource_handle = Some(Arc::new(RutabagaHandle::MesaHandle(MesaHandle {
-                        os_handle: owned_fd,
-                        handle_type: MESA_HANDLE_TYPE_MEM_DMABUF,
-                    })));
+                    resource_handle = Some(Arc::new(
+                        MesaHandle {
+                            os_handle: owned_fd,
+                            handle_type: MESA_HANDLE_TYPE_MEM_DMABUF,
+                        }
+                        .into(),
+                    ));
                     resource_info_3d = Some(Resource3DInfo {
                         width: info_ext.base.width,
                         height: info_ext.base.height,

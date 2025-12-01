@@ -22,6 +22,7 @@ use serde::Serialize;
 use crate::cross_domain::CrossDomain;
 #[cfg(feature = "gfxstream")]
 use crate::gfxstream::Gfxstream;
+use crate::handle::RutabagaHandle;
 use crate::magma::MagmaVirtioGpu;
 use crate::rutabaga_2d::Rutabaga2D;
 use crate::rutabaga_utils::GfxstreamFlags;
@@ -79,59 +80,6 @@ struct Rutabaga2DSnapshot {
     width: u32,
     height: u32,
     // NOTE: `host_mem` is not preserved to avoid snapshot bloat.
-}
-impl From<MesaHandle> for RutabagaHandle {
-    fn from(value: MesaHandle) -> Self {
-        RutabagaHandle::MesaHandle(value)
-    }
-}
-pub enum RutabagaHandle {
-    MesaHandle(MesaHandle),
-    AhbInfo{
-        fds: Vec<OwnedDescriptor>,
-        metadata: Vec<u8>,
-    },
-}
-impl TryFrom<RutabagaHandle> for MesaHandle {
-    type Error = MesaError;
-
-    fn try_from(handle: RutabagaHandle) -> Result<Self, Self::Error> {
-        match handle {
-            RutabagaHandle::MesaHandle(h) => Ok(h),
-            // Return an error if it's an AhbInfo or any future variant.
-            // You might want a more specific error like MesaError::InvalidHandleType if available.
-            _ => Err(MesaError::InvalidMesaHandle),
-        }
-    }
-}
-
-impl RutabagaHandle {
-    /// Clones the RutabagaHandle, duplicating any underlying file descriptors.
-    pub fn try_clone(&self) -> RutabagaResult<RutabagaHandle> {
-        match self {
-            RutabagaHandle::MesaHandle(handle) => {
-                Ok(RutabagaHandle::MesaHandle(handle.try_clone()?))
-            }
-            RutabagaHandle::AhbInfo { fds, metadata } => {
-                let cloned_fds = fds
-                    .iter()
-                    .map(|fd| {
-                        // NOTE: This assumes your `OwnedFd` type has a `try_clone` method.
-                        // If it is standard `std::os::fd::OwnedFd`, you might need a trait
-                        // or manual `fcntl(F_DUPFD_CLOEXEC)` here.
-                        fd.try_clone()
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    // Map the OS/IO error to your generic MesaError
-                    .map_err(|_| MesaError::InvalidMesaHandle)?;
-
-                Ok(RutabagaHandle::AhbInfo {
-                    fds: cloned_fds,
-                    metadata: metadata.clone(),
-                })
-            }
-        }
-    }
 }
 
 /// A Rutabaga resource, supporting 2D and 3D rutabaga features.  Assumes a single-threaded library.
@@ -1040,7 +988,7 @@ impl Rutabaga {
             let handle_opt = resource.handle.take();
             match handle_opt {
                 Some(handle) => {
-                    if let RutabagaHandle::MesaHandle(mesa_handle) = &*handle {
+                    if let Some(mesa_handle) = handle.as_mesa_handle() {
                         if mesa_handle.handle_type != MESA_HANDLE_TYPE_MEM_SHM {
                             return Err(
                                 MesaError::WithContext("expected a shared memory handle").into()
