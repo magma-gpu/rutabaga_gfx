@@ -12,6 +12,7 @@ use std::io::IoSliceMut;
 
 use mesa3d_util::MesaError;
 
+use crate::handle::RutabagaHandle;
 use crate::rutabaga_core::Rutabaga2DInfo;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaResource;

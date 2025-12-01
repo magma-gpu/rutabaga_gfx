@@ -10,8 +10,8 @@ use mesa3d_util::MesaHandle;
 
 use crate::context_common::ContextResource;
 use crate::context_common::ContextResources;
+use crate::handle::RutabagaHandle;
 use crate::rutabaga_core::RutabagaContext;
-use crate::rutabaga_core::RutabagaHandle;
 use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;
