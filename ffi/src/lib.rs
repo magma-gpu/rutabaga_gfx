@@ -582,12 +582,15 @@ pub unsafe extern "C" fn rutabaga_resource_create_blob(
         // Only needed on Unix, since there is no way to create a handle from guest memory on
         // Windows.
         if let Some(hnd) = handle {
-            handle_opt = Some(rutabaga_gfx::RutabagaHandle::MesaHandle(RutabagaMesaHandle {
-                os_handle: RutabagaDescriptor::from_raw_descriptor(
-                    hnd.os_handle as RutabagaRawDescriptor,
-                ),
-                handle_type: hnd.handle_type,
-            }));
+            handle_opt = Some(
+                RutabagaMesaHandle {
+                    os_handle: RutabagaDescriptor::from_raw_descriptor(
+                        hnd.os_handle as RutabagaRawDescriptor,
+                    ),
+                    handle_type: hnd.handle_type,
+                }
+                .into(),
+            );
         }
 
         let result =

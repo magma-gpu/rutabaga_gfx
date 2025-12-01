@@ -38,9 +38,9 @@ use zerocopy::IntoBytes;
 use crate::context_common::ContextResource;
 use crate::context_common::ContextResources;
 use crate::cross_domain::cross_domain_protocol::*;
+use crate::handle::RutabagaHandle;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
-use crate::rutabaga_core::RutabagaHandle;
 use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::Resource3DInfo;
 use crate::rutabaga_utils::ResourceCreateBlob;
@@ -677,12 +677,17 @@ impl CrossDomainContext {
                     .get(identifier)
                     .ok_or(RutabagaError::InvalidResourceId)?;
 
-                if let Some(ref handle) = context_resource.handle {
-                    if let RutabagaHandle::MesaHandle(mesa_handle) = &**handle {
-                        descriptors.push(mesa_handle.os_handle.try_clone().map_err(MesaError::IoError)?);
-                    } else {
-                        return Err(MesaError::InvalidMesaHandle.into());
-                    }
+                if let Some(mesa_handle) = context_resource
+                    .handle
+                    .as_ref()
+                    .and_then(|h| h.as_mesa_handle())
+                {
+                    descriptors.push(
+                        mesa_handle
+                            .os_handle
+                            .try_clone()
+                            .map_err(MesaError::IoError)?,
+                    );
                 } else {
                     return Err(MesaError::InvalidMesaHandle.into());
                 }

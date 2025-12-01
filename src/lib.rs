@@ -9,6 +9,7 @@ mod context_common;
 mod cross_domain;
 mod generated;
 mod gfxstream;
+mod handle;
 mod magma;
 #[macro_use]
 mod macros;
@@ -31,10 +32,10 @@ pub use mesa3d_util::RawDescriptor as RutabagaRawDescriptor;
 pub use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF as RUTABAGA_HANDLE_TYPE_MEM_DMABUF;
 pub use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD as RUTABAGA_HANDLE_TYPE_MEM_OPAQUE_FD;
 
+pub use crate::handle::RutabagaHandle;
 pub use crate::rutabaga_core::calculate_capset_mask;
 pub use crate::rutabaga_core::calculate_capset_names;
 pub use crate::rutabaga_core::Rutabaga;
-pub use crate::rutabaga_core::RutabagaHandle;
 pub use crate::rutabaga_core::RutabagaBuilder;
 pub use crate::rutabaga_gralloc::DrmFormat;
 pub use crate::rutabaga_gralloc::ImageAllocationInfo;
