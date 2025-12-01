@@ -36,13 +36,13 @@ use serde::Serialize;
 use crate::generated::virgl_renderer_bindings::iovec;
 use crate::generated::virgl_renderer_bindings::virgl_box;
 use crate::generated::virgl_renderer_bindings::virgl_renderer_resource_create_args;
+use crate::handle::RutabagaHandle;
 use crate::renderer_utils::ret_to_res;
 use crate::renderer_utils::RutabagaCookie;
 use crate::renderer_utils::VirglBox;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
 use crate::rutabaga_core::RutabagaResource;
-use crate::rutabaga_core::RutabagaHandle;
 use crate::rutabaga_utils::DeviceId;
 use crate::rutabaga_utils::GfxstreamFlags;
 use crate::rutabaga_utils::ResourceCreate3D;
@@ -534,10 +534,13 @@ impl Gfxstream {
         // valid and owned by us.
         let handle = unsafe { OwnedDescriptor::from_raw_descriptor(raw_descriptor) };
 
-        Ok(Arc::new(MesaHandle {
-            os_handle: handle,
-            handle_type: stream_handle.handle_type,
-        }.into()))
+        Ok(Arc::new(
+            MesaHandle {
+                os_handle: handle,
+                handle_type: stream_handle.handle_type,
+            }
+            .into(),
+        ))
     }
 }
 

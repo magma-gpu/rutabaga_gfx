@@ -6,7 +6,7 @@ use std::collections::BTreeMap as Map;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::rutabaga_core::RutabagaHandle;
+use crate::handle::RutabagaHandle;
 
 use crate::rutabaga_utils::RutabagaIovec;
 
