@@ -44,7 +44,7 @@ endif
 if with_virgl_renderer
   dep_virgl = dependency('virglrenderer', version: '>= 1.0.0')
   rutabaga_args += ['--cfg', 'feature="virgl_renderer"']
-  dep_rutabaga_gfx += virgl_renderer
+  dep_rutabaga_gfx += dep_virgl
 endif
 
 if with_kumquat
