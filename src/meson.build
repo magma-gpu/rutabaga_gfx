@@ -25,12 +25,19 @@ dep_serde_json = dependency('serde_json-1-rs',
   required: true,
 )
 
+dep_nix = dependency('nix-0.29-rs',
+  version: '>= 0.29',
+  fallback: ['nix-0.29-rs', 'dep_nix'],
+  required: true,
+)
+
 dep_rutabaga_gfx += dep_mesa3d_util
 dep_rutabaga_gfx += [
   dep_libc,
   dep_log,
   dep_serde_json,
   dep_serde,
+  dep_nix,
 ]
 
 librutabaga_gfx = static_library(
