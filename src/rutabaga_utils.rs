@@ -656,6 +656,8 @@ impl RutabagaComponentType {
 // Handle types to support special-case consumers.
 pub const RUTABAGA_HANDLE_TYPE_PLATFORM_SCREEN_BUFFER_QNX: u32 = 0x01000000;
 pub const RUTABAGA_HANDLE_TYPE_PLATFORM_EGL_NATIVE_PIXMAP: u32 = 0x02000000;
+pub const RUTABAGA_HANDLE_TYPE_PLATFORM_AHB: u32 = 0x03000000;
+
 
 #[derive(Clone)]
 pub struct RutabagaHandler<S> {
