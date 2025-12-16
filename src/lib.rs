@@ -32,6 +32,7 @@ pub use mesa3d_util::RawDescriptor as RutabagaRawDescriptor;
 pub use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF as RUTABAGA_HANDLE_TYPE_MEM_DMABUF;
 pub use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD as RUTABAGA_HANDLE_TYPE_MEM_OPAQUE_FD;
 
+pub use crate::handle::AhbInfo;
 pub use crate::handle::RutabagaHandle;
 pub use crate::rutabaga_core::calculate_capset_mask;
 pub use crate::rutabaga_core::calculate_capset_names;

@@ -59,6 +59,7 @@ use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::VulkanInfo;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
+use crate::rutabaga_utils::RUTABAGA_HANDLE_TYPE_PLATFORM_AHB;
 use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
 use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
@@ -528,19 +529,61 @@ impl Gfxstream {
         let ret = unsafe { stream_renderer_export_blob(resource_id, &mut stream_handle) };
         ret_to_res(ret)?;
 
-        let raw_descriptor = stream_handle.os_handle as RawDescriptor;
-        // SAFETY:
-        // Safe because the handle was just returned by a successful gfxstream call so it must be
-        // valid and owned by us.
-        let handle = unsafe { OwnedDescriptor::from_raw_descriptor(raw_descriptor) };
+        if stream_handle.handle_type == RUTABAGA_HANDLE_TYPE_PLATFORM_AHB {
+            #[cfg(target_os = "android")]
+            {
+                use crate::handle::AhbInfo;
+                use nativewindow::AhbInfo as NativeAhbInfo;
+                use nativewindow::HardwareBuffer;
+                use std::os::fd::IntoRawFd;
+                use std::ptr::NonNull;
 
-        Ok(Arc::new(
-            MesaHandle {
-                os_handle: handle,
-                handle_type: stream_handle.handle_type,
+                let buffer_ptr = NonNull::new(stream_handle.os_handle as *mut c_void)
+                    .ok_or(RutabagaError::InvalidResourceId)?;
+
+                // SAFETY:
+                // Safe because `buffer_ptr` is a valid AHardwareBuffer pointer.
+                let buffer = unsafe { HardwareBuffer::clone_from_raw(buffer_ptr.cast()) };
+
+                let ahb_info: NativeAhbInfo = buffer
+                    .try_into()
+                    .map_err(|_| RutabagaError::InvalidResourceId)?;
+
+                // Convert nativewindow::AhbInfo to RutabagaHandle::AhbInfo
+                let fds = ahb_info
+                    .fds
+                    .into_iter()
+                    .map(|fd| {
+                        // SAFETY:
+                        // Safe because the file descriptor is valid and owned.
+                        unsafe { OwnedDescriptor::from_raw_descriptor(fd.into_raw_fd()) }
+                    })
+                    .collect();
+
+                Ok(Arc::new(RutabagaHandle::from(AhbInfo {
+                    fds,
+                    metadata: ahb_info.data,
+                })))
             }
-            .into(),
-        ))
+            #[cfg(not(target_os = "android"))]
+            {
+                Err(RutabagaError::InvalidResourceId)
+            }
+        } else {
+            let raw_descriptor = stream_handle.os_handle as RawDescriptor;
+            // SAFETY:
+            // Safe because the handle was just returned by a successful gfxstream call so it must be
+            // valid and owned by us.
+            let handle = unsafe { OwnedDescriptor::from_raw_descriptor(raw_descriptor) };
+
+            Ok(Arc::new(
+                MesaHandle {
+                    os_handle: handle,
+                    handle_type: stream_handle.handle_type,
+                }
+                .into(),
+            ))
+        }
     }
 }
 
