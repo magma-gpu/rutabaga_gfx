@@ -1112,7 +1112,7 @@ impl Rutabaga {
     }
 
     /// Returns true if the resource is mappable by the guest CPU.
-    #[deprecated(since = "0.1.75", note = "ChromeOS specific API, do not use")]
+    #[deprecated(since = "0.1.76", note = "ChromeOS specific API, do not use")]
     pub fn guest_cpu_mappable(&self, _resource_id: u32) -> RutabagaResult<bool> {
         unimplemented!();
     }
