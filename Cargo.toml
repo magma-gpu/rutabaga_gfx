@@ -7,7 +7,7 @@ members = [
 
 [package]
 name = "rutabaga_gfx"
-version = "0.1.75-chromeos"
+version = "0.1.76-chromeos"
 authors = ["Magma GPU project"]
 edition = "2021"
 description = "Cross-platform, open-source, Rust-based graphics paravirtualization"
