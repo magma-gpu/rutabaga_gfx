@@ -1,6 +1,6 @@
 [package]
 name = "kumquat_virtio"
-version = "0.1.75"
+version = "0.1.76"
 authors = ["Magma GPU project"]
 edition = "2021"
 description = "A Rust server designed for virtio-multimedia use cases"
@@ -16,9 +16,9 @@ path = "src/main.rs"
 gfxstream = ["rutabaga_gfx/gfxstream"]
 
 [dependencies]
-mesa3d_util = { path = "../../third_party/mesa3d/src/util/rust/", version = "0.1.75" }
-mesa3d_protocols = { path = "../../third_party/mesa3d/src/virtio/protocols", version = "0.1.75" }
-rutabaga_gfx = { path = "../../", version = "0.1.75"}
+mesa3d_util = { path = "../../third_party/mesa3d/src/util/rust/", version = "0.1.76" }
+mesa3d_protocols = { path = "../../third_party/mesa3d/src/virtio/protocols", version = "0.1.76" }
+rutabaga_gfx = { path = "../../", version = "0.1.76"}
 zerocopy = { version = "0.8.13", features = ["derive"] }
 log = "0.4"
 remain = "0.2"
