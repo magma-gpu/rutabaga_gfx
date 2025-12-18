@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.1.76](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.76)
+
+### API and dependencies
+
+- `rutabaga_gfx`
+  - `RutabagaHandle`
+    - now supports `AhbInfo` variant (Android Hardware Buffer) in addition to `MesaHandle`
+  - `export_blob`
+    - now supports Android Hardware Buffers (AHB)
+
 ## [v0.1.71](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.71)
 
 ### API and dependencies
