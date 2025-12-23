@@ -22,10 +22,12 @@ pub const CROSS_DOMAIN_CMD_WRITE: u8 = 7;
 pub const CROSS_DOMAIN_CMD_CREATE_ATOMIC_MEMORY_SENTINEL: u8 = 8;
 pub const CROSS_DOMAIN_CMD_SIGNAL_ATOMIC_MEMORY_SENTINEL: u8 = 9;
 pub const CROSS_DOMAIN_CMD_DESTROY_ATOMIC_MEMORY_SENTINEL: u8 = 10;
+pub const CROSS_DOMAIN_CMD_READ_CREATE_EVENT: u8 = 11;
 
 /// Channel types (must match rutabaga channel types)
 pub const CROSS_DOMAIN_CHANNEL_TYPE_WAYLAND: u32 = 0x0001;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_CAMERA: u32 = 0x0002;
+pub const CROSS_DOMAIN_CHANNEL_TYPE_PIPEWIRE: u32 = 0x0010;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_X11: u32 = 0x0011;
 
 /// The maximum number of identifiers
@@ -88,7 +90,7 @@ pub struct CrossDomainHeader {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
 pub struct CrossDomainInit {
     pub hdr: CrossDomainHeader,
     pub query_ring_id: u32,
@@ -153,6 +155,14 @@ pub struct CrossDomainSignalAtomicMemorySentinel {
 #[repr(C)]
 #[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
 pub struct CrossDomainDestroyAtomicMemorySentinel {
+    pub hdr: CrossDomainHeader,
+    pub id: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainCreateEvent {
     pub hdr: CrossDomainHeader,
     pub id: u32,
     pub pad: u32,

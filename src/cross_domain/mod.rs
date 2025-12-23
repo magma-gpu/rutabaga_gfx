@@ -90,6 +90,7 @@ enum CrossDomainJob {
     AddReadPipe(u32),
     Finish,
     AddAtomicMemorySentinel(u32, Event),
+    AddReadEvent(u32),
 }
 
 enum RingWrite<'a, T> {
@@ -393,18 +394,18 @@ impl CrossDomainWorker {
                 _ => {
                     let mut items = self.item_state.lock().unwrap();
                     let mut cmd_read: CrossDomainReadWrite = Default::default();
-                    let pipe_id: u32 = event
+                    let item_id: u32 = event
                         .connection_id
                         .try_into()
                         .map_err(MesaError::TryFromIntError)?;
                     let bytes_read;
 
                     cmd_read.hdr.cmd = CROSS_DOMAIN_CMD_READ;
-                    cmd_read.identifier = pipe_id;
+                    cmd_read.identifier = item_id;
 
                     let item = items
                         .table
-                        .get_mut(&pipe_id)
+                        .get_mut(&item_id)
                         .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
 
                     match item {
@@ -421,11 +422,18 @@ impl CrossDomainWorker {
                                 self.wait_ctx.delete(readpipe.as_borrowed_descriptor())?;
                             }
                         }
+                        CrossDomainItem::Event(ref evt) => {
+                            // For eventfd, we can use wait() to consume the event
+                            if event.readable {
+                                let _ = evt.wait();
+                            }
+                            bytes_read = 0; // eventfd doesn't have data to read like pipes
+                        }
                         _ => return Err(RutabagaError::InvalidCrossDomainItemType),
                     }
 
                     if event.hung_up && bytes_read == 0 {
-                        items.table.remove(&pipe_id);
+                        items.table.remove(&item_id);
                     }
 
                     self.fence_handler.call(fence);
@@ -542,6 +550,20 @@ impl CrossDomainWorker {
                         CrossDomainItem::WaylandReadPipe(read_pipe) => self
                             .wait_ctx
                             .add(read_pipe_id as u64, read_pipe.as_borrowed_descriptor())?,
+                        _ => return Err(RutabagaError::InvalidCrossDomainItemType),
+                    }
+                }
+                CrossDomainJob::AddReadEvent(efd_id) => {
+                    let items = self.item_state.lock().unwrap();
+                    let item = items
+                        .table
+                        .get(&efd_id)
+                        .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
+
+                    match item {
+                        CrossDomainItem::Event(event) => self
+                            .wait_ctx
+                            .add(efd_id as u64, event.as_borrowed_descriptor())?,
                         _ => return Err(RutabagaError::InvalidCrossDomainItemType),
                     }
                 }
@@ -718,17 +740,14 @@ impl CrossDomainContext {
 
     fn send(
         &mut self,
-        cmd_send: &CrossDomainSendReceive,
+        cmd_send: &mut CrossDomainSendReceive,
         opaque_data: &[u8],
     ) -> RutabagaResult<()> {
         let mut descriptors: Vec<OwnedDescriptor> = vec![];
         let mut write_pipe_opt: Option<WritePipe> = None;
         let mut read_pipe_id_opt: Option<u32> = None;
 
-        let num_identifiers = cmd_send
-            .num_identifiers
-            .try_into()
-            .map_err(MesaError::TryFromIntError)?;
+        let num_identifiers = cmd_send.num_identifiers as usize;
 
         if num_identifiers > CROSS_DOMAIN_MAX_IDENTIFIERS {
             return Err(MesaError::WithContext("max cross domain identifiers exceeded").into());
@@ -736,11 +755,13 @@ impl CrossDomainContext {
 
         let iter = cmd_send
             .identifiers
-            .iter()
-            .zip(cmd_send.identifier_types.iter())
+            .iter_mut()
+            .zip(cmd_send.identifier_types.iter_mut())
+            .zip(cmd_send.identifier_sizes.iter_mut())
+            .map(|((i, it), is)| (i, it, is))
             .take(num_identifiers);
 
-        for (identifier, identifier_type) in iter {
+        for (identifier, identifier_type, _identifier_size) in iter {
             if *identifier_type == CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB {
                 let context_resources = self.context_resources.lock().unwrap();
 
@@ -851,6 +872,25 @@ impl CrossDomainContext {
         Ok(())
     }
 
+    fn read_event_new(&mut self, cmd_event_new: &CrossDomainCreateEvent) -> RutabagaResult<()> {
+        let items = self.item_state.lock().unwrap();
+
+        if let Some(item) = items.table.get(&cmd_event_new.id) {
+            if let CrossDomainItem::Event(_) = item {
+                self.state
+                    .as_ref()
+                    .unwrap()
+                    .add_job(CrossDomainJob::AddReadEvent(cmd_event_new.id));
+                self.resample_evt.as_mut().unwrap().signal()?;
+                Ok(())
+            } else {
+                Err(RutabagaError::InvalidCrossDomainItemType)
+            }
+        } else {
+            Err(RutabagaError::InvalidCrossDomainItemId)
+        }
+    }
+
     fn write(&self, cmd_write: &CrossDomainReadWrite, opaque_data: &[u8]) -> RutabagaResult<()> {
         let mut items = self.item_state.lock().unwrap();
 
@@ -884,6 +924,21 @@ impl CrossDomainContext {
             _ => Err(RutabagaError::InvalidCrossDomainItemType),
         }
     }
+
+    fn process_cmd_send(&mut self, commands: &mut [u8]) -> RutabagaResult<()> {
+        let opaque_data_offset = size_of::<CrossDomainSendReceive>();
+        let (mut cmd_send, _) = CrossDomainSendReceive::read_from_prefix(commands.as_bytes())
+            .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
+
+        let opaque_data = commands
+            .get_mut(opaque_data_offset..opaque_data_offset + cmd_send.opaque_data_size as usize)
+            .ok_or(RutabagaError::InvalidCommandSize(
+                cmd_send.opaque_data_size as usize,
+            ))?;
+
+        self.send(&mut cmd_send, opaque_data)?;
+        Ok(())
+    }
 }
 
 impl Drop for CrossDomainContext {
@@ -909,11 +964,22 @@ impl Drop for CrossDomainContext {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
 struct CrossDomainInitLegacy {
     hdr: CrossDomainHeader,
     query_ring_id: u32,
     channel_type: u32,
+}
+
+impl CrossDomainInitLegacy {
+    pub(crate) fn upgrade(&self) -> CrossDomainInit {
+        CrossDomainInit {
+            hdr: self.hdr,
+            query_ring_id: self.query_ring_id,
+            channel_ring_id: self.query_ring_id,
+            channel_type: self.channel_type,
+        }
+    }
 }
 
 impl RutabagaContext for CrossDomainContext {
@@ -1019,24 +1085,13 @@ impl RutabagaContext for CrossDomainContext {
 
             match hdr.cmd {
                 CROSS_DOMAIN_CMD_INIT => {
-                    let cmd_init = match CrossDomainInit::read_from_prefix(commands) {
-                        Ok((cmd_init, _)) => cmd_init,
-                        _ => {
-                            if let Ok((cmd_init, _)) =
-                                CrossDomainInitLegacy::read_from_prefix(commands)
-                            {
-                                CrossDomainInit {
-                                    hdr: cmd_init.hdr,
-                                    query_ring_id: cmd_init.query_ring_id,
-                                    channel_ring_id: cmd_init.query_ring_id,
-                                    channel_type: cmd_init.channel_type,
-                                }
-                            } else {
-                                return Err(RutabagaError::InvalidCommandBuffer);
-                            }
-                        }
-                    };
-
+                    let cmd_init = CrossDomainInit::read_from_prefix(commands)
+                        .map(|(v, _)| v)
+                        .or_else(|_| {
+                            CrossDomainInitLegacy::read_from_prefix(commands)
+                                .map(|(v, _)| v.upgrade())
+                        })
+                        .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
                     self.initialize(&cmd_init)?;
                 }
                 CROSS_DOMAIN_CMD_GET_IMAGE_REQUIREMENTS => {
@@ -1047,20 +1102,7 @@ impl RutabagaContext for CrossDomainContext {
                     self.get_image_requirements(&cmd_get_reqs)?;
                 }
                 CROSS_DOMAIN_CMD_SEND => {
-                    let opaque_data_offset = size_of::<CrossDomainSendReceive>();
-                    let (cmd_send, _) = CrossDomainSendReceive::read_from_prefix(commands)
-                        .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
-
-                    let opaque_data = commands
-                        .get_mut(
-                            opaque_data_offset
-                                ..opaque_data_offset + cmd_send.opaque_data_size as usize,
-                        )
-                        .ok_or(RutabagaError::InvalidCommandSize(
-                            cmd_send.opaque_data_size as usize,
-                        ))?;
-
-                    self.send(&cmd_send, opaque_data)?;
+                    self.process_cmd_send(commands)?;
                 }
                 CROSS_DOMAIN_CMD_POLL => {
                     // Actual polling is done in the subsequent when creating a fence.
@@ -1098,6 +1140,11 @@ impl RutabagaContext for CrossDomainContext {
                         CrossDomainDestroyAtomicMemorySentinel::read_from_prefix(commands)
                             .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
                     self.atomic_memory_sentinel_destroy(&cmd_atomic_memory_sentinel_destroy)?;
+                }
+                CROSS_DOMAIN_CMD_READ_CREATE_EVENT => {
+                    let (cmd_new_evt, _) = CrossDomainCreateEvent::read_from_prefix(commands)
+                        .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
+                    self.read_event_new(&cmd_new_evt)?;
                 }
                 _ => return Err(MesaError::WithContext("invalid cross domain command").into()),
             }
