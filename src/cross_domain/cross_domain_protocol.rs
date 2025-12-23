@@ -22,13 +22,16 @@ pub const CROSS_DOMAIN_CMD_WRITE: u8 = 7;
 pub const CROSS_DOMAIN_CMD_FUTEX_NEW: u8 = 8;
 pub const CROSS_DOMAIN_CMD_FUTEX_SIGNAL: u8 = 9;
 pub const CROSS_DOMAIN_CMD_FUTEX_DESTROY: u8 = 10;
+pub const CROSS_DOMAIN_CMD_READ_EVENTFD_NEW: u8 = 11;
+pub const CROSS_DOMAIN_CMD_READ_EVENTFD_DESTROY: u8 = 12;
 
 /// Channel types (must match rutabaga channel types)
 pub const CROSS_DOMAIN_CHANNEL_TYPE_WAYLAND: u32 = 0x0001;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_CAMERA: u32 = 0x0002;
+pub const CROSS_DOMAIN_CHANNEL_TYPE_PIPEWIRE: u32 = 0x0010;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_X11: u32 = 0x0011;
 
-/// The maximum number of identifiers
+/// The maximum number of identifiers (must match what sommelier expects)
 pub const CROSS_DOMAIN_MAX_IDENTIFIERS: usize = 28;
 
 /// virtgpu memory resource ID.  Also works with non-blob memory resources, despite the name.
@@ -43,6 +46,7 @@ pub const CROSS_DOMAIN_ID_TYPE_READ_PIPE: u32 = 3;
 pub const CROSS_DOMAIN_ID_TYPE_WRITE_PIPE: u32 = 4;
 
 pub const CROSS_DOMAIN_ID_TYPE_SHM: u32 = 5;
+pub const CROSS_DOMAIN_ID_TYPE_EVENTFD: u32 = 6;
 
 /// No ring
 pub const CROSS_DOMAIN_RING_NONE: u32 = 0xffffffff;
@@ -88,12 +92,34 @@ pub struct CrossDomainHeader {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
-pub struct CrossDomainInit {
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainInitV1 {
     pub hdr: CrossDomainHeader,
     pub query_ring_id: u32,
     pub channel_ring_id: u32,
     pub channel_type: u32,
+    pub protocol_version: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainInitV0 {
+    pub hdr: CrossDomainHeader,
+    pub query_ring_id: u32,
+    pub channel_ring_id: u32,
+    pub channel_type: u32,
+}
+
+impl CrossDomainInitV0 {
+    pub(crate) fn upgrade(&self) -> CrossDomainInitV1 {
+        CrossDomainInitV1 {
+            hdr: self.hdr,
+            query_ring_id: self.query_ring_id,
+            channel_ring_id: self.channel_ring_id,
+            channel_type: self.channel_type,
+            protocol_version: 0,
+        }
+    }
 }
 
 #[repr(C)]
@@ -106,6 +132,16 @@ pub struct CrossDomainGetImageRequirements {
     pub flags: u32,
 }
 
+pub trait CrossDomainSendReceiveBase:
+    Copy + Clone + Default + FromBytes + IntoBytes + Immutable
+{
+    const MAX_IDENTIFIERS: usize;
+    fn hdr_mut(&mut self) -> &mut CrossDomainHeader;
+    fn num_identifiers_mut(&mut self) -> &mut u32;
+    fn opaque_data_size_mut(&mut self) -> &mut u32;
+    fn iter_over_identifiers(&mut self) -> impl Iterator<Item = (&mut u32, &mut u32, &mut u32)>;
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
 pub struct CrossDomainSendReceive {
@@ -116,6 +152,57 @@ pub struct CrossDomainSendReceive {
     pub identifier_types: [u32; CROSS_DOMAIN_MAX_IDENTIFIERS],
     pub identifier_sizes: [u32; CROSS_DOMAIN_MAX_IDENTIFIERS],
     // Data of size "opaque data size follows"
+}
+impl CrossDomainSendReceiveBase for CrossDomainSendReceive {
+    const MAX_IDENTIFIERS: usize = CROSS_DOMAIN_MAX_IDENTIFIERS;
+    fn hdr_mut(&mut self) -> &mut CrossDomainHeader {
+        &mut self.hdr
+    }
+    fn num_identifiers_mut(&mut self) -> &mut u32 {
+        &mut self.num_identifiers
+    }
+    fn opaque_data_size_mut(&mut self) -> &mut u32 {
+        &mut self.opaque_data_size
+    }
+    fn iter_over_identifiers(&mut self) -> impl Iterator<Item = (&mut u32, &mut u32, &mut u32)> {
+        self.identifiers
+            .iter_mut()
+            .zip(self.identifier_types.iter_mut())
+            .zip(self.identifier_sizes.iter_mut())
+            .map(|((i, it), is)| (i, it, is))
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainSendReceiveV2 {
+    pub hdr: CrossDomainHeader,
+    pub num_identifiers: u32,
+    pub opaque_data_size: u32,
+    pub identifiers: [u32; CROSS_DOMAIN_MAX_IDENTIFIERS],
+    pub identifier_types: [u32; CROSS_DOMAIN_MAX_IDENTIFIERS],
+    pub identifier_sizes: [u32; CROSS_DOMAIN_MAX_IDENTIFIERS],
+    // Data of size "opaque data size follows"
+}
+
+impl CrossDomainSendReceiveBase for CrossDomainSendReceiveV2 {
+    const MAX_IDENTIFIERS: usize = CROSS_DOMAIN_MAX_IDENTIFIERS;
+    fn hdr_mut(&mut self) -> &mut CrossDomainHeader {
+        &mut self.hdr
+    }
+    fn num_identifiers_mut(&mut self) -> &mut u32 {
+        &mut self.num_identifiers
+    }
+    fn opaque_data_size_mut(&mut self) -> &mut u32 {
+        &mut self.opaque_data_size
+    }
+    fn iter_over_identifiers(&mut self) -> impl Iterator<Item = (&mut u32, &mut u32, &mut u32)> {
+        self.identifiers
+            .iter_mut()
+            .zip(self.identifier_types.iter_mut())
+            .zip(self.identifier_sizes.iter_mut())
+            .map(|((i, it), is)| (i, it, is))
+    }
 }
 
 #[repr(C)]
@@ -150,6 +237,14 @@ pub struct CrossDomainFutexSignal {
 #[repr(C)]
 #[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
 pub struct CrossDomainFutexDestroy {
+    pub hdr: CrossDomainHeader,
+    pub id: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainReadEventfdNew {
     pub hdr: CrossDomainHeader,
     pub id: u32,
     pub pad: u32,

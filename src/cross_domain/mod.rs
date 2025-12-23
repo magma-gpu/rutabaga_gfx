@@ -6,13 +6,17 @@
 //! boundaries.
 
 #[cfg(target_os = "linux")]
+use libc::{fcntl, F_GETFL, O_ACCMODE, O_WRONLY};
 use log::{error, info};
 use rustix::mm::{mmap, munmap, MapFlags, ProtFlags};
 use std::cmp::max;
 use std::collections::BTreeMap as Map;
 use std::collections::VecDeque;
 use std::convert::TryInto;
+use std::fs::{read_link, File};
+use std::io::{Seek, SeekFrom};
 use std::mem::size_of;
+use std::os::unix::io::{FromRawFd, IntoRawFd};
 #[cfg(target_os = "linux")]
 use std::ptr::null_mut;
 #[cfg(target_os = "linux")]
@@ -28,9 +32,9 @@ use mesa3d_util::create_pipe;
 #[cfg(target_os = "linux")]
 use mesa3d_util::futex;
 use mesa3d_util::AsBorrowedDescriptor;
-use mesa3d_util::AsRawDescriptor;
-use mesa3d_util::DescriptorType;
 use mesa3d_util::Event;
+use mesa3d_util::FromRawDescriptor;
+use mesa3d_util::IntoRawDescriptor;
 use mesa3d_util::MesaError;
 use mesa3d_util::MesaHandle;
 use mesa3d_util::OwnedDescriptor;
@@ -42,6 +46,7 @@ use mesa3d_util::WaitTimeout;
 use mesa3d_util::WritePipe;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
 use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
+use mesa3d_util::MESA_HANDLE_TYPE_SIGNAL_EVENT_FD;
 use zerocopy::FromBytes;
 use zerocopy::Immutable;
 use zerocopy::IntoBytes;
@@ -84,6 +89,8 @@ const CROSS_DOMAIN_KILL_ID: u64 = 3;
 const CROSS_DOMAIN_DEFAULT_BUFFER_SIZE: usize = 4096;
 const CROSS_DOMAIN_MAX_SEND_RECV_SIZE: usize =
     CROSS_DOMAIN_DEFAULT_BUFFER_SIZE - size_of::<CrossDomainSendReceive>();
+const CROSS_DOMAIN_MAX_SEND_RECV_SIZE_V2: usize =
+    CROSS_DOMAIN_DEFAULT_BUFFER_SIZE - size_of::<CrossDomainSendReceiveV2>();
 
 // Type aliases for event signaling
 type Sender = Event;
@@ -97,8 +104,10 @@ fn channel_signal(sender: &mut Sender) -> RutabagaResult<()> {
 enum CrossDomainItem {
     ImageRequirements(ImageMemoryRequirements),
     Blob(MesaHandle),
+    #[allow(dead_code)] // `WaylandReadPipe` is never constructed on Windows.
     WaylandReadPipe(ReadPipe),
     WaylandWritePipe(WritePipe),
+    Eventfd(Event),
 }
 
 enum CrossDomainJob {
@@ -107,6 +116,7 @@ enum CrossDomainJob {
     Finish,
     #[cfg(target_os = "linux")]
     AddFutex(u32, Arc<Receiver>),
+    AddReadEventfd(u32),
 }
 
 enum RingWrite<'a, T> {
@@ -139,6 +149,7 @@ struct CrossDomainWorker {
     state: Arc<CrossDomainState>,
     item_state: CrossDomainItemState,
     fence_handler: RutabagaFenceHandler,
+    protocol_version: u32,
 }
 
 #[cfg(target_os = "linux")]
@@ -242,6 +253,7 @@ struct CrossDomainContext {
     resample_evt: Option<Event>,
     kill_evt: Option<Event>,
     virtiofs_table: Option<VirtioFsTable>,
+    protocol_version: u32,
 }
 
 /// The CrossDomain component contains a list of paths that the guest may connect to and the
@@ -409,12 +421,14 @@ impl CrossDomainWorker {
         state: Arc<CrossDomainState>,
         item_state: CrossDomainItemState,
         fence_handler: RutabagaFenceHandler,
+        protocol_version: u32,
     ) -> CrossDomainWorker {
         CrossDomainWorker {
             wait_ctx,
             state,
             item_state,
             fence_handler,
+            protocol_version,
         }
     }
 
@@ -446,63 +460,11 @@ impl CrossDomainWorker {
         if let Some(event) = events.first() {
             match event.connection_id {
                 CROSS_DOMAIN_CONTEXT_CHANNEL_ID => {
-                    let (len, files) = self.state.receive_msg(receive_buf)?;
-                    let mut cmd_receive: CrossDomainSendReceive = Default::default();
-
-                    let num_files = files.len();
-                    cmd_receive.hdr.cmd = CROSS_DOMAIN_CMD_RECEIVE;
-                    cmd_receive.num_identifiers = files
-                        .len()
-                        .try_into()
-                        .map_err(|_| RutabagaError::InvalidCommandSize(files.len()))?;
-                    cmd_receive.opaque_data_size = len
-                        .try_into()
-                        .map_err(|_| RutabagaError::InvalidCommandSize(len))?;
-
-                    let iter = cmd_receive
-                        .identifiers
-                        .iter_mut()
-                        .zip(cmd_receive.identifier_types.iter_mut())
-                        .zip(cmd_receive.identifier_sizes.iter_mut())
-                        .zip(files)
-                        .take(num_files);
-
-                    for (((identifier, identifier_type), identifier_size), file) in iter {
-                        // Determine the descriptor type and size
-                        let desc_type = file
-                            .determine_type()
-                            .map_err(|e| RutabagaError::MesaError(e.into()))?;
-                        match desc_type {
-                            DescriptorType::Memory(size, handle_type) => {
-                                *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
-                                *identifier_size = size;
-
-                                let mesa_handle = MesaHandle {
-                                    os_handle: file,
-                                    handle_type,
-                                };
-                                *identifier =
-                                    add_item(&self.item_state, CrossDomainItem::Blob(mesa_handle));
-                            }
-                            DescriptorType::WritePipe => {
-                                *identifier_type = CROSS_DOMAIN_ID_TYPE_WRITE_PIPE;
-                                *identifier_size = 0;
-                                let write_pipe = WritePipe::new(file.as_raw_descriptor());
-                                std::mem::forget(file); // Prevent double-free since WritePipe now owns the descriptor
-                                *identifier = add_item(
-                                    &self.item_state,
-                                    CrossDomainItem::WaylandWritePipe(write_pipe),
-                                );
-                            }
-                            _ => return Err(RutabagaError::InvalidCrossDomainItemType),
-                        }
+                    if self.protocol_version == 0 {
+                        self.process_receive::<CrossDomainSendReceive, {CrossDomainSendReceive::MAX_IDENTIFIERS}>(fence, receive_buf)?;
+                    } else {
+                        self.process_receive::<CrossDomainSendReceiveV2, {CrossDomainSendReceiveV2::MAX_IDENTIFIERS}>(fence, receive_buf)?;
                     }
-
-                    self.state.write_to_ring(
-                        RingWrite::Write(cmd_receive, Some(&receive_buf[0..len])),
-                        self.state.channel_ring_id,
-                    )?;
-                    self.fence_handler.call(fence);
                 }
                 CROSS_DOMAIN_RESAMPLE_ID => {
                     // The resample event is triggered when the job queue is in the following state:
@@ -559,18 +521,18 @@ impl CrossDomainWorker {
                 _ => {
                     let mut items = self.item_state.lock().unwrap();
                     let mut cmd_read: CrossDomainReadWrite = Default::default();
-                    let pipe_id: u32 = event
+                    let item_id: u32 = event
                         .connection_id
                         .try_into()
                         .map_err(MesaError::TryFromIntError)?;
                     let bytes_read;
 
                     cmd_read.hdr.cmd = CROSS_DOMAIN_CMD_READ;
-                    cmd_read.identifier = pipe_id;
+                    cmd_read.identifier = item_id;
 
                     let item = items
                         .table
-                        .get_mut(&pipe_id)
+                        .get_mut(&item_id)
                         .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
 
                     match item {
@@ -587,11 +549,18 @@ impl CrossDomainWorker {
                                 self.wait_ctx.delete(readpipe.as_borrowed_descriptor())?;
                             }
                         }
+                        CrossDomainItem::Eventfd(ref efd) => {
+                            // For eventfd, we can use wait() to consume the event
+                            if event.readable {
+                                let _ = efd.wait();
+                            }
+                            bytes_read = 0; // eventfd doesn't have data to read like pipes
+                        }
                         _ => return Err(RutabagaError::InvalidCrossDomainItemType),
                     }
 
                     if event.hung_up && bytes_read == 0 {
-                        items.table.remove(&pipe_id);
+                        items.table.remove(&item_id);
                     }
 
                     self.fence_handler.call(fence);
@@ -599,6 +568,109 @@ impl CrossDomainWorker {
             }
         }
 
+        Ok(())
+    }
+
+    fn process_receive<T: CrossDomainSendReceiveBase, const MAX_IDENTIFIERS: usize>(
+        &mut self,
+        fence: RutabagaFence,
+        receive_buf: &mut [u8],
+    ) -> RutabagaResult<()> {
+        let (len, files) = self.state.receive_msg(receive_buf)?;
+        let mut cmd_receive: T = Default::default();
+
+        let num_files = files.len();
+        cmd_receive.hdr_mut().cmd = CROSS_DOMAIN_CMD_RECEIVE;
+        *cmd_receive.num_identifiers_mut() =
+            files.len().try_into().map_err(MesaError::TryFromIntError)?;
+        *cmd_receive.opaque_data_size_mut() = len.try_into().map_err(MesaError::TryFromIntError)?;
+
+        let iter = cmd_receive
+            .iter_over_identifiers()
+            .zip(files)
+            .take(num_files);
+
+        for ((identifier, identifier_type, identifier_size), file) in iter {
+            // Safe since the descriptors from receive_msg(..) are owned by us and valid.
+            let raw_fd = file.into_raw_descriptor();
+            let mut f = unsafe { File::from_raw_fd(raw_fd) };
+            if let Ok(seek_size) = f.seek(SeekFrom::End(0)) {
+                *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
+                *identifier_size = seek_size.try_into().map_err(MesaError::TryFromIntError)?;
+                let fd_path = read_link(format!("/proc/self/fd/{}", raw_fd))
+                    .unwrap()
+                    .as_os_str()
+                    .to_string_lossy()
+                    .into_owned();
+                *identifier = if fd_path.starts_with("/dmabuf:") {
+                    let owned_desc =
+                        unsafe { OwnedDescriptor::from_raw_descriptor(f.into_raw_fd()) };
+                    add_item(
+                        &self.item_state,
+                        CrossDomainItem::Blob(MesaHandle {
+                            os_handle: owned_desc,
+                            handle_type: MESA_HANDLE_TYPE_MEM_DMABUF,
+                        }),
+                    )
+                } else if fd_path.starts_with("/memfd:") {
+                    let owned_desc =
+                        unsafe { OwnedDescriptor::from_raw_descriptor(f.into_raw_fd()) };
+                    add_item(
+                        &self.item_state,
+                        CrossDomainItem::Blob(MesaHandle {
+                            os_handle: owned_desc,
+                            handle_type: MESA_HANDLE_TYPE_MEM_SHM,
+                        }),
+                    )
+                } else if fd_path.starts_with("anon_inode:[eventfd]") {
+                    *identifier_type = CROSS_DOMAIN_ID_TYPE_EVENTFD;
+                    let owned_desc =
+                        unsafe { OwnedDescriptor::from_raw_descriptor(f.into_raw_fd()) };
+                    let event = Event::try_from(MesaHandle {
+                        os_handle: owned_desc,
+                        handle_type: MESA_HANDLE_TYPE_SIGNAL_EVENT_FD,
+                    })?;
+                    add_item(&self.item_state, CrossDomainItem::Eventfd(event))
+                } else {
+                    info!(
+                        "Unknown fd item path {:?}, treating as a shmem blob",
+                        fd_path
+                    );
+                    let owned_desc =
+                        unsafe { OwnedDescriptor::from_raw_descriptor(f.into_raw_fd()) };
+                    add_item(
+                        &self.item_state,
+                        CrossDomainItem::Blob(MesaHandle {
+                            os_handle: owned_desc,
+                            handle_type: MESA_HANDLE_TYPE_MEM_SHM,
+                        }),
+                    )
+                };
+            } else {
+                let flags = unsafe {
+                    let ret = fcntl(raw_fd, F_GETFL);
+                    if ret == -1 {
+                        return Err(MesaError::IoError(std::io::Error::last_os_error()).into());
+                    }
+                    ret
+                };
+                *identifier_type = match flags & O_ACCMODE {
+                    O_WRONLY => CROSS_DOMAIN_ID_TYPE_WRITE_PIPE,
+                    _ => return Err(RutabagaError::InvalidCrossDomainItemType),
+                };
+                *identifier = add_item(
+                    &self.item_state,
+                    CrossDomainItem::WaylandWritePipe(WritePipe::new(raw_fd)),
+                );
+                std::mem::forget(f);
+            }
+        }
+
+        self.state.write_to_ring(
+            RingWrite::Write(cmd_receive, Some(&receive_buf[0..len])),
+            self.state.channel_ring_id,
+        )?;
+        self.fence_handler.call(fence);
         Ok(())
     }
 
@@ -611,7 +683,12 @@ impl CrossDomainWorker {
             CROSS_DOMAIN_KILL_ID,
             thread_kill_evt.as_borrowed_descriptor(),
         )?;
-        let mut receive_buf: Vec<u8> = vec![0; CROSS_DOMAIN_MAX_SEND_RECV_SIZE];
+        let buf_size = if self.protocol_version == 0 {
+            CROSS_DOMAIN_MAX_SEND_RECV_SIZE
+        } else {
+            CROSS_DOMAIN_MAX_SEND_RECV_SIZE_V2
+        };
+        let mut receive_buf: Vec<u8> = vec![0; buf_size];
 
         while let Some(job) = self.state.wait_for_job() {
             match job {
@@ -635,6 +712,20 @@ impl CrossDomainWorker {
                         CrossDomainItem::WaylandReadPipe(read_pipe) => self
                             .wait_ctx
                             .add(read_pipe_id as u64, read_pipe.as_borrowed_descriptor())?,
+                        _ => return Err(RutabagaError::InvalidCrossDomainItemType),
+                    }
+                }
+                CrossDomainJob::AddReadEventfd(efd_id) => {
+                    let items = self.item_state.lock().unwrap();
+                    let item = items
+                        .table
+                        .get(&efd_id)
+                        .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
+
+                    match item {
+                        CrossDomainItem::Eventfd(event) => self
+                            .wait_ctx
+                            .add(efd_id as u64, event.as_borrowed_descriptor())?,
                         _ => return Err(RutabagaError::InvalidCrossDomainItemType),
                     }
                 }
@@ -670,7 +761,7 @@ impl CrossDomain {
 }
 
 impl CrossDomainContext {
-    fn get_connection(&mut self, cmd_init: &CrossDomainInit) -> RutabagaResult<Tube> {
+    fn get_connection(&mut self, cmd_init: &CrossDomainInitV1) -> RutabagaResult<Tube> {
         let paths = self
             .paths
             .take()
@@ -685,7 +776,7 @@ impl CrossDomainContext {
         Ok(tube)
     }
 
-    fn initialize(&mut self, cmd_init: &CrossDomainInit) -> RutabagaResult<()> {
+    fn initialize(&mut self, cmd_init: &CrossDomainInitV1) -> RutabagaResult<()> {
         if !self
             .context_resources
             .lock()
@@ -699,6 +790,7 @@ impl CrossDomainContext {
         let channel_ring_id = cmd_init.channel_ring_id;
         let context_resources = self.context_resources.clone();
         let futexes = self.futexes.clone();
+        let protocol_version = cmd_init.protocol_version;
 
         // Zero means no requested channel.
         if cmd_init.channel_type != 0 {
@@ -745,6 +837,7 @@ impl CrossDomainContext {
                         thread_state,
                         thread_items,
                         thread_fence_handler,
+                        protocol_version,
                     )
                     .run(thread_kill_evt, thread_resample_evt)
                 });
@@ -762,6 +855,8 @@ impl CrossDomainContext {
                 None,
             )));
         }
+
+        self.protocol_version = protocol_version;
 
         Ok(())
     }
@@ -810,31 +905,24 @@ impl CrossDomainContext {
         }
     }
 
-    fn send(
+    fn send<T: CrossDomainSendReceiveBase, const MAX_IDENTIFIERS: usize>(
         &mut self,
-        cmd_send: &CrossDomainSendReceive,
+        cmd_send: &mut T,
         opaque_data: &[u8],
     ) -> RutabagaResult<()> {
         let mut descriptors: Vec<OwnedDescriptor> = vec![];
         let mut write_pipe_opt: Option<WritePipe> = None;
         let mut read_pipe_id_opt: Option<u32> = None;
 
-        let num_identifiers = cmd_send
-            .num_identifiers
-            .try_into()
-            .map_err(MesaError::TryFromIntError)?;
+        let num_identifiers = *cmd_send.num_identifiers_mut() as usize;
 
-        if num_identifiers > CROSS_DOMAIN_MAX_IDENTIFIERS {
+        if num_identifiers > MAX_IDENTIFIERS {
             return Err(MesaError::WithContext("max cross domain identifiers exceeded").into());
         }
 
-        let iter = cmd_send
-            .identifiers
-            .iter()
-            .zip(cmd_send.identifier_types.iter())
-            .take(num_identifiers);
+        let iter = cmd_send.iter_over_identifiers().take(num_identifiers);
 
-        for (identifier, identifier_type) in iter {
+        for (identifier, identifier_type, _identifier_size) in iter {
             if *identifier_type == CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB {
                 let context_resources = self.context_resources.lock().unwrap();
 
@@ -1005,6 +1093,28 @@ impl CrossDomainContext {
         Ok(())
     }
 
+    fn read_eventfd_new(
+        &mut self,
+        cmd_eventfd_new: &CrossDomainReadEventfdNew,
+    ) -> RutabagaResult<()> {
+        let items = self.item_state.lock().unwrap();
+
+        if let Some(item) = items.table.get(&cmd_eventfd_new.id) {
+            if let CrossDomainItem::Eventfd(_) = item {
+                self.state
+                    .as_ref()
+                    .unwrap()
+                    .add_job(CrossDomainJob::AddReadEventfd(cmd_eventfd_new.id));
+                channel_signal(self.resample_evt.as_mut().unwrap())?;
+                Ok(())
+            } else {
+                Err(RutabagaError::InvalidCrossDomainItemType)
+            }
+        } else {
+            Err(RutabagaError::InvalidCrossDomainItemId)
+        }
+    }
+
     fn write(&self, cmd_write: &CrossDomainReadWrite, opaque_data: &[u8]) -> RutabagaResult<()> {
         let mut items = self.item_state.lock().unwrap();
 
@@ -1038,6 +1148,26 @@ impl CrossDomainContext {
             _ => Err(RutabagaError::InvalidCrossDomainItemType),
         }
     }
+
+    fn process_cmd_send<T: CrossDomainSendReceiveBase, const MAX_IDENTIFIERS: usize>(
+        &mut self,
+        commands: &mut [u8],
+    ) -> RutabagaResult<()> {
+        let opaque_data_offset = size_of::<T>();
+        let (mut cmd_send, _) = T::read_from_prefix(commands.as_bytes())
+            .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
+
+        let opaque_data = commands
+            .get_mut(
+                opaque_data_offset..opaque_data_offset + *cmd_send.opaque_data_size_mut() as usize,
+            )
+            .ok_or(RutabagaError::InvalidCommandSize(
+                *cmd_send.opaque_data_size_mut() as usize,
+            ))?;
+
+        self.send::<T, MAX_IDENTIFIERS>(&mut cmd_send, opaque_data)?;
+        Ok(())
+    }
 }
 
 impl Drop for CrossDomainContext {
@@ -1063,11 +1193,23 @@ impl Drop for CrossDomainContext {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
-struct CrossDomainInitLegacy {
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+struct CrossDomainInitVMinus1 {
     hdr: CrossDomainHeader,
     query_ring_id: u32,
     channel_type: u32,
+}
+
+impl CrossDomainInitVMinus1 {
+    pub(crate) fn upgrade(&self) -> CrossDomainInitV1 {
+        CrossDomainInitV1 {
+            hdr: self.hdr,
+            query_ring_id: self.query_ring_id,
+            channel_ring_id: self.query_ring_id,
+            channel_type: self.channel_type,
+            protocol_version: 0,
+        }
+    }
 }
 
 impl RutabagaContext for CrossDomainContext {
@@ -1177,24 +1319,16 @@ impl RutabagaContext for CrossDomainContext {
 
             match hdr.cmd {
                 CROSS_DOMAIN_CMD_INIT => {
-                    let cmd_init = match CrossDomainInit::read_from_prefix(commands) {
-                        Ok((cmd_init, _)) => cmd_init,
-                        _ => {
-                            if let Ok((cmd_init, _)) =
-                                CrossDomainInitLegacy::read_from_prefix(commands)
-                            {
-                                CrossDomainInit {
-                                    hdr: cmd_init.hdr,
-                                    query_ring_id: cmd_init.query_ring_id,
-                                    channel_ring_id: cmd_init.query_ring_id,
-                                    channel_type: cmd_init.channel_type,
-                                }
-                            } else {
-                                return Err(RutabagaError::InvalidCommandBuffer);
-                            }
-                        }
-                    };
-
+                    let cmd_init = CrossDomainInitV1::read_from_prefix(commands)
+                        .map(|(v, _)| v)
+                        .or_else(|_| {
+                            CrossDomainInitV0::read_from_prefix(commands).map(|(v, _)| v.upgrade())
+                        })
+                        .or_else(|_| {
+                            CrossDomainInitVMinus1::read_from_prefix(commands)
+                                .map(|(v, _)| v.upgrade())
+                        })
+                        .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
                     self.initialize(&cmd_init)?;
                 }
                 CROSS_DOMAIN_CMD_GET_IMAGE_REQUIREMENTS => {
@@ -1205,20 +1339,11 @@ impl RutabagaContext for CrossDomainContext {
                     self.get_image_requirements(&cmd_get_reqs)?;
                 }
                 CROSS_DOMAIN_CMD_SEND => {
-                    let opaque_data_offset = size_of::<CrossDomainSendReceive>();
-                    let (cmd_send, _) = CrossDomainSendReceive::read_from_prefix(commands)
-                        .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
-
-                    let opaque_data = commands
-                        .get_mut(
-                            opaque_data_offset
-                                ..opaque_data_offset + cmd_send.opaque_data_size as usize,
-                        )
-                        .ok_or(RutabagaError::InvalidCommandSize(
-                            cmd_send.opaque_data_size as usize,
-                        ))?;
-
-                    self.send(&cmd_send, opaque_data)?;
+                    if self.protocol_version == 0 {
+                        self.process_cmd_send::<CrossDomainSendReceive, {CrossDomainSendReceive::MAX_IDENTIFIERS}>(commands)?;
+                    } else {
+                        self.process_cmd_send::<CrossDomainSendReceiveV2, {CrossDomainSendReceiveV2::MAX_IDENTIFIERS}>(commands)?;
+                    }
                 }
                 CROSS_DOMAIN_CMD_POLL => {
                     // Actual polling is done in the subsequent when creating a fence.
@@ -1257,6 +1382,11 @@ impl RutabagaContext for CrossDomainContext {
                         CrossDomainFutexDestroy::read_from_prefix(commands)
                             .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
                     self.futex_destroy(&cmd_futex_destroy)?;
+                }
+                CROSS_DOMAIN_CMD_READ_EVENTFD_NEW => {
+                    let (cmd_new_efd, _) = CrossDomainReadEventfdNew::read_from_prefix(commands)
+                        .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
+                    self.read_eventfd_new(&cmd_new_efd)?;
                 }
                 _ => return Err(MesaError::WithContext("invalid cross domain command").into()),
             }
@@ -1391,6 +1521,7 @@ impl RutabagaComponent for CrossDomain {
             kill_evt: None,
             virtiofs_table: self.virtiofs_table.clone(),
             futexes: Arc::new(Mutex::new(Default::default())),
+            protocol_version: 0,
         }))
     }
 
