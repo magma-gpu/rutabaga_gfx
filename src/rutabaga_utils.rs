@@ -608,6 +608,8 @@ impl Transfer3D {
 /// Rutabaga path types
 pub const RUTABAGA_PATH_TYPE_WAYLAND: u32 = 0x0001;
 pub const RUTABAGA_PATH_TYPE_GPU: u32 = 0x0002;
+pub const RUTABAGA_PATH_TYPE_PW: u32 = 0x0010;
+pub const RUTABAGA_PATH_TYPE_X11: u32 = 0x0011;
 
 pub type RutabagaPaths = Vec<RutabagaPath>;
 
