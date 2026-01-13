@@ -38,6 +38,8 @@ pub const CROSS_DOMAIN_ID_TYPE_READ_PIPE: u32 = 3;
 /// The host receives the write end of the pipe over the host Wayland socket.
 pub const CROSS_DOMAIN_ID_TYPE_WRITE_PIPE: u32 = 4;
 
+pub const CROSS_DOMAIN_ID_TYPE_EVENT: u32 = 5;
+
 /// No ring
 pub const CROSS_DOMAIN_RING_NONE: u32 = 0xffffffff;
 /// A ring for metadata queries.
