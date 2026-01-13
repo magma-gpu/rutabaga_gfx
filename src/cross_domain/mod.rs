@@ -30,6 +30,8 @@ use mesa3d_util::TubeType;
 use mesa3d_util::WaitContext;
 use mesa3d_util::WaitTimeout;
 use mesa3d_util::WritePipe;
+use mesa3d_util::MESA_HANDLE_TYPE_SIGNAL_EVENT_FD;
+
 use zerocopy::FromBytes;
 use zerocopy::Immutable;
 use zerocopy::IntoBytes;
@@ -77,6 +79,7 @@ enum CrossDomainItem {
     Blob(MesaHandle),
     WaylandReadPipe(ReadPipe),
     WaylandWritePipe(WritePipe),
+    Event(Event),
 }
 
 enum CrossDomainJob {
@@ -328,63 +331,7 @@ impl CrossDomainWorker {
         if let Some(event) = events.first() {
             match event.connection_id {
                 CROSS_DOMAIN_CONTEXT_CHANNEL_ID => {
-                    let (len, files) = self.state.receive_msg(receive_buf)?;
-                    let mut cmd_receive: CrossDomainSendReceive = Default::default();
-
-                    let num_files = files.len();
-                    cmd_receive.hdr.cmd = CROSS_DOMAIN_CMD_RECEIVE;
-                    cmd_receive.num_identifiers = files
-                        .len()
-                        .try_into()
-                        .map_err(|_| RutabagaError::InvalidCommandSize(files.len()))?;
-                    cmd_receive.opaque_data_size = len
-                        .try_into()
-                        .map_err(|_| RutabagaError::InvalidCommandSize(len))?;
-
-                    let iter = cmd_receive
-                        .identifiers
-                        .iter_mut()
-                        .zip(cmd_receive.identifier_types.iter_mut())
-                        .zip(cmd_receive.identifier_sizes.iter_mut())
-                        .zip(files)
-                        .take(num_files);
-
-                    for (((identifier, identifier_type), identifier_size), file) in iter {
-                        // Determine the descriptor type and size
-                        let desc_type = file
-                            .determine_type()
-                            .map_err(|e| RutabagaError::MesaError(e.into()))?;
-                        match desc_type {
-                            DescriptorType::Memory(size, handle_type) => {
-                                *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
-                                *identifier_size = size;
-
-                                let mesa_handle = MesaHandle {
-                                    os_handle: file,
-                                    handle_type,
-                                };
-                                *identifier =
-                                    add_item(&self.item_state, CrossDomainItem::Blob(mesa_handle));
-                            }
-                            DescriptorType::WritePipe => {
-                                *identifier_type = CROSS_DOMAIN_ID_TYPE_WRITE_PIPE;
-                                *identifier_size = 0;
-                                let write_pipe = WritePipe::new(file.as_raw_descriptor());
-                                std::mem::forget(file); // Prevent double-free since WritePipe now owns the descriptor
-                                *identifier = add_item(
-                                    &self.item_state,
-                                    CrossDomainItem::WaylandWritePipe(write_pipe),
-                                );
-                            }
-                            _ => return Err(RutabagaError::InvalidCrossDomainItemType),
-                        }
-                    }
-
-                    self.state.write_to_ring(
-                        RingWrite::Write(cmd_receive, Some(&receive_buf[0..len])),
-                        self.state.channel_ring_id,
-                    )?;
-                    self.fence_handler.call(fence);
+                    self.process_receive(fence, receive_buf)?;
                 }
                 CROSS_DOMAIN_RESAMPLE_ID => {
                     // The resample event is triggered when the job queue is in the following state:
@@ -446,6 +393,79 @@ impl CrossDomainWorker {
             }
         }
 
+        Ok(())
+    }
+
+    fn process_receive(
+        &mut self,
+        fence: RutabagaFence,
+        receive_buf: &mut [u8],
+    ) -> RutabagaResult<()> {
+        let (len, files) = self.state.receive_msg(receive_buf)?;
+        let mut cmd_receive: CrossDomainSendReceive = Default::default();
+
+        let num_files = files.len();
+        cmd_receive.hdr.cmd = CROSS_DOMAIN_CMD_RECEIVE;
+        cmd_receive.num_identifiers = files.len().try_into().map_err(MesaError::TryFromIntError)?;
+        cmd_receive.opaque_data_size = len.try_into().map_err(MesaError::TryFromIntError)?;
+
+        let iter = cmd_receive
+            .identifiers
+            .iter_mut()
+            .zip(cmd_receive.identifier_types.iter_mut())
+            .zip(cmd_receive.identifier_sizes.iter_mut())
+            .map(|((i, it), is)| (i, it, is))
+            .zip(files)
+            .take(num_files);
+
+        for ((identifier, identifier_type, identifier_size), file) in iter {
+            {
+                // Determine the descriptor type using the platform abstraction
+                let desc_type = file
+                    .determine_type()
+                    .map_err(|e| RutabagaError::MesaError(e.into()))?;
+
+                match desc_type {
+                    DescriptorType::Event => {
+                        *identifier_type = CROSS_DOMAIN_ID_TYPE_EVENT;
+                        *identifier_size = 0;
+                        let event = Event::try_from(MesaHandle {
+                            os_handle: file,
+                            handle_type: MESA_HANDLE_TYPE_SIGNAL_EVENT_FD,
+                        })?;
+                        *identifier = add_item(&self.item_state, CrossDomainItem::Event(event));
+                    }
+                    DescriptorType::Memory(size, handle_type) => {
+                        *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
+                        *identifier_size = size;
+
+                        let mesa_handle = MesaHandle {
+                            os_handle: file,
+                            handle_type,
+                        };
+                        *identifier =
+                            add_item(&self.item_state, CrossDomainItem::Blob(mesa_handle));
+                    }
+                    DescriptorType::WritePipe => {
+                        *identifier_type = CROSS_DOMAIN_ID_TYPE_WRITE_PIPE;
+                        *identifier_size = 0;
+                        let write_pipe = WritePipe::new(file.as_raw_descriptor());
+                        std::mem::forget(file); // WritePipe now owns the descriptor
+                        *identifier = add_item(
+                            &self.item_state,
+                            CrossDomainItem::WaylandWritePipe(write_pipe),
+                        );
+                    }
+                    _ => return Err(RutabagaError::InvalidCrossDomainItemType),
+                }
+            }
+        }
+
+        self.state.write_to_ring(
+            RingWrite::Write(cmd_receive, Some(&receive_buf[0..len])),
+            self.state.channel_ring_id,
+        )?;
+        self.fence_handler.call(fence);
         Ok(())
     }
 
