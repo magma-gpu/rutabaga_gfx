@@ -14,10 +14,13 @@ use std::os::unix::io::FromRawFd;
 use std::os::unix::io::IntoRawFd;
 use std::os::unix::io::RawFd;
 
+use rustix::fs::fcntl_get_seals;
 use rustix::fs::fcntl_getfl;
 use rustix::fs::seek;
 use rustix::fs::OFlags;
+use rustix::fs::SealFlags;
 use rustix::fs::SeekFrom;
+use rustix::io::Errno;
 
 use crate::descriptor::AsRawDescriptor;
 use crate::descriptor::FromRawDescriptor;
@@ -25,6 +28,9 @@ use crate::descriptor::IntoRawDescriptor;
 use crate::DescriptorType;
 use crate::MESA_HANDLE_TYPE_MEM_DMABUF;
 use crate::MESA_HANDLE_TYPE_MEM_SHM;
+use crate::MESA_MAP_ACCESS_READ;
+use crate::MESA_MAP_ACCESS_RW;
+use crate::MESA_MAP_ACCESS_WRITE;
 
 pub type RawDescriptor = RawFd;
 pub const DEFAULT_RAW_DESCRIPTOR: RawDescriptor = -1;
@@ -59,6 +65,26 @@ impl OwnedDescriptor {
                 }
             }
         }
+    }
+
+    pub fn determine_map_access_mode(&self) -> Result<u32> {
+        let flags = fcntl_getfl(&self.owned)?;
+        let mut access = match flags & OFlags::ACCMODE {
+            OFlags::RDONLY => MESA_MAP_ACCESS_READ,
+            OFlags::WRONLY => MESA_MAP_ACCESS_WRITE,
+            OFlags::RDWR => MESA_MAP_ACCESS_RW,
+            _ => return Err(Error::from(ErrorKind::Unsupported)),
+        };
+        // Access mode can be RDWR, but a write seal would still prevent RW mappings!
+        let seals = match fcntl_get_seals(&self.owned) {
+            Ok(seals) => seals,
+            Err(Errno::INVAL) => SealFlags::empty(), // It's fine if the file does not support sealing
+            Err(err) => return Err(err.into()),
+        };
+        if seals.contains(SealFlags::WRITE) || seals.contains(SealFlags::FUTURE_WRITE) {
+            access &= !MESA_MAP_ACCESS_WRITE;
+        }
+        Ok(access)
     }
 
     fn get_memory_handle_type(&self) -> Result<u32> {
