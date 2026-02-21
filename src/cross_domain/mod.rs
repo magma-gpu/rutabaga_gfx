@@ -30,8 +30,6 @@ use mesa3d_util::TubeType;
 use mesa3d_util::WaitContext;
 use mesa3d_util::WaitTimeout;
 use mesa3d_util::WritePipe;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
 use zerocopy::FromBytes;
 use zerocopy::Immutable;
 use zerocopy::IntoBytes;
@@ -54,7 +52,6 @@ use crate::rutabaga_utils::RutabagaPath;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::RUTABAGA_BLOB_FLAG_USE_MAPPABLE;
 use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
-use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_READ;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 use crate::rutabaga_utils::RUTABAGA_MAP_CACHE_CACHED;
 use crate::DrmFormat;
@@ -876,14 +873,10 @@ impl RutabagaContext for CrossDomainContext {
         // Items that are removed from the table after one usage.
         match item {
             CrossDomainItem::Blob(hnd) => {
-                let map_access = if hnd.handle_type == MESA_HANDLE_TYPE_MEM_SHM {
-                    RUTABAGA_MAP_ACCESS_READ
-                } else if hnd.handle_type == MESA_HANDLE_TYPE_MEM_DMABUF {
-                    RUTABAGA_MAP_ACCESS_RW
-                } else {
-                    // Default to READ for unknown types
-                    RUTABAGA_MAP_ACCESS_READ
-                };
+                let map_access = hnd
+                    .os_handle
+                    .determine_map_access_mode()
+                    .map_err(|e| RutabagaError::MesaError(e.into()))?;
                 let map_info = Some(RUTABAGA_MAP_CACHE_CACHED | map_access);
 
                 Ok(RutabagaResource {
