@@ -65,7 +65,7 @@ use crate::virgl_renderer::VirglRenderer;
 use crate::RutabagaPaths;
 
 /// Key for identifying a file in the VirtioFS table.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VirtioFsKey {
     /// VirtioFS filesystem ID (identifies which virtio-fs instance)
     pub fs_id: u64,
