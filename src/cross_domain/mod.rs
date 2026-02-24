@@ -43,7 +43,7 @@ use crate::handle::RutabagaHandle;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
 use crate::rutabaga_core::RutabagaResource;
-use crate::rutabaga_core::VirtioFsTable;
+use crate::rutabaga_core::VirtioFsLookup;
 use crate::rutabaga_utils::Resource3DInfo;
 use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;
@@ -144,7 +144,7 @@ pub struct CrossDomain {
     paths: Option<Vec<RutabagaPath>>,
     gralloc: Arc<Mutex<RutabagaGralloc>>,
     fence_handler: RutabagaFenceHandler,
-    virtiofs_table: Option<VirtioFsTable>,
+    virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
 }
 
 // TODO(gurchetansingh): optimize the item tracker.  Each requirements blob is long-lived and can
@@ -585,14 +585,14 @@ impl CrossDomain {
     pub fn init(
         paths: Option<Vec<RutabagaPath>>,
         fence_handler: RutabagaFenceHandler,
-        virtiofs_table: Option<VirtioFsTable>,
+        virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
     ) -> RutabagaResult<Box<dyn RutabagaComponent>> {
         let gralloc = RutabagaGralloc::new(RutabagaGrallocBackendFlags::new())?;
         Ok(Box::new(CrossDomain {
             paths,
             gralloc: Arc::new(Mutex::new(gralloc)),
             fence_handler,
-            virtiofs_table,
+            virtiofs_lookup,
         }))
     }
 }
@@ -1274,7 +1274,7 @@ impl RutabagaComponent for CrossDomain {
             context_resources: Arc::new(Mutex::new(Default::default())),
             item_state: Arc::new(Mutex::new(Default::default())),
             sentinel_manager: Arc::new(Mutex::new(AtomicMemorySentinelManager::new(
-                self.virtiofs_table.clone(),
+                self.virtiofs_lookup.clone(),
             ))),
             fence_handler,
             worker_thread: None,

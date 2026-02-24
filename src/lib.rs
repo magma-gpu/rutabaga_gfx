@@ -38,6 +38,7 @@ pub use crate::rutabaga_core::calculate_capset_mask;
 pub use crate::rutabaga_core::calculate_capset_names;
 pub use crate::rutabaga_core::Rutabaga;
 pub use crate::rutabaga_core::RutabagaBuilder;
+pub use crate::rutabaga_core::VirtioFsLookup;
 pub use crate::rutabaga_gralloc::DrmFormat;
 pub use crate::rutabaga_gralloc::ImageAllocationInfo;
 pub use crate::rutabaga_gralloc::ImageMemoryRequirements;
