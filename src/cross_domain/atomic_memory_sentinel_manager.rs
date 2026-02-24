@@ -19,10 +19,8 @@ use mesa3d_util::AtomicMemorySentinel;
 use mesa3d_util::Event;
 use mesa3d_util::MemoryMapping;
 use mesa3d_util::MesaError;
-use mesa3d_util::OwnedDescriptor;
 
-use crate::rutabaga_core::VirtioFsKey;
-use crate::rutabaga_core::VirtioFsTable;
+use crate::rutabaga_core::VirtioFsLookup;
 use crate::rutabaga_utils::RutabagaError;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
@@ -125,15 +123,15 @@ impl Drop for SentinelInstance {
 /// Manager for all atomic memory sentinel watchers
 pub struct AtomicMemorySentinelManager {
     watchers: Map<u32, SentinelInstance>,
-    virtiofs_table: Option<VirtioFsTable>,
+    virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
 }
 
 impl AtomicMemorySentinelManager {
     /// Creates a new AtomicMemorySentinelManager
-    pub fn new(virtiofs_table: Option<VirtioFsTable>) -> Self {
+    pub fn new(virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>) -> Self {
         Self {
             watchers: Map::new(),
-            virtiofs_table,
+            virtiofs_lookup,
         }
     }
 
@@ -143,20 +141,12 @@ impl AtomicMemorySentinelManager {
             return Err(RutabagaError::AlreadyInUse);
         }
 
-        let virtiofs_table = self
-            .virtiofs_table
+        let virtiofs_lookup = self
+            .virtiofs_lookup
             .as_ref()
             .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
-        let virtiofs = virtiofs_table.lock().unwrap();
 
-        let key = VirtioFsKey { fs_id, handle };
-        let file = virtiofs
-            .get(&key)
-            .ok_or(RutabagaError::InvalidCrossDomainItemId)?
-            .try_clone()
-            .map_err(MesaError::IoError)?;
-
-        let handle = OwnedDescriptor::from(file);
+        let handle = virtiofs_lookup.get_exported_descriptor(fs_id, handle)?;
         let mapping = MemoryMapping::from_safe_descriptor(
             handle,
             size_of::<u32>(),

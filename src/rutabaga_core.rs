@@ -5,11 +5,10 @@
 //! rutabaga_core: Cross-platform, Rust-based, Wayland and Vulkan centric GPU virtualization.
 use std::collections::BTreeMap as Map;
 use std::convert::TryInto;
-use std::fs::File;
 use std::io::IoSlice;
 use std::io::IoSliceMut;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use mesa3d_util::MemoryMapping;
 use mesa3d_util::MesaError;
@@ -64,16 +63,14 @@ use crate::snapshot::RutabagaSnapshotWriter;
 use crate::virgl_renderer::VirglRenderer;
 use crate::RutabagaPaths;
 
-/// Key for identifying a file in the VirtioFS table.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct VirtioFsKey {
-    /// VirtioFS filesystem ID (identifies which virtio-fs instance)
-    pub fs_id: u64,
-    /// File handle within the filesystem (identifies a specific file)
-    pub handle: u64,
+/// Trait for looking up exported file descriptors from virtio-fs.
+///
+/// Allows VMMs to use different data structures and concurrency strategies.
+/// The trait can be extended in the future to support inode-based lookups for O_PATH fds.
+pub trait VirtioFsLookup: Send + Sync {
+    /// Retrieves an exported file descriptor by filesystem ID and handle.
+    fn get_exported_descriptor(&self, fs_id: u64, handle: u64) -> RutabagaResult<OwnedDescriptor>;
 }
-
-pub type VirtioFsTable = Arc<Mutex<Map<VirtioFsKey, File>>>;
 
 const RUTABAGA_DEFAULT_WIDTH: u32 = 1280;
 const RUTABAGA_DEFAULT_HEIGHT: u32 = 1024;
@@ -1301,7 +1298,7 @@ pub struct RutabagaBuilder {
     debug_handler: Option<RutabagaDebugHandler>,
     renderer_features: Option<String>,
     server_descriptor: Option<OwnedDescriptor>,
-    virtiofs_table: Option<VirtioFsTable>,
+    virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
 }
 
 impl RutabagaBuilder {
@@ -1323,7 +1320,7 @@ impl RutabagaBuilder {
             debug_handler: None,
             renderer_features: None,
             server_descriptor: None,
-            virtiofs_table: None,
+            virtiofs_lookup: None,
         }
     }
 
@@ -1428,9 +1425,12 @@ impl RutabagaBuilder {
         self
     }
 
-    /// Set export table for the RutabagaBuilder
-    pub fn set_export_table(mut self, virtiofs_table: VirtioFsTable) -> RutabagaBuilder {
-        self.virtiofs_table = Some(virtiofs_table);
+    /// Set VirtioFS lookup implementation for the RutabagaBuilder
+    pub fn set_virtiofs_lookup(
+        mut self,
+        virtiofs_lookup: Arc<dyn VirtioFsLookup>,
+    ) -> RutabagaBuilder {
+        self.virtiofs_lookup = Some(virtiofs_lookup);
         self
     }
 
@@ -1551,7 +1551,7 @@ impl RutabagaBuilder {
             let cross_domain = CrossDomain::init(
                 self.paths.clone(),
                 self.fence_handler.clone(),
-                self.virtiofs_table.clone(),
+                self.virtiofs_lookup.clone(),
             )?;
             rutabaga_components.insert(RutabagaComponentType::CrossDomain, cross_domain);
             push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
