@@ -272,7 +272,7 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
 
         let result = RutabagaBuilder::new(builder.capset_mask, fence_handler)
             .set_default_component(component)
-            .set_use_external_blob(false)
+            .set_use_external_blob(true)
             .set_use_egl(true)
             .set_wsi(rutabaga_wsi)
             .set_debug_handler(debug_handler_opt)
