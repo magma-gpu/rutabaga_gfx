@@ -281,6 +281,8 @@ extern "C" {
         dpr: f32,
     ) -> c_int;
 
+    fn gfxstream_backend_set_vsync_hz(vsync_hz: c_int);
+
     fn gfxstream_backend_set_scanout_resource(
         scanout_id: u32,
         resource_id: u32,
@@ -1124,6 +1126,10 @@ impl RutabagaComponent for Gfxstream {
                 display_id, width_pt, height_pt, width_px, height_px, dpr)
         };
         ret_to_res(ret)
+    }
+
+    fn set_vsync_hz(&self, vsync_hz: u32) {
+        unsafe { gfxstream_backend_set_vsync_hz(vsync_hz as c_int) };
     }
 
     fn set_scanout_resource(

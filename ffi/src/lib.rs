@@ -791,6 +791,18 @@ pub unsafe extern "C" fn rutabaga_resize_native_surface(
 }
 
 #[no_mangle]
+pub extern "C" fn rutabaga_set_vsync_hz(
+    ptr: &mut rutabaga,
+    vsync_hz: u32,
+) -> i32 {
+    catch_unwind(AssertUnwindSafe(|| {
+        ptr.set_vsync_hz(vsync_hz);
+        NO_ERROR
+    }))
+    .unwrap_or(-ESRCH)
+}
+
+#[no_mangle]
 pub extern "C" fn rutabaga_set_scanout_resource(
     ptr: &mut rutabaga,
     scanout_id: u32,

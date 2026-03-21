@@ -404,6 +404,8 @@ pub trait RutabagaComponent {
         Err(MesaError::Unsupported.into())
     }
 
+    fn set_vsync_hz(&self, _vsync_hz: u32) {}
+
     fn set_scanout_resource(
         &self,
         _scanout_id: u32,
@@ -742,6 +744,12 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidComponent)?;
 
         component.resize_native_surface(display_id, width_pt, height_pt, width_px, height_px, dpr)
+    }
+
+    pub fn set_vsync_hz(&self, vsync_hz: u32) {
+        if let Some(component) = self.components.get(&self.default_component) {
+            component.set_vsync_hz(vsync_hz);
+        }
     }
 
     pub fn set_scanout_resource(

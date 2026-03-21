@@ -391,6 +391,8 @@ int32_t rutabaga_resize_native_surface(struct rutabaga *ptr, uint32_t display_id
                                         int32_t width_px, int32_t height_px,
                                         float dpr);
 
+int32_t rutabaga_set_vsync_hz(struct rutabaga *ptr, uint32_t vsync_hz);
+
 int32_t rutabaga_set_scanout_resource(struct rutabaga *ptr, uint32_t scanout_id,
                                        uint32_t resource_id, uint32_t width, uint32_t height);
 
