@@ -97,6 +97,7 @@ extern "C" {
  * Rutabaga WSI
  */
 #define RUTABAGA_WSI_SURFACELESS 0x1
+#define RUTABAGA_WSI_VULKAN_SWAPCHAIN 0x2
 
 /**
  * Rutabaga flags for creating fences.
@@ -376,6 +377,26 @@ int32_t rutabaga_resource_map_info(struct rutabaga *ptr, uint32_t resource_id, u
 int32_t rutabaga_submit_command(struct rutabaga *ptr, struct rutabaga_command *cmd);
 
 int32_t rutabaga_create_fence(struct rutabaga *ptr, const struct rutabaga_fence *fence);
+
+int32_t rutabaga_setup_native_surface(struct rutabaga *ptr, uint32_t display_id,
+                                       void *native_window_handle,
+                                       int32_t width_pt, int32_t height_pt,
+                                       int32_t width_px, int32_t height_px,
+                                       float dpr);
+
+int32_t rutabaga_teardown_native_surface(struct rutabaga *ptr, uint32_t display_id);
+
+int32_t rutabaga_resize_native_surface(struct rutabaga *ptr, uint32_t display_id,
+                                        int32_t width_pt, int32_t height_pt,
+                                        int32_t width_px, int32_t height_px,
+                                        float dpr);
+
+int32_t rutabaga_set_scanout_resource(struct rutabaga *ptr, uint32_t scanout_id,
+                                       uint32_t resource_id, uint32_t width, uint32_t height);
+
+int32_t rutabaga_present_flushed_resource(struct rutabaga *ptr, uint32_t resource_id,
+                                           uint32_t x, uint32_t y,
+                                           uint32_t width, uint32_t height);
 
 #ifdef RUTABAGA_GFX_FFI_UNSTABLE
 

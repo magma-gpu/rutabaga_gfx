@@ -7,6 +7,7 @@ use std::collections::BTreeMap as Map;
 use std::convert::TryInto;
 use std::io::IoSlice;
 use std::io::IoSliceMut;
+use std::os::raw::c_void;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -373,6 +374,56 @@ pub trait RutabagaComponent {
     fn resume(&self) -> RutabagaResult<()> {
         Ok(())
     }
+
+    fn setup_native_surface(
+        &self,
+        _display_id: u32,
+        _native_window_handle: *mut c_void,
+        _width_pt: i32,
+        _height_pt: i32,
+        _width_px: i32,
+        _height_px: i32,
+        _dpr: f32,
+    ) -> RutabagaResult<()> {
+        Err(MesaError::Unsupported.into())
+    }
+
+    fn teardown_native_surface(&self, _display_id: u32) -> RutabagaResult<()> {
+        Err(MesaError::Unsupported.into())
+    }
+
+    fn resize_native_surface(
+        &self,
+        _display_id: u32,
+        _width_pt: i32,
+        _height_pt: i32,
+        _width_px: i32,
+        _height_px: i32,
+        _dpr: f32,
+    ) -> RutabagaResult<()> {
+        Err(MesaError::Unsupported.into())
+    }
+
+    fn set_scanout_resource(
+        &self,
+        _scanout_id: u32,
+        _resource_id: u32,
+        _width: u32,
+        _height: u32,
+    ) -> RutabagaResult<()> {
+        Err(MesaError::Unsupported.into())
+    }
+
+    fn present_flushed_resource(
+        &self,
+        _resource_id: u32,
+        _x: u32,
+        _y: u32,
+        _width: u32,
+        _height: u32,
+    ) -> RutabagaResult<bool> {
+        Err(MesaError::Unsupported.into())
+    }
 }
 
 pub trait RutabagaContext {
@@ -645,6 +696,83 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidComponent)?;
 
         component.resume()
+    }
+
+    pub fn setup_native_surface(
+        &self,
+        display_id: u32,
+        native_window_handle: *mut c_void,
+        width_pt: i32,
+        height_pt: i32,
+        width_px: i32,
+        height_px: i32,
+        dpr: f32,
+    ) -> RutabagaResult<()> {
+        let component = self
+            .components
+            .get(&self.default_component)
+            .ok_or(RutabagaError::InvalidComponent)?;
+
+        component.setup_native_surface(
+            display_id, native_window_handle,
+            width_pt, height_pt, width_px, height_px, dpr)
+    }
+
+    pub fn teardown_native_surface(&self, display_id: u32) -> RutabagaResult<()> {
+        let component = self
+            .components
+            .get(&self.default_component)
+            .ok_or(RutabagaError::InvalidComponent)?;
+
+        component.teardown_native_surface(display_id)
+    }
+
+    pub fn resize_native_surface(
+        &self,
+        display_id: u32,
+        width_pt: i32,
+        height_pt: i32,
+        width_px: i32,
+        height_px: i32,
+        dpr: f32,
+    ) -> RutabagaResult<()> {
+        let component = self
+            .components
+            .get(&self.default_component)
+            .ok_or(RutabagaError::InvalidComponent)?;
+
+        component.resize_native_surface(display_id, width_pt, height_pt, width_px, height_px, dpr)
+    }
+
+    pub fn set_scanout_resource(
+        &self,
+        scanout_id: u32,
+        resource_id: u32,
+        width: u32,
+        height: u32,
+    ) -> RutabagaResult<()> {
+        let component = self
+            .components
+            .get(&self.default_component)
+            .ok_or(RutabagaError::InvalidComponent)?;
+
+        component.set_scanout_resource(scanout_id, resource_id, width, height)
+    }
+
+    pub fn present_flushed_resource(
+        &self,
+        resource_id: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> RutabagaResult<bool> {
+        let component = self
+            .components
+            .get(&self.default_component)
+            .ok_or(RutabagaError::InvalidComponent)?;
+
+        component.present_flushed_resource(resource_id, x, y, width, height)
     }
 
     fn capset_id_to_component_type(&self, capset_id: u32) -> RutabagaResult<RutabagaComponentType> {

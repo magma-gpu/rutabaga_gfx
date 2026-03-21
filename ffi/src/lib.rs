@@ -61,6 +61,7 @@ pub struct iovec {
 
 const NO_ERROR: i32 = 0;
 const RUTABAGA_WSI_SURFACELESS: u64 = 1;
+const RUTABAGA_WSI_VULKAN_SWAPCHAIN: u64 = 2;
 
 static S_DEBUG_HANDLER: OnceLock<Mutex<RutabagaDebugHandler>> = OnceLock::new();
 
@@ -262,6 +263,7 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
 
         let rutabaga_wsi = match builder.wsi {
             RUTABAGA_WSI_SURFACELESS => RutabagaWsi::Surfaceless,
+            RUTABAGA_WSI_VULKAN_SWAPCHAIN => RutabagaWsi::VulkanSwapchain,
             _ => return -EINVAL,
         };
 
@@ -734,6 +736,93 @@ pub unsafe extern "C" fn rutabaga_restore(ptr: &mut rutabaga, dir: *const c_char
 
         let result = ptr.restore(Path::new(directory));
         return_result(result)
+    }))
+    .unwrap_or(-ESRCH)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rutabaga_setup_native_surface(
+    ptr: &mut rutabaga,
+    display_id: u32,
+    native_window_handle: *mut c_void,
+    width_pt: i32,
+    height_pt: i32,
+    width_px: i32,
+    height_px: i32,
+    dpr: f32,
+) -> i32 {
+    catch_unwind(AssertUnwindSafe(|| {
+        let result = ptr.setup_native_surface(
+            display_id, native_window_handle,
+            width_pt, height_pt, width_px, height_px, dpr);
+        return_result(result)
+    }))
+    .unwrap_or(-ESRCH)
+}
+
+#[no_mangle]
+pub extern "C" fn rutabaga_teardown_native_surface(
+    ptr: &mut rutabaga,
+    display_id: u32,
+) -> i32 {
+    catch_unwind(AssertUnwindSafe(|| {
+        let result = ptr.teardown_native_surface(display_id);
+        return_result(result)
+    }))
+    .unwrap_or(-ESRCH)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rutabaga_resize_native_surface(
+    ptr: &mut rutabaga,
+    display_id: u32,
+    width_pt: i32,
+    height_pt: i32,
+    width_px: i32,
+    height_px: i32,
+    dpr: f32,
+) -> i32 {
+    catch_unwind(AssertUnwindSafe(|| {
+        let result = ptr.resize_native_surface(
+            display_id, width_pt, height_pt, width_px, height_px, dpr);
+        return_result(result)
+    }))
+    .unwrap_or(-ESRCH)
+}
+
+#[no_mangle]
+pub extern "C" fn rutabaga_set_scanout_resource(
+    ptr: &mut rutabaga,
+    scanout_id: u32,
+    resource_id: u32,
+    width: u32,
+    height: u32,
+) -> i32 {
+    catch_unwind(AssertUnwindSafe(|| {
+        let result = ptr.set_scanout_resource(scanout_id, resource_id, width, height);
+        return_result(result)
+    }))
+    .unwrap_or(-ESRCH)
+}
+
+#[no_mangle]
+pub extern "C" fn rutabaga_present_flushed_resource(
+    ptr: &mut rutabaga,
+    resource_id: u32,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> i32 {
+    catch_unwind(AssertUnwindSafe(|| {
+        let result = ptr.present_flushed_resource(resource_id, x, y, width, height);
+        match result {
+            Ok(presented) => if presented { 1 } else { 0 },
+            Err(e) => {
+                log_error(e.to_string());
+                -EINVAL
+            }
+        }
     }))
     .unwrap_or(-ESRCH)
 }

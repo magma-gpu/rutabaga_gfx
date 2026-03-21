@@ -259,6 +259,42 @@ extern "C" {
         import_handle: *const stream_renderer_handle,
         import_data: *const stream_renderer_import_data,
     ) -> c_int;
+
+    fn gfxstream_backend_setup_native_surface(
+        display_id: u32,
+        native_window_handle: *mut c_void,
+        width_pt: i32,
+        height_pt: i32,
+        width_px: i32,
+        height_px: i32,
+        dpr: f32,
+    ) -> c_int;
+
+    fn gfxstream_backend_teardown_native_surface(display_id: u32) -> c_int;
+
+    fn gfxstream_backend_resize_native_surface(
+        display_id: u32,
+        width_pt: i32,
+        height_pt: i32,
+        width_px: i32,
+        height_px: i32,
+        dpr: f32,
+    ) -> c_int;
+
+    fn gfxstream_backend_set_scanout_resource(
+        scanout_id: u32,
+        resource_id: u32,
+        width: u32,
+        height: u32,
+    ) -> c_int;
+
+    fn gfxstream_backend_present_flushed_resource(
+        resource_id: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> c_int;
 }
 
 /// The virtio-gpu backend state tracker which supports accelerated rendering.
@@ -1049,5 +1085,74 @@ impl RutabagaComponent for Gfxstream {
         let ret = unsafe { stream_renderer_resume() };
         ret_to_res(ret)?;
         Ok(())
+    }
+
+    fn setup_native_surface(
+        &self,
+        display_id: u32,
+        native_window_handle: *mut c_void,
+        width_pt: i32,
+        height_pt: i32,
+        width_px: i32,
+        height_px: i32,
+        dpr: f32,
+    ) -> RutabagaResult<()> {
+        let ret = unsafe {
+            gfxstream_backend_setup_native_surface(
+                display_id, native_window_handle,
+                width_pt, height_pt, width_px, height_px, dpr)
+        };
+        ret_to_res(ret)
+    }
+
+    fn teardown_native_surface(&self, display_id: u32) -> RutabagaResult<()> {
+        let ret = unsafe { gfxstream_backend_teardown_native_surface(display_id) };
+        ret_to_res(ret)
+    }
+
+    fn resize_native_surface(
+        &self,
+        display_id: u32,
+        width_pt: i32,
+        height_pt: i32,
+        width_px: i32,
+        height_px: i32,
+        dpr: f32,
+    ) -> RutabagaResult<()> {
+        let ret = unsafe {
+            gfxstream_backend_resize_native_surface(
+                display_id, width_pt, height_pt, width_px, height_px, dpr)
+        };
+        ret_to_res(ret)
+    }
+
+    fn set_scanout_resource(
+        &self,
+        scanout_id: u32,
+        resource_id: u32,
+        width: u32,
+        height: u32,
+    ) -> RutabagaResult<()> {
+        let ret = unsafe {
+            gfxstream_backend_set_scanout_resource(scanout_id, resource_id, width, height)
+        };
+        ret_to_res(ret)
+    }
+
+    fn present_flushed_resource(
+        &self,
+        resource_id: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> RutabagaResult<bool> {
+        let ret = unsafe {
+            gfxstream_backend_present_flushed_resource(resource_id, x, y, width, height)
+        };
+        if ret < 0 {
+            ret_to_res(ret)?;
+        }
+        Ok(ret > 0)
     }
 }
