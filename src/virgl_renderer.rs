@@ -23,6 +23,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::panic::catch_unwind;
 use std::process::abort;
 use std::ptr::null_mut;
+use std::ptr::NonNull;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -73,6 +74,8 @@ use crate::RUTABAGA_PATH_TYPE_GPU;
 
 type Query = virgl_renderer_export_query;
 
+static VIRGL_INIT_ONCE: AtomicBool = AtomicBool::new(false);
+
 /// Default drm fd, returning this indicates that virglrenderer should
 /// find an available GPU itself.
 const DEFAULT_DRM_FD: i32 = -1;
@@ -107,7 +110,9 @@ fn dup(rd: RawDescriptor) -> RutabagaResult<OwnedDescriptor> {
 }
 
 /// The virtio-gpu backend state tracker which supports accelerated rendering.
-pub struct VirglRenderer {}
+pub struct VirglRenderer {
+    cookie: NonNull<RutabagaCookie>,
+}
 
 struct VirglRendererContext {
     ctx_id: u32,
@@ -436,9 +441,8 @@ impl VirglRenderer {
         // virglrenderer is a global state backed library that uses thread bound OpenGL contexts.
         // Initialize it only once and use the non-send/non-sync Renderer struct to keep things tied
         // to whichever thread called this function first.
-        static INIT_ONCE: AtomicBool = AtomicBool::new(false);
-        if INIT_ONCE
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Acquire)
+        if VIRGL_INIT_ONCE
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
             return Err(RutabagaError::AlreadyInUse);
@@ -450,31 +454,35 @@ impl VirglRenderer {
             virgl_set_log_callback(Some(log_callback), null_mut(), None);
         };
 
-        // Cookie is intentionally never freed because virglrenderer never gets uninitialized.
-        // Otherwise, Resource and Context would become invalid because their lifetime is not tied
-        // to the Renderer instance. Doing so greatly simplifies the ownership for users of this
-        // library.
-        let cookie = Box::into_raw(Box::new(RutabagaCookie {
+        // Keep the callback cookie alive for the lifetime of the virglrenderer instance so
+        // callbacks can safely access it, then reclaim it during cleanup.
+        let cookie = NonNull::from(Box::leak(Box::new(RutabagaCookie {
             render_server_fd,
             fence_handler: Some(fence_handler),
             debug_handler: None,
             rutabaga_paths,
-        }));
+        })));
 
         // SAFETY:
         // Safe because a valid cookie and set of callbacks is used and the result is checked for
         // error.
         let ret = unsafe {
             virgl_renderer_init(
-                cookie as *mut c_void,
+                cookie.as_ptr() as *mut c_void,
                 virglrenderer_flags.into(),
                 VIRGL_RENDERER_CALLBACKS as *const virgl_renderer_callbacks
                     as *mut virgl_renderer_callbacks,
             )
         };
 
-        ret_to_res(ret)?;
-        Ok(Box::new(VirglRenderer {}))
+        if let Err(e) = ret_to_res(ret) {
+            unsafe {
+                drop(Box::from_raw(cookie.as_ptr()));
+            }
+            VIRGL_INIT_ONCE.store(false, Ordering::Release);
+            return Err(e);
+        }
+        Ok(Box::new(VirglRenderer { cookie }))
     }
 
     fn map_info(&self, resource_id: u32) -> RutabagaResult<u32> {
@@ -546,8 +554,10 @@ impl Drop for VirglRenderer {
         // makes sure contexts and resources are dropped before this is reached.  Even if it did
         // not, virglrenderer is designed to deal with invalid ids safely.
         unsafe {
-            virgl_renderer_cleanup(null_mut());
+            virgl_renderer_cleanup(self.cookie.as_ptr() as *mut c_void);
+            drop(Box::from_raw(self.cookie.as_ptr()));
         }
+        VIRGL_INIT_ONCE.store(false, Ordering::Release);
     }
 }
 

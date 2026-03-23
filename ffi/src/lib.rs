@@ -68,10 +68,47 @@ const NO_ERROR: i32 = 0;
 const RUTABAGA_WSI_SURFACELESS: u64 = 1;
 const RUTABAGA_WSI_VULKAN_SWAPCHAIN: u64 = 2;
 
-static S_DEBUG_HANDLER: OnceLock<Mutex<RutabagaDebugHandler>> = OnceLock::new();
+static S_DEBUG_HANDLER: OnceLock<Mutex<Option<RutabagaDebugHandler>>> = OnceLock::new();
+
+fn debug_handler_slot() -> &'static Mutex<Option<RutabagaDebugHandler>> {
+    S_DEBUG_HANDLER.get_or_init(|| Mutex::new(None))
+}
+
+struct ScopedDebugHandler {
+    previous_handler: Option<RutabagaDebugHandler>,
+    restore_on_drop: bool,
+}
+
+impl ScopedDebugHandler {
+    fn install(debug_handler_opt: Option<RutabagaDebugHandler>) -> ScopedDebugHandler {
+        let mut handler_slot = debug_handler_slot().lock().unwrap();
+        let previous_handler = std::mem::replace(&mut *handler_slot, debug_handler_opt);
+        ScopedDebugHandler {
+            previous_handler,
+            restore_on_drop: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.restore_on_drop = false;
+    }
+}
+
+impl Drop for ScopedDebugHandler {
+    fn drop(&mut self) {
+        if self.restore_on_drop {
+            *debug_handler_slot().lock().unwrap() = self.previous_handler.take();
+        }
+    }
+}
 
 fn log_error(debug_string: String) {
     if let Some(handler_mutex) = S_DEBUG_HANDLER.get() {
+        let handler_opt = handler_mutex.lock().unwrap().clone();
+        let Some(handler) = handler_opt else {
+            return;
+        };
+
         let cstring = CString::new(debug_string.as_str()).expect("CString creation failed");
 
         let debug = RutabagaDebug {
@@ -79,7 +116,6 @@ fn log_error(debug_string: String) {
             message: cstring.as_ptr(),
         };
 
-        let handler = handler_mutex.lock().unwrap();
         handler.call(debug);
     }
 }
@@ -233,13 +269,10 @@ pub unsafe extern "C" fn rutabaga_calculate_capset_mask(
 pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mut rutabaga) -> i32 {
     catch_unwind(AssertUnwindSafe(|| {
         let fence_handler = create_ffi_fence_handler(builder.user_data, builder.fence_cb);
-        let mut debug_handler_opt: Option<RutabagaDebugHandler> = None;
-
-        if let Some(func) = builder.debug_cb {
-            let debug_handler = create_ffi_debug_handler(builder.user_data, func);
-            let _ = S_DEBUG_HANDLER.set(Mutex::new(debug_handler.clone()));
-            debug_handler_opt = Some(debug_handler);
-        }
+        let debug_handler_opt = builder
+            .debug_cb
+            .map(|func| create_ffi_debug_handler(builder.user_data, func));
+        let mut debug_handler_scope = ScopedDebugHandler::install(debug_handler_opt.clone());
 
         let mut rutabaga_paths_opt = None;
         if let Some(paths) = builder.channels {
@@ -325,6 +358,7 @@ pub unsafe extern "C" fn rutabaga_init(builder: &rutabaga_builder, ptr: &mut *mu
         let result = rutabaga_builder.build();
 
         let rtbg = return_on_error!(result);
+        debug_handler_scope.disarm();
         *ptr = Box::into_raw(Box::new(rtbg)) as _;
         NO_ERROR
     }))
@@ -338,6 +372,7 @@ pub extern "C" fn rutabaga_finish(ptr: &mut *mut rutabaga) -> i32 {
     catch_unwind(AssertUnwindSafe(|| {
         let _ = unsafe { Box::from_raw(*ptr) };
         *ptr = null_mut();
+        *debug_handler_slot().lock().unwrap() = None;
         NO_ERROR
     }))
     .unwrap_or(-ESRCH)
@@ -752,8 +787,10 @@ pub extern "C" fn rutabaga_create_fence(ptr: &mut rutabaga, fence: &rutabaga_fen
 
 #[no_mangle]
 pub extern "C" fn rutabaga_gfxstream_get_address_space_device_control_ops() -> *const c_void {
-    catch_unwind(AssertUnwindSafe(|| gfxstream_get_address_space_device_control_ops()))
-        .unwrap_or(std::ptr::null())
+    catch_unwind(AssertUnwindSafe(|| {
+        gfxstream_get_address_space_device_control_ops()
+    }))
+    .unwrap_or(std::ptr::null())
 }
 
 #[no_mangle]
@@ -768,18 +805,13 @@ pub extern "C" fn rutabaga_gfxstream_set_address_space_hw_funcs(
 
 #[no_mangle]
 pub extern "C" fn rutabaga_gfxstream_get_service_ops() -> *const c_void {
-    catch_unwind(AssertUnwindSafe(|| gfxstream_get_service_ops()))
-        .unwrap_or(std::ptr::null())
+    catch_unwind(AssertUnwindSafe(|| gfxstream_get_service_ops())).unwrap_or(std::ptr::null())
 }
 
 #[no_mangle]
-pub extern "C" fn rutabaga_gfxstream_set_service_ops(
-    service_ops: *const c_void,
-) -> *const c_void {
-    catch_unwind(AssertUnwindSafe(|| {
-        gfxstream_set_service_ops(service_ops)
-    }))
-    .unwrap_or(std::ptr::null())
+pub extern "C" fn rutabaga_gfxstream_set_service_ops(service_ops: *const c_void) -> *const c_void {
+    catch_unwind(AssertUnwindSafe(|| gfxstream_set_service_ops(service_ops)))
+        .unwrap_or(std::ptr::null())
 }
 
 #[no_mangle]
@@ -837,18 +869,21 @@ pub unsafe extern "C" fn rutabaga_setup_native_surface(
 ) -> i32 {
     catch_unwind(AssertUnwindSafe(|| {
         let result = ptr.setup_native_surface(
-            display_id, native_window_handle,
-            width_pt, height_pt, width_px, height_px, dpr);
+            display_id,
+            native_window_handle,
+            width_pt,
+            height_pt,
+            width_px,
+            height_px,
+            dpr,
+        );
         return_result(result)
     }))
     .unwrap_or(-ESRCH)
 }
 
 #[no_mangle]
-pub extern "C" fn rutabaga_teardown_native_surface(
-    ptr: &mut rutabaga,
-    display_id: u32,
-) -> i32 {
+pub extern "C" fn rutabaga_teardown_native_surface(ptr: &mut rutabaga, display_id: u32) -> i32 {
     catch_unwind(AssertUnwindSafe(|| {
         let result = ptr.teardown_native_surface(display_id);
         return_result(result)
@@ -867,18 +902,15 @@ pub unsafe extern "C" fn rutabaga_resize_native_surface(
     dpr: f32,
 ) -> i32 {
     catch_unwind(AssertUnwindSafe(|| {
-        let result = ptr.resize_native_surface(
-            display_id, width_pt, height_pt, width_px, height_px, dpr);
+        let result =
+            ptr.resize_native_surface(display_id, width_pt, height_pt, width_px, height_px, dpr);
         return_result(result)
     }))
     .unwrap_or(-ESRCH)
 }
 
 #[no_mangle]
-pub extern "C" fn rutabaga_set_vsync_hz(
-    ptr: &mut rutabaga,
-    vsync_hz: u32,
-) -> i32 {
+pub extern "C" fn rutabaga_set_vsync_hz(ptr: &mut rutabaga, vsync_hz: u32) -> i32 {
     catch_unwind(AssertUnwindSafe(|| {
         ptr.set_vsync_hz(vsync_hz);
         NO_ERROR
@@ -913,7 +945,13 @@ pub extern "C" fn rutabaga_present_flushed_resource(
     catch_unwind(AssertUnwindSafe(|| {
         let result = ptr.present_flushed_resource(resource_id, x, y, width, height);
         match result {
-            Ok(presented) => if presented { 1 } else { 0 },
+            Ok(presented) => {
+                if presented {
+                    1
+                } else {
+                    0
+                }
+            }
             Err(e) => {
                 log_error(e.to_string());
                 -EINVAL
