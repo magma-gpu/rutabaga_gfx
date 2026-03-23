@@ -1417,6 +1417,8 @@ pub struct RutabagaBuilder {
     fence_handler: RutabagaFenceHandler,
     display_width: u32,
     display_height: u32,
+    display_width_mm: Option<u32>,
+    display_height_mm: Option<u32>,
     default_component: RutabagaComponentType,
     gfxstream_flags: GfxstreamFlags,
     virglrenderer_flags: VirglRendererFlags,
@@ -1424,6 +1426,8 @@ pub struct RutabagaBuilder {
     paths: Option<RutabagaPaths>,
     debug_handler: Option<RutabagaDebugHandler>,
     renderer_features: Option<String>,
+    gfxstream_vm_ops: Option<*const c_void>,
+    gfxstream_address_space_hw_funcs: Option<*const c_void>,
     server_descriptor: Option<OwnedDescriptor>,
 }
 
@@ -1438,6 +1442,8 @@ impl RutabagaBuilder {
             fence_handler,
             display_width: RUTABAGA_DEFAULT_WIDTH,
             display_height: RUTABAGA_DEFAULT_HEIGHT,
+            display_width_mm: None,
+            display_height_mm: None,
             default_component: RutabagaComponentType::NoneSelected,
             gfxstream_flags,
             virglrenderer_flags,
@@ -1445,6 +1451,8 @@ impl RutabagaBuilder {
             paths: None,
             debug_handler: None,
             renderer_features: None,
+            gfxstream_vm_ops: None,
+            gfxstream_address_space_hw_funcs: None,
             server_descriptor: None,
         }
     }
@@ -1458,6 +1466,18 @@ impl RutabagaBuilder {
     /// Set display height for the RutabagaBuilder
     pub fn set_display_height(mut self, display_height: u32) -> RutabagaBuilder {
         self.display_height = display_height;
+        self
+    }
+
+    /// Set physical display width in millimeters for the RutabagaBuilder
+    pub fn set_display_width_mm(mut self, display_width_mm: u32) -> RutabagaBuilder {
+        self.display_width_mm = Some(display_width_mm);
+        self
+    }
+
+    /// Set physical display height in millimeters for the RutabagaBuilder
+    pub fn set_display_height_mm(mut self, display_height_mm: u32) -> RutabagaBuilder {
+        self.display_height_mm = Some(display_height_mm);
         self
     }
 
@@ -1538,6 +1558,24 @@ impl RutabagaBuilder {
     /// Set renderer features for the RutabagaBuilder
     pub fn set_renderer_features(mut self, renderer_features: Option<String>) -> RutabagaBuilder {
         self.renderer_features = renderer_features;
+        self
+    }
+
+    /// Set opaque gfxstream VM ops for the RutabagaBuilder.
+    pub fn set_gfxstream_vm_ops(
+        mut self,
+        gfxstream_vm_ops: Option<*const c_void>,
+    ) -> RutabagaBuilder {
+        self.gfxstream_vm_ops = gfxstream_vm_ops;
+        self
+    }
+
+    /// Set opaque gfxstream address-space HW funcs for the RutabagaBuilder.
+    pub fn set_gfxstream_address_space_hw_funcs(
+        mut self,
+        gfxstream_address_space_hw_funcs: Option<*const c_void>,
+    ) -> RutabagaBuilder {
+        self.gfxstream_address_space_hw_funcs = gfxstream_address_space_hw_funcs;
         self
     }
 
@@ -1646,8 +1684,12 @@ impl RutabagaBuilder {
                 let gfxstream = Gfxstream::init(
                     self.display_width,
                     self.display_height,
+                    self.display_width_mm,
+                    self.display_height_mm,
                     self.gfxstream_flags,
                     self.renderer_features,
+                    self.gfxstream_vm_ops,
+                    self.gfxstream_address_space_hw_funcs,
                     self.fence_handler.clone(),
                     self.debug_handler.clone(),
                 )?;

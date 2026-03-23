@@ -257,6 +257,16 @@ struct rutabaga_builder {
 
     // Optional, renderer specific, null-terminated C-string.
     const char *renderer_features;
+
+    // Optional, opaque gfxstream hooks forwarded into stream_renderer_init().
+    const void *gfxstream_vm_ops;
+    const void *address_space_hw_funcs;
+
+    // Optional gfxstream display geometry. When unset, rutabaga defaults apply.
+    uint32_t display_width;
+    uint32_t display_height;
+    uint32_t display_width_mm;
+    uint32_t display_height_mm;
 };
 
 /**
@@ -399,6 +409,36 @@ int32_t rutabaga_set_scanout_resource(struct rutabaga *ptr, uint32_t scanout_id,
 int32_t rutabaga_present_flushed_resource(struct rutabaga *ptr, uint32_t resource_id,
                                            uint32_t x, uint32_t y,
                                            uint32_t width, uint32_t height);
+
+/**
+ * Returns the active opaque gfxstream address-space control ops table.
+ * Returns null when gfxstream is unavailable.
+ */
+const void *rutabaga_gfxstream_get_address_space_device_control_ops(void);
+
+/**
+ * Overrides the opaque gfxstream address-space HW funcs table.
+ * Returns the previous pointer, or null if gfxstream is unavailable.
+ */
+const void *rutabaga_gfxstream_set_address_space_hw_funcs(const void *address_space_hw_funcs);
+
+/**
+ * Returns the active opaque goldfish-pipe service ops table.
+ * Returns null when gfxstream is unavailable or no ops have been installed.
+ */
+const void *rutabaga_gfxstream_get_service_ops(void);
+
+/**
+ * Overrides the opaque goldfish-pipe service ops table.
+ * Returns the previous pointer, or null if gfxstream is unavailable.
+ */
+const void *rutabaga_gfxstream_set_service_ops(const void *service_ops);
+
+/**
+ * Installs hardware-side callbacks (wake/close) for goldfish-pipe.
+ * Returns the previous pointer, or null if gfxstream is unavailable.
+ */
+const void *rutabaga_gfxstream_set_service_hw_funcs(const void *hw_funcs);
 
 #ifdef RUTABAGA_GFX_FFI_UNSTABLE
 

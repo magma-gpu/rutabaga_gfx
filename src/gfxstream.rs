@@ -53,20 +53,23 @@ use crate::rutabaga_utils::RutabagaDebugHandler;
 use crate::rutabaga_utils::RutabagaError;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaFenceHandler;
-use crate::rutabaga_utils::RutabagaImportData;
 use crate::rutabaga_utils::RutabagaIovec;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::VulkanInfo;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 use crate::rutabaga_utils::RUTABAGA_HANDLE_TYPE_PLATFORM_AHB;
-use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
-use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 #[cfg(gfxstream_unstable)]
 use crate::snapshot::RutabagaSnapshotReader;
 #[cfg(gfxstream_unstable)]
 use crate::snapshot::RutabagaSnapshotWriter;
+#[cfg(gfxstream_unstable)]
+use crate::rutabaga_utils::RutabagaImportData;
+#[cfg(gfxstream_unstable)]
+use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
+#[cfg(gfxstream_unstable)]
+use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
 
 // See `virtgpu-gfxstream-renderer.h` for definitions
 const STREAM_RENDERER_PARAM_USER_DATA: u64 = 1;
@@ -76,6 +79,10 @@ const STREAM_RENDERER_PARAM_WIN0_WIDTH: u64 = 4;
 const STREAM_RENDERER_PARAM_WIN0_HEIGHT: u64 = 5;
 const STREAM_RENDERER_PARAM_DEBUG_CALLBACK: u64 = 6;
 const STREAM_RENDERER_PARAM_RENDERER_FEATURES: u64 = 11;
+const STREAM_RENDERER_PARAM_GFXSTREAM_VM_OPS: u64 = 12;
+const STREAM_RENDERER_PARAM_ADDRESS_SPACE_HW_FUNCS: u64 = 13;
+const STREAM_RENDERER_PARAM_DISPLAY_WIDTH_MM: u64 = 14;
+const STREAM_RENDERER_PARAM_DISPLAY_HEIGHT_MM: u64 = 15;
 
 #[cfg(gfxstream_unstable)]
 const STREAM_RENDERER_IMPORT_FLAG_VULKAN_INFO: u32 = RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
@@ -260,6 +267,13 @@ extern "C" {
         import_data: *const stream_renderer_import_data,
     ) -> c_int;
 
+    fn stream_renderer_get_address_space_device_control_ops() -> *const c_void;
+    fn stream_renderer_set_address_space_hw_funcs(hw_funcs: *const c_void) -> *const c_void;
+
+    fn stream_renderer_get_service_ops() -> *const c_void;
+    fn stream_renderer_set_service_ops(ops: *const c_void) -> *const c_void;
+    fn stream_renderer_set_service_hw_funcs(hw_funcs: *const c_void) -> *const c_void;
+
     fn gfxstream_backend_setup_native_surface(
         display_id: u32,
         native_window_handle: *mut c_void,
@@ -303,6 +317,26 @@ extern "C" {
 pub struct Gfxstream {
     /// Cookie used by Gfxstream, should be held as long as the renderer is alive.
     _cookie: Box<RutabagaCookie>,
+}
+
+pub fn gfxstream_get_address_space_device_control_ops() -> *const c_void {
+    unsafe { stream_renderer_get_address_space_device_control_ops() }
+}
+
+pub fn gfxstream_set_address_space_hw_funcs(hw_funcs: *const c_void) -> *const c_void {
+    unsafe { stream_renderer_set_address_space_hw_funcs(hw_funcs) }
+}
+
+pub fn gfxstream_get_service_ops() -> *const c_void {
+    unsafe { stream_renderer_get_service_ops() }
+}
+
+pub fn gfxstream_set_service_ops(ops: *const c_void) -> *const c_void {
+    unsafe { stream_renderer_set_service_ops(ops) }
+}
+
+pub fn gfxstream_set_service_hw_funcs(hw_funcs: *const c_void) -> *const c_void {
+    unsafe { stream_renderer_set_service_hw_funcs(hw_funcs) }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -469,8 +503,12 @@ impl Gfxstream {
     pub fn init(
         display_width: u32,
         display_height: u32,
+        display_width_mm: Option<u32>,
+        display_height_mm: Option<u32>,
         gfxstream_flags: GfxstreamFlags,
         gfxstream_features: Option<String>,
+        gfxstream_vm_ops: Option<*const c_void>,
+        gfxstream_address_space_hw_funcs: Option<*const c_void>,
         fence_handler: RutabagaFenceHandler,
         debug_handler: Option<RutabagaDebugHandler>,
     ) -> RutabagaResult<Box<dyn RutabagaComponent>> {
@@ -507,6 +545,20 @@ impl Gfxstream {
             },
         ]);
 
+        if let Some(display_width_mm) = display_width_mm {
+            stream_renderer_params.push(stream_renderer_param {
+                key: STREAM_RENDERER_PARAM_DISPLAY_WIDTH_MM,
+                value: display_width_mm as u64,
+            });
+        }
+
+        if let Some(display_height_mm) = display_height_mm {
+            stream_renderer_params.push(stream_renderer_param {
+                key: STREAM_RENDERER_PARAM_DISPLAY_HEIGHT_MM,
+                value: display_height_mm as u64,
+            });
+        }
+
         if use_debug {
             stream_renderer_params.push(stream_renderer_param {
                 key: STREAM_RENDERER_PARAM_DEBUG_CALLBACK,
@@ -519,6 +571,20 @@ impl Gfxstream {
             stream_renderer_params.push(stream_renderer_param {
                 key: STREAM_RENDERER_PARAM_RENDERER_FEATURES,
                 value: features_cstr.as_ptr() as u64,
+            });
+        }
+
+        if let Some(gfxstream_vm_ops) = gfxstream_vm_ops {
+            stream_renderer_params.push(stream_renderer_param {
+                key: STREAM_RENDERER_PARAM_GFXSTREAM_VM_OPS,
+                value: gfxstream_vm_ops as u64,
+            });
+        }
+
+        if let Some(gfxstream_address_space_hw_funcs) = gfxstream_address_space_hw_funcs {
+            stream_renderer_params.push(stream_renderer_param {
+                key: STREAM_RENDERER_PARAM_ADDRESS_SPACE_HW_FUNCS,
+                value: gfxstream_address_space_hw_funcs as u64,
             });
         }
 
