@@ -465,10 +465,8 @@ impl KumquatGpuConnection {
                         },
                     };
 
-                    self.stream.write(KumquatGpuProtocolWrite::CmdWithHandle(
-                        resp,
-                        handle,
-                    ))?;
+                    self.stream
+                        .write(KumquatGpuProtocolWrite::CmdWithHandle(resp, handle))?;
 
                     kumquat_gpu
                         .rutabaga

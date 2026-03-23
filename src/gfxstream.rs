@@ -53,23 +53,23 @@ use crate::rutabaga_utils::RutabagaDebugHandler;
 use crate::rutabaga_utils::RutabagaError;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaFenceHandler;
+#[cfg(gfxstream_unstable)]
+use crate::rutabaga_utils::RutabagaImportData;
 use crate::rutabaga_utils::RutabagaIovec;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::VulkanInfo;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 use crate::rutabaga_utils::RUTABAGA_HANDLE_TYPE_PLATFORM_AHB;
+#[cfg(gfxstream_unstable)]
+use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
+#[cfg(gfxstream_unstable)]
+use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 #[cfg(gfxstream_unstable)]
 use crate::snapshot::RutabagaSnapshotReader;
 #[cfg(gfxstream_unstable)]
 use crate::snapshot::RutabagaSnapshotWriter;
-#[cfg(gfxstream_unstable)]
-use crate::rutabaga_utils::RutabagaImportData;
-#[cfg(gfxstream_unstable)]
-use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
-#[cfg(gfxstream_unstable)]
-use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
 
 // See `virtgpu-gfxstream-renderer.h` for definitions
 const STREAM_RENDERER_PARAM_USER_DATA: u64 = 1;
@@ -1168,8 +1168,14 @@ impl RutabagaComponent for Gfxstream {
     ) -> RutabagaResult<()> {
         let ret = unsafe {
             gfxstream_backend_setup_native_surface(
-                display_id, native_window_handle,
-                width_pt, height_pt, width_px, height_px, dpr)
+                display_id,
+                native_window_handle,
+                width_pt,
+                height_pt,
+                width_px,
+                height_px,
+                dpr,
+            )
         };
         ret_to_res(ret)
     }
@@ -1190,7 +1196,8 @@ impl RutabagaComponent for Gfxstream {
     ) -> RutabagaResult<()> {
         let ret = unsafe {
             gfxstream_backend_resize_native_surface(
-                display_id, width_pt, height_pt, width_px, height_px, dpr)
+                display_id, width_pt, height_pt, width_px, height_px, dpr,
+            )
         };
         ret_to_res(ret)
     }
@@ -1220,9 +1227,8 @@ impl RutabagaComponent for Gfxstream {
         width: u32,
         height: u32,
     ) -> RutabagaResult<bool> {
-        let ret = unsafe {
-            gfxstream_backend_present_flushed_resource(resource_id, x, y, width, height)
-        };
+        let ret =
+            unsafe { gfxstream_backend_present_flushed_resource(resource_id, x, y, width, height) };
         if ret < 0 {
             ret_to_res(ret)?;
         }

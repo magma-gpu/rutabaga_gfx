@@ -716,8 +716,14 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidComponent)?;
 
         component.setup_native_surface(
-            display_id, native_window_handle,
-            width_pt, height_pt, width_px, height_px, dpr)
+            display_id,
+            native_window_handle,
+            width_pt,
+            height_pt,
+            width_px,
+            height_px,
+            dpr,
+        )
     }
 
     pub fn teardown_native_surface(&self, display_id: u32) -> RutabagaResult<()> {
