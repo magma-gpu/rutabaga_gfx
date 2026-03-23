@@ -517,6 +517,7 @@ impl Gfxstream {
             render_server_fd: None,
             fence_handler: Some(fence_handler),
             debug_handler,
+            #[cfg(feature = "virgl_renderer")]
             rutabaga_paths: None,
         });
 

@@ -13,7 +13,3 @@ path = "lib.rs"
 [dependencies]
 mesa3d_util = {path = "../../util/rust", version = "0.1.76"}
 mesa3d_protocols = { path = "../protocols", version = "0.1.76"}
-
-[profile.dev]
-lto = true
-incremental = false
