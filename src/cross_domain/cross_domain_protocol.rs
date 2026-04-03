@@ -23,6 +23,7 @@ pub const CROSS_DOMAIN_CMD_CREATE_ATOMIC_MEMORY_SENTINEL: u8 = 8;
 pub const CROSS_DOMAIN_CMD_SIGNAL_ATOMIC_MEMORY_SENTINEL: u8 = 9;
 pub const CROSS_DOMAIN_CMD_DESTROY_ATOMIC_MEMORY_SENTINEL: u8 = 10;
 pub const CROSS_DOMAIN_CMD_READ_CREATE_EVENT: u8 = 11;
+pub const CROSS_DOMAIN_CMD_IMPORT_VIRTIOFS_HANDLE: u8 = 12;
 
 /// Channel types (must match rutabaga channel types)
 pub const CROSS_DOMAIN_CHANNEL_TYPE_WAYLAND: u32 = 0x0001;
@@ -45,6 +46,8 @@ pub const CROSS_DOMAIN_ID_TYPE_READ_PIPE: u32 = 3;
 pub const CROSS_DOMAIN_ID_TYPE_WRITE_PIPE: u32 = 4;
 
 pub const CROSS_DOMAIN_ID_TYPE_EVENT: u32 = 5;
+
+pub const CROSS_DOMAIN_ID_TYPE_VIRTIO_FS_BLOB: u32 = 6;
 
 /// No ring
 pub const CROSS_DOMAIN_RING_NONE: u32 = 0xffffffff;
@@ -164,6 +167,16 @@ pub struct CrossDomainDestroyAtomicMemorySentinel {
 #[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
 pub struct CrossDomainCreateEvent {
     pub hdr: CrossDomainHeader,
+    pub id: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainImportVirtioFsHandle {
+    pub hdr: CrossDomainHeader,
+    pub fs_id: u64,
+    pub handle: u64,
     pub id: u32,
     pub pad: u32,
 }
