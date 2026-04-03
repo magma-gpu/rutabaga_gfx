@@ -83,6 +83,7 @@ enum CrossDomainItem {
     WaylandReadPipe(ReadPipe),
     WaylandWritePipe(WritePipe),
     Event(Event),
+    RegularFile(OwnedDescriptor),
 }
 
 enum CrossDomainJob {
@@ -133,6 +134,7 @@ struct CrossDomainContext {
     item_state: CrossDomainItemState,
     sentinel_manager: SentinelManager,
     fence_handler: RutabagaFenceHandler,
+    virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
     worker_thread: Option<thread::JoinHandle<RutabagaResult<()>>>,
     resample_evt: Option<Event>,
     kill_evt: Option<Event>,
@@ -816,6 +818,14 @@ impl CrossDomainContext {
                 // the read pipe can receive subsequent hang-up events.
                 write_pipe_opt = Some(write_pipe);
                 read_pipe_id_opt = Some(read_pipe_id);
+            } else if *identifier_type == CROSS_DOMAIN_ID_TYPE_VIRTIO_FS_BLOB {
+                if let Some(CrossDomainItem::RegularFile(file)) =
+                    self.item_state.lock().unwrap().table.remove(identifier)
+                {
+                    descriptors.push(file);
+                } else {
+                    return Err(RutabagaError::InvalidCrossDomainItemId);
+                }
             } else {
                 // Don't know how to handle anything else yet.
                 return Err(RutabagaError::InvalidCrossDomainItemType);
@@ -889,6 +899,29 @@ impl CrossDomainContext {
         } else {
             Err(RutabagaError::InvalidCrossDomainItemId)
         }
+    }
+
+    fn import_virtiofs_handle(
+        &mut self,
+        cmd_imp_handle: &CrossDomainImportVirtioFsHandle,
+    ) -> RutabagaResult<()> {
+        let mut items = self.item_state.lock().unwrap();
+
+        if items.table.contains_key(&cmd_imp_handle.id) {
+            return Err(RutabagaError::InvalidCrossDomainItemId);
+        }
+
+        let Some(ref lookup) = self.virtiofs_lookup else {
+            return Err(RutabagaError::InvalidCrossDomainState);
+        };
+
+        let file = lookup.get_exported_descriptor(cmd_imp_handle.fs_id, cmd_imp_handle.handle)?;
+
+        items
+            .table
+            .insert(cmd_imp_handle.id, CrossDomainItem::RegularFile(file));
+
+        Ok(())
     }
 
     fn write(&self, cmd_write: &CrossDomainReadWrite, opaque_data: &[u8]) -> RutabagaResult<()> {
@@ -1146,6 +1179,12 @@ impl RutabagaContext for CrossDomainContext {
                         .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
                     self.read_event_new(&cmd_new_evt)?;
                 }
+                CROSS_DOMAIN_CMD_IMPORT_VIRTIOFS_HANDLE => {
+                    let (cmd_imp_handle, _) =
+                        CrossDomainImportVirtioFsHandle::read_from_prefix(commands.as_bytes())
+                            .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
+                    self.import_virtiofs_handle(&cmd_imp_handle)?;
+                }
                 _ => return Err(MesaError::WithContext("invalid cross domain command").into()),
             }
 
@@ -1277,6 +1316,7 @@ impl RutabagaComponent for CrossDomain {
                 self.virtiofs_lookup.clone(),
             ))),
             fence_handler,
+            virtiofs_lookup: self.virtiofs_lookup.clone(),
             worker_thread: None,
             resample_evt: None,
             kill_evt: None,
