@@ -610,6 +610,8 @@ pub const RUTABAGA_PATH_TYPE_WAYLAND: u32 = 0x0001;
 pub const RUTABAGA_PATH_TYPE_GPU: u32 = 0x0002;
 pub const RUTABAGA_PATH_TYPE_PIPEWIRE: u32 = 0x0010;
 pub const RUTABAGA_PATH_TYPE_X11: u32 = 0x0011;
+pub const RUTABAGA_PATH_TYPE_DBUS_SESSION: u32 = 0x0012;
+pub const RUTABAGA_PATH_TYPE_DBUS_SYSTEM: u32 = 0x0013;
 
 pub type RutabagaPaths = Vec<RutabagaPath>;
 
