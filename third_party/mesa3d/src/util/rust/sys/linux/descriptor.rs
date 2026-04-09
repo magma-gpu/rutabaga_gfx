@@ -16,16 +16,21 @@ use std::os::unix::io::RawFd;
 
 use rustix::fs::fcntl_get_seals;
 use rustix::fs::fcntl_getfl;
+use rustix::fs::fstat;
 use rustix::fs::seek;
+use rustix::fs::FileType;
 use rustix::fs::OFlags;
 use rustix::fs::SealFlags;
 use rustix::fs::SeekFrom;
 use rustix::io::Errno;
+use rustix::net::sockopt::socket_type;
+use rustix::net::SocketType;
 
 use crate::descriptor::AsRawDescriptor;
 use crate::descriptor::FromRawDescriptor;
 use crate::descriptor::IntoRawDescriptor;
 use crate::DescriptorType;
+use crate::TubeType;
 use crate::MESA_HANDLE_TYPE_MEM_DMABUF;
 use crate::MESA_HANDLE_TYPE_MEM_SHM;
 use crate::MESA_MAP_ACCESS_READ;
@@ -52,6 +57,20 @@ impl OwnedDescriptor {
             let path_str = fd_path.to_string_lossy();
             if path_str.starts_with("anon_inode:[eventfd]") {
                 return Ok(DescriptorType::Event);
+            }
+        }
+
+        if let Ok(fd_stat) = fstat(&self.owned) {
+            let fd_type = FileType::from_raw_mode(fd_stat.st_mode);
+            if fd_type == FileType::Socket {
+                return Ok(DescriptorType::Socket(match socket_type(&self.owned)? {
+                    SocketType::SEQPACKET => TubeType::Packet,
+                    SocketType::STREAM => TubeType::Stream,
+                    ty => {
+                        log::warn!("Unsupported socket type {ty:?}");
+                        return Err(Error::from(ErrorKind::Unsupported));
+                    }
+                }));
             }
         }
 

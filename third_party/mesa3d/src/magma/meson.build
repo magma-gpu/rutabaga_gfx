@@ -3,12 +3,6 @@
 
 magma_generated_libs = []
 
-dep_log = dependency('log',
-  version: '>= 0.4.22',
-  fallback: ['log-0.4-rs', 'dep_log'],
-  required: true,
-)
-
 dep_windows_sys = null_dep
 if host_machine.system() == 'linux' or host_machine.system() == 'android'
   drm_bindgen = rust.bindgen(
@@ -165,5 +159,5 @@ libmesa_magma = static_library(
   rust_args: magma_args,
   link_with: [magma_generated_libs, libmesa_rust_util, libmesa_protocols,
               libvirtgpu_kumquat],
-  dependencies: [dep_mesa3d_util, dep_log, dep_windows_sys]
+  dependencies: [dep_mesa3d_util, dep_windows_sys]
 )
