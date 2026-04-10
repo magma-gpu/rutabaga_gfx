@@ -271,6 +271,9 @@ pub enum RutabagaError {
     /// Invalid cross domain channel
     #[error("invalid cross domain channel")]
     InvalidCrossDomainChannel,
+    /// Invalid cross domain internal socket UUID
+    #[error("invalid cross domain internal socket UUID")]
+    InvalidCrossDomainInternalSocketUuid,
     /// Invalid cross domain item ID
     #[error("invalid cross domain item id")]
     InvalidCrossDomainItemId,

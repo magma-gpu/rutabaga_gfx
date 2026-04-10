@@ -84,6 +84,7 @@ enum CrossDomainItem {
     WaylandWritePipe(WritePipe),
     Event(Event),
     RegularFile(OwnedDescriptor),
+    Socket(OwnedDescriptor),
 }
 
 enum CrossDomainJob {
@@ -136,6 +137,7 @@ struct CrossDomainContext {
     sentinel_manager: SentinelManager,
     fence_handler: RutabagaFenceHandler,
     virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
+    internal_sockets: Arc<Mutex<Map<u128, Tube>>>,
     worker_thread: Option<thread::JoinHandle<RutabagaResult<()>>>,
     resample_evt: Option<Event>,
     kill_evt: Option<Event>,
@@ -147,6 +149,7 @@ pub struct CrossDomain {
     paths: Option<Vec<RutabagaPath>>,
     gralloc: Arc<Mutex<RutabagaGralloc>>,
     fence_handler: RutabagaFenceHandler,
+    internal_sockets: Arc<Mutex<Map<u128, Tube>>>,
     virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
 }
 
@@ -526,6 +529,11 @@ impl CrossDomainWorker {
                             CrossDomainItem::WaylandWritePipe(write_pipe),
                         );
                     }
+                    DescriptorType::Socket(_) => {
+                        *identifier_type = CROSS_DOMAIN_ID_TYPE_SOCKET;
+                        *identifier_size = 0;
+                        *identifier = add_item(&self.item_state, CrossDomainItem::Socket(file));
+                    }
                     _ => return Err(RutabagaError::InvalidCrossDomainItemType),
                 }
             }
@@ -618,6 +626,7 @@ impl CrossDomain {
             paths,
             gralloc: Arc::new(Mutex::new(gralloc)),
             fence_handler,
+            internal_sockets: Arc::new(Mutex::new(Map::new())),
             virtiofs_lookup,
         }))
     }
@@ -637,6 +646,15 @@ impl CrossDomainContext {
 
         let tube = Tube::new(path.clone(), TubeType::Stream)?;
         Ok(tube)
+    }
+
+    fn get_internal_socket_connection(&mut self, uuid: u128) -> RutabagaResult<Tube> {
+        let mut sockets = self.internal_sockets.lock().unwrap();
+        let socket = sockets
+            .remove(&uuid)
+            .ok_or(RutabagaError::InvalidCrossDomainInternalSocketUuid)?;
+
+        Ok(socket)
     }
 
     fn initialize(&mut self, cmd_init: &CrossDomainInit) -> RutabagaResult<()> {
@@ -665,7 +683,13 @@ impl CrossDomainContext {
                 return Err(RutabagaError::InvalidResourceId);
             }
 
-            let connection = self.get_connection(cmd_init)?;
+            let connection = if cmd_init.channel_type == CROSS_DOMAIN_CHANNEL_TYPE_INTERNAL_SOCKET {
+                self.get_internal_socket_connection(u128::from_le_bytes(
+                    cmd_init.internal_socket_uuid,
+                ))?
+            } else {
+                self.get_connection(cmd_init)?
+            };
 
             let kill_evt = Event::new()?;
             let thread_kill_evt = kill_evt.try_clone()?;
@@ -948,6 +972,29 @@ impl CrossDomainContext {
         Ok(())
     }
 
+    fn socket_assign_uuid(
+        &mut self,
+        cmd_exp_socket: &CrossDomainAssignSocketUuid,
+    ) -> RutabagaResult<()> {
+        let mut items = self.item_state.lock().unwrap();
+
+        let item = items
+            .table
+            .remove(&cmd_exp_socket.id)
+            .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
+
+        if let CrossDomainItem::Socket(fd) = item {
+            let mut sockets = self.internal_sockets.lock().unwrap();
+            sockets.insert(
+                u128::from_ne_bytes(cmd_exp_socket.socket_uuid),
+                Tube::try_from(fd)?,
+            );
+            Ok(())
+        } else {
+            Err(RutabagaError::InvalidCrossDomainItemType)
+        }
+    }
+
     fn write(&self, cmd_write: &CrossDomainReadWrite, opaque_data: &[u8]) -> RutabagaResult<()> {
         let mut items = self.item_state.lock().unwrap();
 
@@ -1035,6 +1082,28 @@ impl CrossDomainInitLegacy {
             query_ring_id: self.query_ring_id,
             channel_ring_id: self.query_ring_id,
             channel_type: self.channel_type,
+            internal_socket_uuid: [0; 16],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainInitV1 {
+    pub hdr: CrossDomainHeader,
+    pub query_ring_id: u32,
+    pub channel_ring_id: u32,
+    pub channel_type: u32,
+}
+
+impl CrossDomainInitV1 {
+    pub(crate) fn upgrade(&self) -> CrossDomainInit {
+        CrossDomainInit {
+            hdr: self.hdr,
+            query_ring_id: self.query_ring_id,
+            channel_ring_id: self.channel_ring_id,
+            channel_type: self.channel_type,
+            internal_socket_uuid: [0; 16],
         }
     }
 }
@@ -1141,14 +1210,23 @@ impl RutabagaContext for CrossDomainContext {
                 .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
 
             match hdr.cmd {
-                CROSS_DOMAIN_CMD_INIT => {
-                    let cmd_init = CrossDomainInit::read_from_prefix(commands)
-                        .map(|(v, _)| v)
-                        .or_else(|_| {
-                            CrossDomainInitLegacy::read_from_prefix(commands)
-                                .map(|(v, _)| v.upgrade())
-                        })
-                        .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
+                CROSS_DOMAIN_CMD_INIT
+                    if hdr.cmd_size as usize == size_of::<CrossDomainInitLegacy>() =>
+                {
+                    let (cmd_init, _) = CrossDomainInitLegacy::read_from_prefix(commands)
+                        .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
+                    self.initialize(&cmd_init.upgrade())?;
+                }
+                CROSS_DOMAIN_CMD_INIT
+                    if hdr.cmd_size as usize == size_of::<CrossDomainInitV1>() =>
+                {
+                    let (cmd_init, _) = CrossDomainInitV1::read_from_prefix(commands)
+                        .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
+                    self.initialize(&cmd_init.upgrade())?;
+                }
+                CROSS_DOMAIN_CMD_INIT if hdr.cmd_size as usize == size_of::<CrossDomainInit>() => {
+                    let (cmd_init, _) = CrossDomainInit::read_from_prefix(commands)
+                        .map_err(|_e| RutabagaError::InvalidCommandBuffer)?;
                     self.initialize(&cmd_init)?;
                 }
                 CROSS_DOMAIN_CMD_GET_IMAGE_REQUIREMENTS => {
@@ -1202,6 +1280,12 @@ impl RutabagaContext for CrossDomainContext {
                     let (cmd_new_evt, _) = CrossDomainCreateEvent::read_from_prefix(commands)
                         .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
                     self.read_event_new(&cmd_new_evt)?;
+                }
+                CROSS_DOMAIN_CMD_ASSIGN_SOCKET_UUID => {
+                    let (cmd_exp_socket, _) =
+                        CrossDomainAssignSocketUuid::read_from_prefix(commands.as_bytes())
+                            .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
+                    self.socket_assign_uuid(&cmd_exp_socket)?;
                 }
                 CROSS_DOMAIN_CMD_IMPORT_VIRTIOFS_HANDLE => {
                     let (cmd_imp_handle, _) =
@@ -1341,6 +1425,7 @@ impl RutabagaComponent for CrossDomain {
             ))),
             fence_handler,
             virtiofs_lookup: self.virtiofs_lookup.clone(),
+            internal_sockets: self.internal_sockets.clone(),
             worker_thread: None,
             resample_evt: None,
             kill_evt: None,
