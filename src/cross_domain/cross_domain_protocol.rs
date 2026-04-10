@@ -24,6 +24,7 @@ pub const CROSS_DOMAIN_CMD_SIGNAL_ATOMIC_MEMORY_SENTINEL: u8 = 9;
 pub const CROSS_DOMAIN_CMD_DESTROY_ATOMIC_MEMORY_SENTINEL: u8 = 10;
 pub const CROSS_DOMAIN_CMD_READ_CREATE_EVENT: u8 = 11;
 pub const CROSS_DOMAIN_CMD_IMPORT_VIRTIOFS_HANDLE: u8 = 12;
+pub const CROSS_DOMAIN_CMD_ASSIGN_SOCKET_UUID: u8 = 13;
 
 /// Channel types (must match rutabaga channel types)
 pub const CROSS_DOMAIN_CHANNEL_TYPE_WAYLAND: u32 = 0x0001;
@@ -32,6 +33,7 @@ pub const CROSS_DOMAIN_CHANNEL_TYPE_PIPEWIRE: u32 = 0x0010;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_X11: u32 = 0x0011;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_DBUS_SESSION: u32 = 0x0012;
 pub const CROSS_DOMAIN_CHANNEL_TYPE_DBUS_SYSTEM: u32 = 0x0013;
+pub const CROSS_DOMAIN_CHANNEL_TYPE_INTERNAL_SOCKET: u32 = u32::MAX;
 
 /// The maximum number of identifiers
 pub const CROSS_DOMAIN_MAX_IDENTIFIERS: usize = 28;
@@ -50,6 +52,7 @@ pub const CROSS_DOMAIN_ID_TYPE_WRITE_PIPE: u32 = 4;
 pub const CROSS_DOMAIN_ID_TYPE_EVENT: u32 = 5;
 
 pub const CROSS_DOMAIN_ID_TYPE_VIRTIO_FS_BLOB: u32 = 6;
+pub const CROSS_DOMAIN_ID_TYPE_SOCKET: u32 = 7;
 
 /// No ring
 pub const CROSS_DOMAIN_RING_NONE: u32 = 0xffffffff;
@@ -101,6 +104,7 @@ pub struct CrossDomainInit {
     pub query_ring_id: u32,
     pub channel_ring_id: u32,
     pub channel_type: u32,
+    pub internal_socket_uuid: [u8; 16],
 }
 
 #[repr(C)]
@@ -179,6 +183,15 @@ pub struct CrossDomainImportVirtioFsHandle {
     pub hdr: CrossDomainHeader,
     pub fs_id: u64,
     pub handle: u64,
+    pub id: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainAssignSocketUuid {
+    pub hdr: CrossDomainHeader,
+    pub socket_uuid: [u8; 16],
     pub id: u32,
     pub pad: u32,
 }
