@@ -498,7 +498,7 @@ impl KumquatGpuConnection {
                     hung_up = true;
                 }
                 _ => {
-                    error!("Unsupported protocol {:?}", protocol);
+                    error!("Unsupported protocol {protocol:?}");
                     return Err(MesaError::Unsupported.into());
                 }
             };

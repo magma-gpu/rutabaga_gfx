@@ -134,7 +134,7 @@ impl LinuxPhysicalDevice {
 
         // TODO: confirm if necessary if everything has PCI-ID
         let name = get_drm_device_name(&descriptor)?;
-        println!("the name is {}", name);
+        println!("the name is {name}");
 
         Ok(LinuxPhysicalDevice { descriptor, name })
     }
@@ -240,8 +240,8 @@ pub fn enumerate_devices() -> MesaResult<Vec<MagmaPhysicalDevice>> {
             let maj = major(statbuf.st_rdev);
             let min = minor(statbuf.st_rdev);
 
-            let pci_device_dir = format!("/sys/dev/char/{}:{}/device", maj, min);
-            let pci_subsystem_dir = format!("{}/subsystem", pci_device_dir);
+            let pci_device_dir = format!("/sys/dev/char/{maj}:{min}/device");
+            let pci_subsystem_dir = format!("{pci_device_dir}/subsystem");
             let subsystem_path = Path::new(&pci_subsystem_dir);
             let subsystem = readlink(subsystem_path, Vec::new())?;
 
@@ -258,7 +258,7 @@ pub fn enumerate_devices() -> MesaResult<Vec<MagmaPhysicalDevice>> {
             let mut pci_info: MagmaPciInfo = Default::default();
             let mut pci_bus_info: MagmaPciBusInfo = Default::default();
             for attr in PCI_ATTRS {
-                let attr_path = format!("{}/{}", pci_device_dir, attr);
+                let attr_path = format!("{pci_device_dir}/{attr}");
                 let mut file = File::open(attr_path)?;
                 let mut hex_string = String::new();
                 file.read_to_string(&mut hex_string)?;
@@ -273,7 +273,7 @@ pub fn enumerate_devices() -> MesaResult<Vec<MagmaPhysicalDevice>> {
                 }
             }
 
-            let uevent_path = format!("{}/uevent", pci_device_dir);
+            let uevent_path = format!("{pci_device_dir}/uevent");
             let text: String = fs::read_to_string(uevent_path)?;
             for line in text.lines() {
                 if line.contains("PCI_SLOT_NAME") {

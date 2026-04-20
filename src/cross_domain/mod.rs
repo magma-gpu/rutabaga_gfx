@@ -463,7 +463,7 @@ impl CrossDomainWorker {
                     match self.handle_fence(fence, &thread_resample_evt, &mut receive_buf) {
                         Ok(()) => (),
                         Err(e) => {
-                            error!("Worker halting due to: {}", e);
+                            error!("Worker halting due to: {e}");
                             return Err(e);
                         }
                     }
@@ -789,7 +789,7 @@ impl Drop for CrossDomainContext {
             match kill_evt.signal() {
                 Ok(_) => (),
                 Err(e) => {
-                    error!("failed to write cross domain kill event: {}", e);
+                    error!("failed to write cross domain kill event: {e}");
                 }
             }
 

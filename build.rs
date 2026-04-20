@@ -41,7 +41,7 @@ fn gfxstream() -> PkgConfigResult<()> {
 
     if let Some(gfxstream_path) = gfxstream_path_env_override {
         println!("cargo:rustc-link-lib=gfxstream_backend");
-        println!("cargo:rustc-link-search={}", gfxstream_path);
+        println!("cargo:rustc-link-search={gfxstream_path}");
         Ok(())
     } else {
         let gfxstream_lib = pkg_config::Config::new().probe("gfxstream_backend")?;
