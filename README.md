@@ -131,7 +131,7 @@ longer needed:
 
 ```sh
 export MESA_LOADER_DRIVER_OVERRIDE=zink
-export VK_ICD_FILENAMES=$(mesa_dir)/guest-build/src/gfxstream/guest/vulkan/gfxstream_vk_devenv_icd.x86_64.json
+export VK_DRIVER_FILES=$(mesa_dir)/guest-build/src/gfxstream/guest/vulkan/gfxstream_vk_devenv_icd.x86_64.json
 weston --backend=drm
 ```
 
