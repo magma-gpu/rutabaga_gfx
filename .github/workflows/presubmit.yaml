@@ -181,30 +181,31 @@ jobs:
             ninja-build \
             pkg-config \
             mingw-w64 \
-            mingw-w64-tools \
-            bindgen
+            mingw-w64-tools
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.81.0"
+          toolchain: "1.88.0"
           targets: x86_64-pc-windows-gnu
 
       - name: Create Meson cross file
         run: |
           cat <<EOF > cross_file_x86_64_linux_mingw.txt
           [binaries]
-          c = '/usr/bin/x86_64-w64-mingw32-gcc'
-          cpp = '/usr/bin/x86_64-w64-mingw32-g++'
-          ar = '/usr/bin/x86_64-w64-mingw32-ar'
-          strip = '/usr/bin/x86_64-w64-mingw32-strip'
-          pkg-config = '/usr/bin/x86_64-w64-mingw32-pkg-config'
+          c = 'x86_64-w64-mingw32-gcc'
+          cpp = 'x86_64-w64-mingw32-g++'
+          ar = 'x86_64-w64-mingw32-ar'
+          nm = 'x86_64-w64-mingw32-nm'
+          strip = 'x86_64-w64-mingw32-strip'
+          windres = 'x86_64-w64-mingw32-windres'
+          pkg-config = 'x86_64-w64-mingw32-pkg-config'
           rust = ['rustc', '--target', 'x86_64-pc-windows-gnu']
 
           [host_machine]
           system = 'windows'
           cpu_family = 'x86_64'
-          cpu = 'i686'
+          cpu = 'x86_64'
           endian = 'little'
           EOF
 
