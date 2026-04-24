@@ -97,6 +97,7 @@ enum CrossDomainJob {
 enum RingWrite<'a, T> {
     Write(T, Option<&'a [u8]>),
     WriteFromPipe(CrossDomainReadWrite, &'a mut ReadPipe, bool),
+    WriteFromEvent(CrossDomainReadWrite, &'a mut Event, bool),
 }
 
 type CrossDomainJobs = Mutex<Option<VecDeque<CrossDomainJob>>>;
@@ -293,6 +294,24 @@ impl CrossDomainState {
                     bytes_read.try_into().map_err(MesaError::TryFromIntError)?;
                 cmd_slice.copy_from_slice(cmd_read.as_bytes());
             }
+            RingWrite::WriteFromEvent(mut cmd_read, ref mut event, readable) => {
+                if slice.len() < size_of::<CrossDomainReadWrite>() {
+                    return Err(RutabagaError::InvalidIovec);
+                }
+
+                let (cmd_slice, opaque_data_slice) =
+                    slice.split_at_mut(size_of::<CrossDomainReadWrite>());
+
+                if readable {
+                    let value = event.wait()?;
+                    bytes_read = 8;
+                    opaque_data_slice[0..8].copy_from_slice(&value.to_ne_bytes());
+                }
+
+                cmd_read.opaque_data_size =
+                    bytes_read.try_into().map_err(MesaError::TryFromIntError)?;
+                cmd_slice.copy_from_slice(cmd_read.as_bytes());
+            }
         }
 
         Ok(bytes_read)
@@ -424,12 +443,13 @@ impl CrossDomainWorker {
                                 self.wait_ctx.delete(readpipe.as_borrowed_descriptor())?;
                             }
                         }
-                        CrossDomainItem::Event(ref evt) => {
-                            // For eventfd, we can use wait() to consume the event
-                            if event.readable {
-                                let _ = evt.wait();
-                            }
-                            bytes_read = 0; // eventfd doesn't have data to read like pipes
+                        CrossDomainItem::Event(ref mut evt) => {
+                            let ring_write =
+                                RingWrite::WriteFromEvent(cmd_read, evt, event.readable);
+                            bytes_read = self.state.write_to_ring::<CrossDomainReadWrite>(
+                                ring_write,
+                                self.state.channel_ring_id,
+                            )?;
                         }
                         _ => return Err(RutabagaError::InvalidCrossDomainItemType),
                     }
