@@ -192,10 +192,10 @@ impl AtomicMemorySentinelManager {
 
     /// Handles an event for a memory watcher, returns the command to write to the ring
     pub fn handle_event(
-        &self,
+        &mut self,
         id: u32,
     ) -> RutabagaResult<Option<CrossDomainSignalAtomicMemorySentinel>> {
-        if let Some(watcher) = self.watchers.get(&id) {
+        if let Some(watcher) = self.watchers.get_mut(&id) {
             if watcher.is_shutdown() {
                 Ok(None)
             } else {

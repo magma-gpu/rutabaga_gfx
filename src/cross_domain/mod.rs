@@ -319,7 +319,7 @@ impl CrossDomainWorker {
     fn handle_fence(
         &mut self,
         fence: RutabagaFence,
-        thread_resample_evt: &Event,
+        thread_resample_evt: &mut Event,
         receive_buf: &mut [u8],
     ) -> RutabagaResult<()> {
         let events = self.wait_ctx.wait(WaitTimeout::NoTimeout)?;
@@ -519,7 +519,11 @@ impl CrossDomainWorker {
         Ok(())
     }
 
-    fn run(&mut self, thread_kill_evt: Event, thread_resample_evt: Event) -> RutabagaResult<()> {
+    fn run(
+        &mut self,
+        thread_kill_evt: Event,
+        mut thread_resample_evt: Event,
+    ) -> RutabagaResult<()> {
         self.wait_ctx.add(
             CROSS_DOMAIN_RESAMPLE_ID,
             thread_resample_evt.as_borrowed_descriptor(),
@@ -533,7 +537,7 @@ impl CrossDomainWorker {
         while let Some(job) = self.state.wait_for_job() {
             match job {
                 CrossDomainJob::HandleFence(fence) => {
-                    match self.handle_fence(fence, &thread_resample_evt, &mut receive_buf) {
+                    match self.handle_fence(fence, &mut thread_resample_evt, &mut receive_buf) {
                         Ok(()) => (),
                         Err(e) => {
                             error!("Worker halting due to: {e}");
