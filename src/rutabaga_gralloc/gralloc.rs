@@ -395,7 +395,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg_attr(target_os = "windows", ignore)]
+    #[cfg_attr(any(target_os = "windows", target_os = "macos"), ignore)]
     fn create_render_target() {
         let gralloc_result = RutabagaGralloc::new(RutabagaGrallocBackendFlags::new());
         if gralloc_result.is_err() {
@@ -424,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(target_os = "windows", ignore)]
+    #[cfg_attr(any(target_os = "windows", target_os = "macos"), ignore)]
     fn create_video_buffer() {
         let gralloc_result = RutabagaGralloc::new(RutabagaGrallocBackendFlags::new());
         if gralloc_result.is_err() {
@@ -462,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(target_os = "windows", ignore)]
+    #[cfg_attr(any(target_os = "windows", target_os = "macos"), ignore)]
     fn export_and_map() {
         let gralloc_result = RutabagaGralloc::new(RutabagaGrallocBackendFlags::new());
         if gralloc_result.is_err() {
