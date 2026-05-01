@@ -5,7 +5,7 @@ project(
   'libc-0.2-rs',
   'rust',
   meson_version: '>=1.3.0',
-  version: '0.2.168',
+  version: '0.2.185',
   license: 'MIT OR Apache-2.0',
 )
 
