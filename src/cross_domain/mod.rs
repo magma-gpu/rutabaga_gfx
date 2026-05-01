@@ -1025,6 +1025,21 @@ impl CrossDomainContext {
 
                 Ok(())
             }
+            CrossDomainItem::Event(mut event) => {
+                let Ok(bytes) = <[u8; 8]>::try_from(opaque_data) else {
+                    return Err(RutabagaError::InvalidCrossDomainWriteLength);
+                };
+
+                event.add(u64::from_ne_bytes(bytes))?;
+
+                if cmd_write.hang_up == 0 {
+                    items
+                        .table
+                        .insert(cmd_write.identifier, CrossDomainItem::Event(event));
+                }
+
+                Ok(())
+            }
             _ => Err(RutabagaError::InvalidCrossDomainItemType),
         }
     }

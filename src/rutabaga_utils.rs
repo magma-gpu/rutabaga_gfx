@@ -283,6 +283,9 @@ pub enum RutabagaError {
     /// Invalid cross domain state
     #[error("invalid cross domain state")]
     InvalidCrossDomainState,
+    /// Invalid cross domain write length for item type
+    #[error("invalid cross domain write length for item type")]
+    InvalidCrossDomainWriteLength,
     /// Invalid gralloc backend.
     #[error("invalid gralloc backend")]
     InvalidGrallocBackend,
