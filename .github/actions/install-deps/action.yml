@@ -10,11 +10,16 @@ runs:
           clang-tidy \
           libncurses-dev \
           build-essential \
-          meson \
-          ninja-build \
           pkg-config \
           libx11-dev \
           libdrm-dev \
           libepoxy-dev \
           bindgen
+      shell: bash
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Install Meson and Ninja
+      run: python -m pip install --upgrade pip meson ninja pyyaml
       shell: bash
