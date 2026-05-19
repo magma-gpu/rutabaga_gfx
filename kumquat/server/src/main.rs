@@ -44,7 +44,7 @@ fn main() -> KumquatGpuResult<()> {
 
     if args.pipe_descriptor != 0 {
         let write_pipe = WritePipe::new(args.pipe_descriptor.into_raw_descriptor());
-        write_pipe.write(&1u64.to_ne_bytes())?;
+        write_pipe.write(&1u64.to_le_bytes())?;
     }
 
     loop {

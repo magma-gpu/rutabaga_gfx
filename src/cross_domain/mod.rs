@@ -308,7 +308,7 @@ impl CrossDomainState {
                 if readable {
                     let value = event.wait()?;
                     bytes_read = 8;
-                    opaque_data_slice[0..8].copy_from_slice(&value.to_ne_bytes());
+                    opaque_data_slice[0..8].copy_from_slice(&value.to_le_bytes());
                 }
 
                 cmd_read.opaque_data_size =
@@ -986,7 +986,7 @@ impl CrossDomainContext {
         if let CrossDomainItem::Socket(fd) = item {
             let mut sockets = self.internal_sockets.lock().unwrap();
             sockets.insert(
-                u128::from_ne_bytes(cmd_exp_socket.socket_uuid),
+                u128::from_le_bytes(cmd_exp_socket.socket_uuid),
                 Tube::try_from(fd)?,
             );
             Ok(())
@@ -1030,7 +1030,7 @@ impl CrossDomainContext {
                     return Err(RutabagaError::InvalidCrossDomainWriteLength);
                 };
 
-                event.add(u64::from_ne_bytes(bytes))?;
+                event.add(u64::from_le_bytes(bytes))?;
 
                 if cmd_write.hang_up == 0 {
                     items
