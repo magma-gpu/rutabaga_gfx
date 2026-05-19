@@ -4,9 +4,9 @@
 project(
   'zerocopy-derive',
   'rust',
-  meson_version: '>=1.3.0',
   version : '0.8.13',
   license : 'MIT OR Apache-2.0 OR BSD 2-Clause',
+  meson_version : '>= 1.7.0',
 )
 
 syn = subproject('syn-2-rs').get_variable('lib')
@@ -17,7 +17,7 @@ rust = import('rust')
 lib = rust.proc_macro(
   'zerocopy_derive',
   'src/lib.rs',
-  override_options : ['rust_std=2021', 'build.rust_std=2021'],
+  override_options : ['rust_std=2021', 'build.rust_std=2021', 'warning_level=0'],
   link_with : [syn, quote, proc_macro2]
 )
 

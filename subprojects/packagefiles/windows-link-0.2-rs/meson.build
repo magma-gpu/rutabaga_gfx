@@ -6,12 +6,13 @@ project(
   'rust',
   version : '0.2.0',
   license : 'MIT OR Apache-2.0',
+  meson_version : '>= 1.7.0',
 )
 
 lib = static_library(
   'windows_link',
   'src/lib.rs',
-  override_options : ['rust_std=2021', 'build.rust_std=2021'],
+  override_options : ['rust_std=2021', 'build.rust_std=2021', 'warning_level=0'],
   rust_abi: 'rust',
 )
 

@@ -1,9 +1,9 @@
 project(
-  'proc-macro2-1-rs',
+  'proc-macro2',
   'rust',
-  meson_version: '>=1.3.0',
-  version: '1.0.86',
-  license: 'MIT OR Apache-2.0',
+  version : '1.0.86',
+  license : 'MIT OR Apache-2.0',
+  meson_version : '>= 1.7.0',
 )
 
 rc = meson.get_compiler('rust')
@@ -58,7 +58,7 @@ lib = static_library(
   'proc_macro2',
   'src/lib.rs',
   rust_args : rust_args,
-  override_options : ['rust_std=2021', 'build.rust_std=2021'],
+  override_options : ['rust_std=2021', 'build.rust_std=2021', 'warning_level=0'],
   link_with : u_ind,
   rust_abi : 'rust',
   native : true,

@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: MIT
 
 project(
-  'libc-0.2-rs',
+  'libc',
   'rust',
-  meson_version: '>=1.3.0',
-  version: '0.2.185',
-  license: 'MIT OR Apache-2.0',
+  version : '0.2.185',
+  license : 'MIT OR Apache-2.0',
+  meson_version : '>= 1.7.0',
 )
 
 libc_args = [
@@ -35,7 +35,7 @@ lib = static_library(
   'libc',
   'src/lib.rs',
   rust_abi : 'rust',
-  override_options : ['rust_std=2021', 'build.rust_std=2021'],
+  override_options : ['rust_std=2021', 'build.rust_std=2021', 'warning_level=0'],
   rust_args: libc_args,
 )
 

@@ -1,15 +1,15 @@
 project(
-  'unicode-ident-1-rs',
+  'unicode-ident',
   'rust',
-  meson_version: '>=1.3.0',
-  version: '1.0.12',
-  license: '(MIT OR Apache-2.0) AND Unicode-DFS-2016',
+  version : '1.0.12',
+  license : '(MIT or Apache-2.0) AND Unicode-DFS-2016)',
+  meson_version : '>= 1.7.0',
 )
 
 lib = static_library(
   'unicode_ident',
   'src/lib.rs',
-  override_options : ['rust_std=2018', 'build.rust_std=2018'],
+  override_options : ['rust_std=2018', 'build.rust_std=2018', 'warning_level=0'],
   rust_abi : 'rust',
   native : true,
 )

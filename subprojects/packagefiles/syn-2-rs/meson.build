@@ -1,9 +1,9 @@
 project(
-  'syn-2-rs',
+  'syn',
   'rust',
-  meson_version: '>=1.3.0',
-  version: '2.0.87',
-  license: 'MIT OR Apache-2.0',
+  version : '2.0.87',
+  license : 'MIT OR Apache-2.0',
+  meson_version : '>= 1.7.0',
 )
 
 rc = meson.get_compiler('rust')
@@ -42,10 +42,10 @@ lib = static_library(
   'syn',
   'src/lib.rs',
   rust_args : rust_args,
-  override_options : ['rust_std=2021', 'build.rust_std=2021'],
+  override_options : ['rust_std=2021', 'build.rust_std=2021', 'warning_level=0'],
   link_with : [u_ind, quote, pm2],
   rust_abi : 'rust',
-  native: true,
+  native : true,
 )
 
 dep_syn = declare_dependency(

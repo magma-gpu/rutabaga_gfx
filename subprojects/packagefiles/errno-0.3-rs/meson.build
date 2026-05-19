@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: MIT
 
 project(
-  'errno-0.3-rs',
+  'errno',
   'rust',
-  meson_version: '>=1.3.0',
-  version: '0.3.12',
-  license: 'MIT OR Apache-2.0',
+  version : '0.3.12',
+  license : 'MIT OR Apache-2.0',
+  meson_version : '>= 1.7.0',
 )
 
 os_deps = []
@@ -18,7 +18,7 @@ endif
 lib = static_library(
   'libc_errno',
   'src/lib.rs',
-  override_options : ['rust_std=2018', 'build.rust_std=2018'],
+  override_options : ['rust_std=2018', 'build.rust_std=2018', 'warning_level=0'],
   link_with: [libc] + os_deps,
   rust_abi : 'rust',
 )

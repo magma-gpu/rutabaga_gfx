@@ -1,9 +1,9 @@
 project(
   'once_cell',
   'rust',
-  meson_version: '>=1.3.0',
   version : '1.8.0',
   license : 'MIT OR Apache-2.0',
+  meson_version : '>= 1.7.0',
 )
 
 rust_args = [
@@ -14,8 +14,9 @@ lib = static_library(
   'once_cell',
   'src/lib.rs',
   rust_args : rust_args,
-  override_options : ['rust_std=2018', 'build.rust_std=2018'],
+  override_options : ['rust_std=2018', 'build.rust_std=2018', 'warning_level=0'],
   rust_abi : 'rust',
+  native : true,
 )
 
 dep_once_cell = declare_dependency(
