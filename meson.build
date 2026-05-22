@@ -28,6 +28,12 @@ with_virgl_renderer = features.contains('virgl_renderer')
 rutabaga_args = []
 dep_rutabaga_gfx = []
 
+rust_global_args = [
+  '-Aclippy::collapsible_else_if',
+  '-Aclippy::needless_lifetimes',
+  '-Aclippy::question_mark',
+]
+
 if with_gbm
   error('rutabaga_gfx does not work with upstream gbm yet')
   dep_gbm = dependency('gbm', version: '>= 21.1.1')
