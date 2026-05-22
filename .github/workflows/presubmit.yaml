@@ -183,7 +183,7 @@ jobs:
             mingw-w64 \
             mingw-w64-tools
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
       - name: Install Meson and Ninja
