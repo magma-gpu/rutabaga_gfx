@@ -57,6 +57,8 @@ jobs:
           sudo ninja -C build install
       - name: Setup Meson build directory
         run: meson setup amd64-build -Dfeatures="gfxstream" -Dffi=true -Dkumquat=true -Dbuild-tests=true
+      - name: Build
+        run: ninja -C amd64-build
       - name: Run tests
         run: meson test -C amd64-build
 
