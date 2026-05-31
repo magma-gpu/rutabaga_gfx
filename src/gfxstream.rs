@@ -654,9 +654,13 @@ impl RutabagaComponent for Gfxstream {
         let ret = unsafe { stream_renderer_resource_create(&mut args, null_mut(), 0) };
         ret_to_res(ret)?;
 
+        // Always attempt to export when possible to potentially enable flows which share
+        // memory directly.
+        let exported_handle = self.export_blob(resource_id).ok();
+
         Ok(RutabagaResource {
             resource_id,
-            handle: None,
+            handle: exported_handle,
             blob: false,
             blob_mem: 0,
             blob_flags: 0,
