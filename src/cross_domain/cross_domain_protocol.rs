@@ -195,3 +195,47 @@ pub struct CrossDomainAssignSocketUuid {
     pub id: u32,
     pub pad: u32,
 }
+
+// This is formally not part of the protocol.  This was for ChromeOS and the ChromeOS LTS rutabaga
+// branch has it.
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainInitLegacy {
+    hdr: CrossDomainHeader,
+    query_ring_id: u32,
+    channel_type: u32,
+}
+
+impl CrossDomainInitLegacy {
+    pub fn upgrade(&self) -> CrossDomainInit {
+        CrossDomainInit {
+            hdr: self.hdr,
+            query_ring_id: self.query_ring_id,
+            channel_ring_id: self.query_ring_id,
+            channel_type: self.channel_type,
+            internal_socket_uuid: [0; 16],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
+pub struct CrossDomainInitV1 {
+    pub hdr: CrossDomainHeader,
+    pub query_ring_id: u32,
+    pub channel_ring_id: u32,
+    pub channel_type: u32,
+}
+
+impl CrossDomainInitV1 {
+    pub fn upgrade(&self) -> CrossDomainInit {
+        CrossDomainInit {
+            hdr: self.hdr,
+            query_ring_id: self.query_ring_id,
+            channel_ring_id: self.channel_ring_id,
+            channel_type: self.channel_type,
+            internal_socket_uuid: [0; 16],
+        }
+    }
+}
