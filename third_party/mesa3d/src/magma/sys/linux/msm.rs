@@ -6,10 +6,10 @@ use std::sync::Arc;
 use crate::ioctl_readwrite;
 use crate::ioctl_write_ptr;
 
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaResult;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::Result as MagmaGpuResult;
 
 use crate::traits::Buffer;
 use crate::traits::Context;
@@ -109,15 +109,15 @@ impl Msm {
 }
 
 impl GenericDevice for Msm {
-    fn get_memory_properties(&self) -> MesaResult<MagmaMemoryProperties> {
-        Err(MesaError::Unsupported)
+    fn get_memory_properties(&self) -> MagmaGpuResult<MagmaMemoryProperties> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn get_memory_budget(&self, _heap_idx: u32) -> MesaResult<MagmaHeapBudget> {
-        Err(MesaError::Unsupported)
+    fn get_memory_budget(&self, _heap_idx: u32) -> MagmaGpuResult<MagmaHeapBudget> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn create_context(&self, _device: &Arc<dyn Device>) -> MesaResult<Arc<dyn Context>> {
+    fn create_context(&self, _device: &Arc<dyn Device>) -> MagmaGpuResult<Arc<dyn Context>> {
         let mut new_submit_queue = drm_msm_submitqueue {
             flags: 0,
             prio: 0,
@@ -139,7 +139,7 @@ impl GenericDevice for Msm {
         &self,
         _device: &Arc<dyn Device>,
         create_info: &MagmaCreateBufferInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let buf = MsmBuffer::new(self.physical_device.clone(), create_info, &self.mem_props)?;
         Ok(Arc::new(buf))
     }
@@ -148,7 +148,7 @@ impl GenericDevice for Msm {
         &self,
         _device: &Arc<dyn Device>,
         info: MagmaImportHandleInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let gem_handle = self.physical_device.import(info.handle)?;
         let buf = MsmBuffer::from_existing(
             self.physical_device.clone(),
@@ -167,7 +167,7 @@ impl MsmBuffer {
         physical_device: Arc<dyn PhysicalDevice>,
         create_info: &MagmaCreateBufferInfo,
         _mem_props: &MagmaMemoryProperties,
-    ) -> MesaResult<MsmBuffer> {
+    ) -> MagmaGpuResult<MsmBuffer> {
         let mut gem_new = drm_msm_gem_new {
             size: create_info.size,
             flags: 0,
@@ -190,7 +190,7 @@ impl MsmBuffer {
         physical_device: Arc<dyn PhysicalDevice>,
         gem_handle: u32,
         size: usize,
-    ) -> MesaResult<MsmBuffer> {
+    ) -> MagmaGpuResult<MsmBuffer> {
         Ok(MsmBuffer {
             physical_device,
             gem_handle,
@@ -200,7 +200,7 @@ impl MsmBuffer {
 }
 
 impl GenericBuffer for MsmBuffer {
-    fn map(&self, _buffer: &Arc<dyn Buffer>) -> MesaResult<Arc<dyn MappedRegion>> {
+    fn map(&self, _buffer: &Arc<dyn Buffer>) -> MagmaGpuResult<Arc<dyn MappedRegion>> {
         let mut gem_info: drm_msm_gem_info = drm_msm_gem_info {
             handle: self.gem_handle,
             info: MSM_INFO_GET_OFFSET,
@@ -220,11 +220,15 @@ impl GenericBuffer for MsmBuffer {
         Ok(Arc::new(mapping))
     }
 
-    fn export(&self) -> MesaResult<MesaHandle> {
+    fn export(&self) -> MagmaGpuResult<MagmaGpuHandle> {
         self.physical_device.export(self.gem_handle)
     }
 
-    fn invalidate(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()> {
+    fn invalidate(
+        &self,
+        _sync_flags: u64,
+        _ranges: &[MagmaMappedMemoryRange],
+    ) -> MagmaGpuResult<()> {
         let prep = drm_msm_gem_cpu_prep {
             handle: self.gem_handle,
             op: MSM_PREP_READ | MSM_PREP_WRITE,
@@ -238,7 +242,7 @@ impl GenericBuffer for MsmBuffer {
         Ok(())
     }
 
-    fn flush(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()> {
+    fn flush(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MagmaGpuResult<()> {
         let fini = drm_msm_gem_cpu_fini {
             handle: self.gem_handle,
         };

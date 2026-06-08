@@ -7,8 +7,8 @@ mod kumquat_gpu;
 
 use clap::Parser;
 use kumquat::KumquatBuilder;
-use mesa3d_util::IntoRawDescriptor;
-use mesa3d_util::WritePipe;
+use magma_gpu::util::IntoRawDescriptor;
+use magma_gpu::util::WritePipe;
 
 use crate::kumquat_gpu::KumquatGpuResult;
 

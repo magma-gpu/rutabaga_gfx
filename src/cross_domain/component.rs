@@ -6,8 +6,8 @@ use std::mem::size_of;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use mesa3d_util::MesaError;
-use mesa3d_util::Tube;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Tube;
 use zerocopy::IntoBytes;
 
 use crate::cross_domain::atomic_memory_sentinel_manager::AtomicMemorySentinelManager;
@@ -96,7 +96,7 @@ impl RutabagaComponent for CrossDomain {
         if resource_create_blob.blob_mem != RUTABAGA_BLOB_MEM_GUEST
             && resource_create_blob.blob_flags != RUTABAGA_BLOB_FLAG_USE_MAPPABLE
         {
-            return Err(MesaError::WithContext("expected only guest memory blobs").into());
+            return Err(MagmaGpuError::WithContext("expected only guest memory blobs").into());
         }
 
         Ok(RutabagaResource {

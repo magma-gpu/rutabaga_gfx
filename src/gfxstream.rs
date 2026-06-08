@@ -23,13 +23,13 @@ use std::ptr::null;
 use std::ptr::null_mut;
 use std::sync::Arc;
 
-use mesa3d_util::FromRawDescriptor;
-use mesa3d_util::IntoRawDescriptor;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaMapping;
-use mesa3d_util::OwnedDescriptor;
-use mesa3d_util::RawDescriptor;
+use magma_gpu::util::FromRawDescriptor;
+use magma_gpu::util::IntoRawDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MesaMapping;
+use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::RawDescriptor;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -279,7 +279,7 @@ struct GfxstreamContext {
 
 impl GfxstreamContext {
     #[cfg(gfxstream_unstable)]
-    fn export_fence(&self, fence_id: u64) -> RutabagaResult<MesaHandle> {
+    fn export_fence(&self, fence_id: u64) -> RutabagaResult<MagmaGpuHandle> {
         let mut stream_handle: stream_renderer_handle = Default::default();
         // SAFETY:
         // Safe because a correctly formatted stream_handle is given to gfxstream.
@@ -292,15 +292,15 @@ impl GfxstreamContext {
         // be valid and owned by us.
         let handle = unsafe { OwnedDescriptor::from_raw_descriptor(raw_descriptor) };
 
-        Ok(MesaHandle {
+        Ok(MagmaGpuHandle {
             os_handle: handle,
             handle_type: stream_handle.handle_type,
         })
     }
 
     #[cfg(not(gfxstream_unstable))]
-    fn export_fence(&self, _fence_id: u64) -> RutabagaResult<MesaHandle> {
-        Err(MesaError::Unsupported.into())
+    fn export_fence(&self, _fence_id: u64) -> RutabagaResult<MagmaGpuHandle> {
+        Err(MagmaGpuError::Unsupported.into())
     }
 }
 
@@ -309,7 +309,7 @@ impl RutabagaContext for GfxstreamContext {
         &mut self,
         commands: &mut [u8],
         _fence_ids: &[u64],
-        _shareable_fences: Vec<MesaHandle>,
+        _shareable_fences: Vec<MagmaGpuHandle>,
     ) -> RutabagaResult<()> {
         if commands.len() % size_of::<u32>() != 0 {
             return Err(RutabagaError::InvalidCommandSize(commands.len()));
@@ -323,7 +323,7 @@ impl RutabagaContext for GfxstreamContext {
                 cmd_size: commands
                     .len()
                     .try_into()
-                    .map_err(MesaError::TryFromIntError)?,
+                    .map_err(MagmaGpuError::TryFromIntError)?,
                 cmd: commands.as_mut_ptr(),
                 num_in_fences: 0,
                 in_fence_descriptors: null(),
@@ -356,7 +356,7 @@ impl RutabagaContext for GfxstreamContext {
         RutabagaComponentType::Gfxstream
     }
 
-    fn context_create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<Option<MesaHandle>> {
+    fn context_create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<Option<MagmaGpuHandle>> {
         if fence.ring_idx as u32 == 1 {
             self.fence_handler.call(fence);
             return Ok(None);
@@ -367,7 +367,7 @@ impl RutabagaContext for GfxstreamContext {
         let ret = unsafe { stream_renderer_create_fence(&fence as *const stream_renderer_fence) };
         ret_to_res(ret)?;
 
-        let mut hnd: Option<MesaHandle> = None;
+        let mut hnd: Option<MagmaGpuHandle> = None;
         if fence.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0 {
             hnd = Some(self.export_fence(fence.fence_id)?);
         }
@@ -381,7 +381,7 @@ impl RutabagaContext for GfxstreamContext {
         };
 
         let mut buffer = std::io::Cursor::new(Vec::new());
-        serde_json::to_writer(&mut buffer, &snapshot).map_err(|e| MesaError::IoError(e.into()))?;
+        serde_json::to_writer(&mut buffer, &snapshot).map_err(|e| MagmaGpuError::IoError(e.into()))?;
 
         Ok(buffer.into_inner())
     }
@@ -577,7 +577,7 @@ impl Gfxstream {
             let handle = unsafe { OwnedDescriptor::from_raw_descriptor(raw_descriptor) };
 
             Ok(Arc::new(
-                MesaHandle {
+                MagmaGpuHandle {
                     os_handle: handle,
                     handle_type: stream_handle.handle_type,
                 }
@@ -682,7 +682,7 @@ impl RutabagaComponent for Gfxstream {
         import_handle: RutabagaHandle,
         import_data: RutabagaImportData,
     ) -> RutabagaResult<Option<RutabagaResource>> {
-        let import_handle = MesaHandle::try_from(import_handle)?;
+        let import_handle = MagmaGpuHandle::try_from(import_handle)?;
         let stream_handle = stream_renderer_handle {
             os_handle: import_handle.os_handle.into_raw_descriptor() as i64,
             handle_type: import_handle.handle_type,
@@ -906,7 +906,7 @@ impl RutabagaComponent for Gfxstream {
         let mut handle_ptr = null();
         let mut stream_handle: stream_renderer_handle = Default::default();
         if let Some(handle) = handle_opt {
-            let handle = MesaHandle::try_from(handle)?;
+            let handle = MagmaGpuHandle::try_from(handle)?;
             stream_handle.handle_type = handle.handle_type;
             stream_handle.os_handle = handle.os_handle.into_raw_descriptor() as i64;
             handle_ptr = &stream_handle;
@@ -1009,7 +1009,7 @@ impl RutabagaComponent for Gfxstream {
     #[cfg(gfxstream_unstable)]
     fn snapshot(&self, writer: RutabagaSnapshotWriter) -> RutabagaResult<()> {
         let directory = String::from(writer.get_path().to_string_lossy());
-        let directory_cstring = CString::new(directory).map_err(MesaError::NulError)?;
+        let directory_cstring = CString::new(directory).map_err(MagmaGpuError::NulError)?;
 
         // SAFETY:
         // Safe because directory string is valid
@@ -1022,7 +1022,7 @@ impl RutabagaComponent for Gfxstream {
     #[cfg(gfxstream_unstable)]
     fn restore(&self, reader: RutabagaSnapshotReader) -> RutabagaResult<()> {
         let directory = String::from(reader.get_path().to_string_lossy());
-        let directory_cstring = CString::new(directory).map_err(MesaError::NulError)?;
+        let directory_cstring = CString::new(directory).map_err(MagmaGpuError::NulError)?;
 
         // SAFETY:
         // Safe because directory string is valid
@@ -1038,7 +1038,7 @@ impl RutabagaComponent for Gfxstream {
         fence_handler: RutabagaFenceHandler,
     ) -> RutabagaResult<Box<dyn RutabagaContext>> {
         let context_snapshot: GfxstreamContextSnapshot =
-            serde_json::from_reader(&snapshot[..]).map_err(|e| MesaError::IoError(e.into()))?;
+            serde_json::from_reader(&snapshot[..]).map_err(|e| MagmaGpuError::IoError(e.into()))?;
 
         Ok(Box::new(GfxstreamContext {
             ctx_id: context_snapshot.ctx_id,

@@ -9,13 +9,13 @@ use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::Mutex;
 
-use mesa3d_util::Event;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::OwnedDescriptor;
-use mesa3d_util::ReadPipe;
-use mesa3d_util::Tube;
-use mesa3d_util::WritePipe;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Event;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::ReadPipe;
+use magma_gpu::util::Tube;
+use magma_gpu::util::WritePipe;
 
 use zerocopy::FromBytes;
 use zerocopy::Immutable;
@@ -23,8 +23,8 @@ use zerocopy::IntoBytes;
 
 use crate::context_common::ContextResources;
 use crate::cross_domain::atomic_memory_sentinel_manager::AtomicMemorySentinelManager;
-use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_PIPE_READ_START;
 use crate::cross_domain::cross_domain_protocol::CrossDomainReadWrite;
+use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_PIPE_READ_START;
 use crate::rutabaga_utils::RutabagaError;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaResult;
@@ -38,7 +38,7 @@ pub type SentinelManager = Arc<Mutex<AtomicMemorySentinelManager>>;
 
 pub enum CrossDomainItem {
     ImageRequirements(ImageMemoryRequirements),
-    Blob(MesaHandle),
+    Blob(MagmaGpuHandle),
     WaylandReadPipe(ReadPipe),
     WaylandWritePipe(WritePipe),
     Event(Event),
@@ -187,8 +187,9 @@ impl CrossDomainState {
                     cmd_read.hang_up = 1;
                 }
 
-                cmd_read.opaque_data_size =
-                    bytes_read.try_into().map_err(MesaError::TryFromIntError)?;
+                cmd_read.opaque_data_size = bytes_read
+                    .try_into()
+                    .map_err(MagmaGpuError::TryFromIntError)?;
                 cmd_slice.copy_from_slice(cmd_read.as_bytes());
             }
             RingWrite::WriteFromEvent(mut cmd_read, ref mut event, readable) => {
@@ -205,8 +206,9 @@ impl CrossDomainState {
                     opaque_data_slice[0..8].copy_from_slice(&value.to_le_bytes());
                 }
 
-                cmd_read.opaque_data_size =
-                    bytes_read.try_into().map_err(MesaError::TryFromIntError)?;
+                cmd_read.opaque_data_size = bytes_read
+                    .try_into()
+                    .map_err(MagmaGpuError::TryFromIntError)?;
                 cmd_slice.copy_from_slice(cmd_read.as_bytes());
             }
         }

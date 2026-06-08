@@ -6,11 +6,11 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap as Map;
 use std::path::PathBuf;
 
-use mesa3d_util::AsBorrowedDescriptor;
-use mesa3d_util::Listener;
-use mesa3d_util::MesaError;
-use mesa3d_util::WaitContext;
-use mesa3d_util::WaitTimeout;
+use magma_gpu::util::AsBorrowedDescriptor;
+use magma_gpu::util::Listener;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::WaitContext;
+use magma_gpu::util::WaitTimeout;
 
 use crate::kumquat_gpu::KumquatGpu;
 use crate::kumquat_gpu::KumquatGpuConnection;
@@ -69,7 +69,7 @@ impl Kumquat {
                     }
                 }
                 Entry::Vacant(_) => {
-                    return Err(MesaError::WithContext("no connection found").into())
+                    return Err(MagmaGpuError::WithContext("no connection found").into())
                 }
             }
         }

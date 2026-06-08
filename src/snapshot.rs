@@ -11,7 +11,7 @@ use std::io::BufWriter;
 use std::io::Write;
 use std::path::PathBuf;
 
-use mesa3d_util::MesaError;
+use magma_gpu::util::Error as MagmaGpuError;
 
 use crate::RutabagaError;
 use crate::RutabagaResult;
@@ -34,7 +34,7 @@ impl RutabagaSnapshotWriter {
     pub fn add_namespace(&self, name: &str) -> RutabagaResult<Self> {
         let directory = self.dir.join(name);
 
-        std::fs::create_dir(&directory).map_err(MesaError::IoError)?;
+        std::fs::create_dir(&directory).map_err(MagmaGpuError::IoError)?;
 
         Ok(Self::from_existing(directory))
     }
@@ -48,7 +48,7 @@ impl RutabagaSnapshotWriter {
             .map_err(|_| RutabagaError::SnapshotError)?;
         let mut fragment_writer = BufWriter::new(fragment_file);
         serde_json::to_writer(&mut fragment_writer, t)?;
-        fragment_writer.flush().map_err(MesaError::IoError)?;
+        fragment_writer.flush().map_err(MagmaGpuError::IoError)?;
         Ok(())
     }
 }
@@ -79,7 +79,7 @@ impl RutabagaSnapshotReader {
 
     pub fn get_fragment<T: serde::de::DeserializeOwned>(&self, name: &str) -> RutabagaResult<T> {
         let fragment_path = self.dir.join(name);
-        let fragment_file = File::open(fragment_path).map_err(MesaError::IoError)?;
+        let fragment_file = File::open(fragment_path).map_err(MagmaGpuError::IoError)?;
         let mut fragment_reader = BufReader::new(fragment_file);
         Ok(serde_json::from_reader(&mut fragment_reader)?)
     }

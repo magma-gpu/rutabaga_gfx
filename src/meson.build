@@ -25,7 +25,7 @@ dep_serde_json = dependency('serde_json-1-rs',
   required: true,
 )
 
-dep_rutabaga_gfx += dep_mesa3d_util
+dep_rutabaga_gfx += dep_magma_gpu_rs
 dep_rutabaga_gfx += [
   dep_libc,
   dep_log,
@@ -37,7 +37,7 @@ librutabaga_gfx = static_library(
   'rutabaga_gfx',
   'lib.rs',
   dependencies: dep_rutabaga_gfx,
-  link_with: [libmesa_rust_util],
+  link_with: [libmagma_gpu_rs],
   rust_abi: 'rust',
   gnu_symbol_visibility: 'hidden',
   rust_args: rutabaga_args,

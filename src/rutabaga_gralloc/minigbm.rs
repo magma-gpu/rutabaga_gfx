@@ -15,10 +15,10 @@ use std::io::SeekFrom;
 use std::os::fd::FromRawFd;
 use std::sync::Arc;
 
-use mesa3d_util::FromRawDescriptor;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
+use magma_gpu::util::FromRawDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
 
 use crate::rutabaga_gralloc::formats::DrmFormat;
 use crate::rutabaga_gralloc::gralloc::Gralloc;
@@ -74,7 +74,7 @@ impl MinigbmDevice {
 
             gbm = minigbm_create_default_device(&mut fd);
             if gbm.is_null() {
-                return Err(MesaError::IoError(Error::last_os_error()).into());
+                return Err(MagmaGpuError::IoError(Error::last_os_error()).into());
             }
             descriptor = File::from_raw_fd(fd);
         }
@@ -114,7 +114,7 @@ impl Gralloc for MinigbmDevice {
             )
         };
         if bo.is_null() {
-            return Err(MesaError::IoError(Error::last_os_error()).into());
+            return Err(MagmaGpuError::IoError(Error::last_os_error()).into());
         }
 
         let mut reqs: ImageMemoryRequirements = Default::default();
@@ -136,7 +136,7 @@ impl Gralloc for MinigbmDevice {
         }
 
         let mut fd = gbm_buffer.export()?;
-        let size = fd.seek(SeekFrom::End(0)).map_err(MesaError::IoError)?;
+        let size = fd.seek(SeekFrom::End(0)).map_err(MagmaGpuError::IoError)?;
 
         // minigbm does have the ability to query image requirements without allocating memory
         // via the TEST_ALLOC flag.  However, support has only been added in i915.  Until this
@@ -151,7 +151,7 @@ impl Gralloc for MinigbmDevice {
         Ok(reqs)
     }
 
-    fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MesaHandle> {
+    fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MagmaGpuHandle> {
         let last_buffer = self.last_buffer.take();
         if let Some(gbm_buffer) = last_buffer {
             if gbm_buffer.width() != reqs.info.width
@@ -162,9 +162,9 @@ impl Gralloc for MinigbmDevice {
             }
 
             let dmabuf = gbm_buffer.export()?.into();
-            return Ok(MesaHandle {
+            return Ok(MagmaGpuHandle {
                 os_handle: dmabuf,
-                handle_type: MESA_HANDLE_TYPE_MEM_DMABUF,
+                handle_type: MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF,
             });
         }
 
@@ -181,7 +181,7 @@ impl Gralloc for MinigbmDevice {
         };
 
         if bo.is_null() {
-            return Err(MesaError::IoError(Error::last_os_error()).into());
+            return Err(MagmaGpuError::IoError(Error::last_os_error()).into());
         }
 
         let gbm_buffer = MinigbmBuffer {
@@ -189,9 +189,9 @@ impl Gralloc for MinigbmDevice {
             _device: self.clone(),
         };
         let dmabuf = gbm_buffer.export()?.into();
-        Ok(MesaHandle {
+        Ok(MagmaGpuHandle {
             os_handle: dmabuf,
-            handle_type: MESA_HANDLE_TYPE_MEM_DMABUF,
+            handle_type: MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF,
         })
     }
 }

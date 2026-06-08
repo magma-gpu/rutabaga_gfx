@@ -5,12 +5,12 @@
 use std::fs::File;
 use std::sync::Arc;
 
-use mesa3d_util::FromRawDescriptor;
-use mesa3d_util::IntoRawDescriptor;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD;
+use magma_gpu::util::FromRawDescriptor;
+use magma_gpu::util::IntoRawDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD;
 use vulkano::device::Device;
 use vulkano::device::DeviceExtensions;
 use vulkano::memory::DeviceMemory;
@@ -42,13 +42,13 @@ impl VulkanoGralloc {
     pub(crate) unsafe fn import_memory(
         device: Arc<Device>,
         allocate_info: MemoryAllocateInfo,
-        handle: MesaHandle,
+        handle: MagmaGpuHandle,
     ) -> RutabagaResult<DeviceMemory> {
         let import_info = MemoryImportInfo::Fd {
             handle_type: match handle.handle_type {
-                MESA_HANDLE_TYPE_MEM_DMABUF => ExternalMemoryHandleType::DmaBuf,
-                MESA_HANDLE_TYPE_MEM_OPAQUE_FD => ExternalMemoryHandleType::OpaqueFd,
-                _ => return Err(MesaError::InvalidMesaHandle.into()),
+                MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF => ExternalMemoryHandleType::DmaBuf,
+                MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD => ExternalMemoryHandleType::OpaqueFd,
+                _ => return Err(MagmaGpuError::InvalidMagmaHandle.into()),
             },
             // Safe because we own the handle.
             file: File::from_raw_descriptor(handle.os_handle.into_raw_descriptor()),

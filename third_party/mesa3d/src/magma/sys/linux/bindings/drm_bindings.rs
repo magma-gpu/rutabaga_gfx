@@ -7,7 +7,7 @@
 #![allow(non_camel_case_types)]
 
 #[cfg(avoid_cargo)]
-pub use mesa3d_magma_drm_bindgen::*;
+pub use magma_gpu_magma_drm_bindgen::*;
 
 #[cfg(not(avoid_cargo))]
-include!(concat!(env!("OUT_DIR"), "/mesa3d_magma_drm_bindgen.rs"));
+include!(concat!(env!("OUT_DIR"), "/magma_gpu_magma_drm_bindgen.rs"));

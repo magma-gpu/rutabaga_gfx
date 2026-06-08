@@ -4,7 +4,7 @@
 
 //! renderer_utils: Utility functions and structs used by virgl_renderer and gfxstream.
 
-use mesa3d_util::OwnedDescriptor;
+use magma_gpu::util::OwnedDescriptor;
 
 use crate::rutabaga_utils::RutabagaDebugHandler;
 use crate::rutabaga_utils::RutabagaError;

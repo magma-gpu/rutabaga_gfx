@@ -1,7 +1,7 @@
 // Copyright 2025 Google
 // SPDX-License-Identifier: MIT
 
-use mesa3d_util::MesaError;
+use magma_gpu::util::Error as MagmaGpuError;
 use remain::sorted;
 use thiserror::Error;
 use zerocopy::FromBytes;
@@ -23,19 +23,19 @@ pub enum MagmaError {
     InternalError,
     #[error("Invalid Arguments")]
     InvalidArgs,
+    #[error("A Mesa error was returned {0}")]
+    MagmaError(MagmaGpuError),
     #[error("Memory Error")]
     MemoryError,
-    #[error("A Mesa error was returned {0}")]
-    MesaError(MesaError),
     #[error("Timed out")]
     TimedOut,
     #[error("Unimplemented")]
     Unimplemented,
 }
 
-impl From<MesaError> for MagmaError {
-    fn from(e: MesaError) -> MagmaError {
-        MagmaError::MesaError(e)
+impl From<MagmaGpuError> for MagmaError {
+    fn from(e: MagmaGpuError) -> MagmaError {
+        MagmaError::MagmaError(e)
     }
 }
 
@@ -197,10 +197,10 @@ pub const MAGMA_VENDOR_ID_AMD: u16 = 0x1002;
 pub const MAGMA_VENDOR_ID_MALI: u16 = 0x13B5;
 pub const MAGMA_VENDOR_ID_QCOM: u16 = 0x5413;
 
-use mesa3d_util::MesaHandle;
+use magma_gpu::util::Handle as MagmaGpuHandle;
 
 pub struct MagmaImportHandleInfo {
-    pub handle: MesaHandle,
+    pub handle: MagmaGpuHandle,
     pub size: u64,
     pub memory_type_idx: u32,
 }

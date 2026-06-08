@@ -5,9 +5,9 @@
 //! Utility file for allocating exportable system memory.  On Linux systems,
 //! this is is often done with memfd.
 
-use mesa3d_util::MesaHandle;
-use mesa3d_util::SharedMemory;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::SharedMemory;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 
 use crate::rutabaga_gralloc::formats::canonical_image_requirements;
 use crate::rutabaga_gralloc::gralloc::Gralloc;
@@ -48,11 +48,11 @@ impl Gralloc for SystemGralloc {
         Ok(reqs)
     }
 
-    fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MesaHandle> {
+    fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MagmaGpuHandle> {
         let shm = SharedMemory::new("rutabaga_gralloc", reqs.size)?;
-        Ok(MesaHandle {
+        Ok(MagmaGpuHandle {
             os_handle: shm.into(),
-            handle_type: MESA_HANDLE_TYPE_MEM_SHM,
+            handle_type: MAGMA_GPU_HANDLE_TYPE_MEM_SHM,
         })
     }
 }

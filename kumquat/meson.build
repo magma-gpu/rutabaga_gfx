@@ -15,8 +15,7 @@ kumquat_exe = executable(
   dependencies: dep_kumquat,
   link_with: [
     librutabaga_gfx,
-    libmesa_rust_util,
-    libmesa_protocols
+    libmagma_gpu_rs,
   ],
   install: true,
 )

@@ -8,7 +8,7 @@ macro_rules! check_ntstatus {
             windows_sys::Win32::Foundation::STATUS_SUCCESS => Ok(()),
             e => {
                 let error = rustix::io::Errno::from_raw_os_error(e);
-                Err(MesaError::RustixError(error))
+                Err(magma_gpu::util::Error::RustixError(error))
             }
         }
     }};

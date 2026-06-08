@@ -10,12 +10,12 @@ use std::io::IoSliceMut;
 use std::path::Path;
 use std::sync::Arc;
 
-use mesa3d_util::MemoryMapping;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaMapping;
-use mesa3d_util::OwnedDescriptor;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
+use magma_gpu::util::MemoryMapping;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MesaMapping;
+use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -257,7 +257,7 @@ pub trait RutabagaComponent {
         _import_handle: RutabagaHandle,
         _import_data: RutabagaImportData,
     ) -> RutabagaResult<Option<RutabagaResource>> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must attach `vecs` to the resource.
@@ -301,7 +301,7 @@ pub trait RutabagaComponent {
 
     /// Implementations must flush the given resource to the display.
     fn resource_flush(&self, _resource_id: &mut RutabagaResource) -> RutabagaResult<()> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must create a blob resource on success.  The memory parameters, size, and
@@ -314,31 +314,31 @@ pub trait RutabagaComponent {
         _iovec_opt: Option<Vec<RutabagaIovec>>,
         _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must map the blob resource on success. If addr is Some, the resource
     /// should be mapped at the specified address. Otherwise, the implementation may choose
     /// the address.
     fn map_placed(&self, _resource_id: u32, _placed_addr: u64) -> RutabagaResult<()> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must map the blob resource on success.  This is typically done by
     /// glMapBufferRange(...) or vkMapMemory.
     fn map(&self, _resource_id: u32) -> RutabagaResult<MesaMapping> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must unmap the blob resource on success.  This is typically done by
     /// glUnmapBuffer(...) or vkUnmapMemory.
     fn unmap(&self, _resource_id: u32) -> RutabagaResult<()> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
-    /// Implementations must return a MesaHandle of the fence on success.
-    fn export_fence(&self, _fence_id: u64) -> RutabagaResult<MesaHandle> {
-        Err(MesaError::Unsupported.into())
+    /// Implementations must return a MagmaGpuHandle of the fence on success.
+    fn export_fence(&self, _fence_id: u64) -> RutabagaResult<MagmaGpuHandle> {
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must create a context for submitting commands.  The command stream of the
@@ -351,7 +351,7 @@ pub trait RutabagaComponent {
         _context_name: Option<&str>,
         _fence_handler: RutabagaFenceHandler,
     ) -> RutabagaResult<Box<dyn RutabagaContext>> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations should stop workers.
@@ -361,12 +361,12 @@ pub trait RutabagaComponent {
 
     /// Implementations must snapshot to the specified writer.
     fn snapshot(&self, _writer: RutabagaSnapshotWriter) -> RutabagaResult<()> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must restore from the specified reader.
     fn restore(&self, _reader: RutabagaSnapshotReader) -> RutabagaResult<()> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must restore the context from the given stream.
@@ -375,7 +375,7 @@ pub trait RutabagaComponent {
         _snapshot: Vec<u8>,
         _fence_handler: RutabagaFenceHandler,
     ) -> RutabagaResult<Box<dyn RutabagaContext>> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations should resume workers.
@@ -392,7 +392,7 @@ pub trait RutabagaContext {
         _resource_create_blob: ResourceCreateBlob,
         _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must handle the context-specific command stream.
@@ -400,7 +400,7 @@ pub trait RutabagaContext {
         &mut self,
         _commands: &mut [u8],
         _fence_ids: &[u64],
-        shareable_fences: Vec<MesaHandle>,
+        shareable_fences: Vec<MagmaGpuHandle>,
     ) -> RutabagaResult<()>;
 
     /// Implementations may use `resource` in this context's command stream.
@@ -417,8 +417,8 @@ pub trait RutabagaContext {
     fn context_create_fence(
         &mut self,
         _fence: RutabagaFence,
-    ) -> RutabagaResult<Option<MesaHandle>> {
-        Err(MesaError::Unsupported.into())
+    ) -> RutabagaResult<Option<MagmaGpuHandle>> {
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     /// Implementations must return the component type associated with the context.
@@ -426,7 +426,7 @@ pub trait RutabagaContext {
 
     /// Implementations must serialize the context.
     fn snapshot(&self) -> RutabagaResult<Vec<u8>> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 }
 
@@ -506,7 +506,7 @@ pub fn calculate_capset_names(capset_mask: u64) -> Vec<String> {
 
 fn calculate_component(component_mask: u8) -> RutabagaResult<RutabagaComponentType> {
     if component_mask.count_ones() != 1 {
-        return Err(MesaError::WithContext("can't infer single component").into());
+        return Err(MagmaGpuError::WithContext("can't infer single component").into());
     }
 
     match component_mask.trailing_zeros() {
@@ -529,7 +529,7 @@ fn calculate_component(component_mask: u8) -> RutabagaResult<RutabagaComponentTy
 pub struct Rutabaga {
     resources: Map<u32, RutabagaResource>,
     #[cfg(fence_passing_option1)]
-    shareable_fences: Map<u64, MesaHandle>,
+    shareable_fences: Map<u64, MagmaGpuHandle>,
     contexts: Map<u32, Box<dyn RutabagaContext>>,
     // Declare components after resources and contexts such that it is dropped last.
     components: Map<RutabagaComponentType, Box<dyn RutabagaComponent>>,
@@ -913,7 +913,7 @@ impl Rutabaga {
         let component = self
             .components
             .get(&self.default_component)
-            .ok_or(MesaError::Unsupported)?;
+            .ok_or(MagmaGpuError::Unsupported)?;
 
         let resource = self
             .resources
@@ -1021,9 +1021,9 @@ impl Rutabaga {
             match handle_opt {
                 Some(handle) => {
                     if let Some(mesa_handle) = handle.as_mesa_handle() {
-                        if mesa_handle.handle_type != MESA_HANDLE_TYPE_MEM_SHM {
+                        if mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_SHM {
                             return Err(
-                                MesaError::WithContext("expected a shared memory handle").into()
+                                MagmaGpuError::WithContext("expected a shared memory handle").into()
                             );
                         }
 
@@ -1031,10 +1031,10 @@ impl Rutabaga {
                         let resource_size: usize = resource
                             .size
                             .try_into()
-                            .map_err(MesaError::TryFromIntError)?;
+                            .map_err(MagmaGpuError::TryFromIntError)?;
                         let map_info = resource
                             .map_info
-                            .ok_or(MesaError::WithContext("no map info available"))?;
+                            .ok_or(MagmaGpuError::WithContext("no map info available"))?;
 
                         // Creating the mapping closes the cloned descriptor.
                         let mapping = MemoryMapping::from_safe_descriptor(
@@ -1048,10 +1048,10 @@ impl Rutabaga {
 
                         return Ok(mesa_mapping);
                     } else {
-                        return Err(MesaError::WithContext("mesa handle is expected").into());
+                        return Err(MagmaGpuError::WithContext("mesa handle is expected").into());
                     }
                 }
-                None => return Err(MesaError::WithContext("expected a handle to map").into()),
+                None => return Err(MagmaGpuError::WithContext("expected a handle to map").into()),
             }
         }
 
@@ -1094,7 +1094,7 @@ impl Rutabaga {
 
         resource
             .map_info
-            .ok_or(MesaError::WithContext("no map info available").into())
+            .ok_or(MagmaGpuError::WithContext("no map info available").into())
     }
 
     /// Returns the `vulkan_info` of the blob resource, which consists of the physical device
@@ -1117,7 +1117,7 @@ impl Rutabaga {
 
         resource
             .info_3d
-            .ok_or(MesaError::WithContext("no 3d info available").into())
+            .ok_or(MagmaGpuError::WithContext("no 3d info available").into())
     }
 
     /// Returns true if the resource is mappable by the guest CPU.
@@ -1147,15 +1147,15 @@ impl Rutabaga {
             }
             (Some(handle), false) => {
                 // Exactly one strong reference in this case.
-                let hnd = Arc::try_unwrap(handle).map_err(|_| MesaError::InvalidMesaHandle)?;
+                let hnd = Arc::try_unwrap(handle).map_err(|_| MagmaGpuError::InvalidMagmaHandle)?;
                 Ok(hnd)
             }
-            _ => Err(MesaError::InvalidMesaHandle.into()),
+            _ => Err(MagmaGpuError::InvalidMagmaHandle.into()),
         }
     }
 
     /// Exports the given fence for import into other processes.
-    pub fn export_fence(&mut self, fence_id: u64) -> RutabagaResult<MesaHandle> {
+    pub fn export_fence(&mut self, fence_id: u64) -> RutabagaResult<MagmaGpuHandle> {
         #[cfg(fence_passing_option1)]
         if let Some(handle) = self.shareable_fences.get_mut(&fence_id) {
             return handle.try_clone().map_err(|e| e.into());
@@ -1256,14 +1256,14 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidContextId)?;
 
         #[allow(unused_mut)]
-        let mut shareable_fences: Vec<MesaHandle> = Vec::with_capacity(fence_ids.len());
+        let mut shareable_fences: Vec<MagmaGpuHandle> = Vec::with_capacity(fence_ids.len());
 
         #[cfg(fence_passing_option1)]
         for (i, fence_id) in fence_ids.iter().enumerate() {
             let handle = self
                 .shareable_fences
                 .get_mut(fence_id)
-                .ok_or(MesaError::InvalidMesaHandle)?;
+                .ok_or(MagmaGpuError::InvalidMagmaHandle)?;
 
             let clone = handle.try_clone()?;
             shareable_fences.insert(i, clone);
@@ -1278,7 +1278,7 @@ impl Rutabaga {
         for fence_id in fence_ids {
             self.shareable_fences
                 .remove(fence_id)
-                .ok_or(MesaError::InvalidMesaHandle)?;
+                .ok_or(MagmaGpuError::InvalidMagmaHandle)?;
         }
 
         Ok(())

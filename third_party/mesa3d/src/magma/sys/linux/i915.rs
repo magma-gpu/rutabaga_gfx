@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use log::error;
 
-use mesa3d_util::log_status;
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaResult;
+use magma_gpu::log_status;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::Result as MagmaGpuResult;
 
 use crate::flexible_array_impl;
 use crate::ioctl_readwrite;
@@ -92,7 +92,7 @@ flexible_array_impl!(
 fn i915_query<T, S>(
     physical_device: &Arc<dyn PhysicalDevice>,
     query_id: u64,
-) -> MesaResult<FlexibleArrayWrapper<T, S>>
+) -> MagmaGpuResult<FlexibleArrayWrapper<T, S>>
 where
     T: FlexibleArray<S> + Default,
 {
@@ -115,7 +115,7 @@ where
     }
 
     if item.length < 0 {
-        return Err(MesaError::from(std::io::Error::from_raw_os_error(
+        return Err(MagmaGpuError::from(std::io::Error::from_raw_os_error(
             -item.length,
         )));
     }
@@ -148,7 +148,7 @@ struct I915MemoryInfo {
 
 fn i915_query_memory_regions(
     physical_device: &Arc<dyn PhysicalDevice>,
-) -> MesaResult<I915MemoryInfo> {
+) -> MagmaGpuResult<I915MemoryInfo> {
     let query_mem_regions = i915_query::<drm_i915_query_memory_regions, drm_i915_memory_region_info>(
         physical_device,
         DRM_I915_QUERY_MEMORY_REGIONS as u64,
@@ -218,7 +218,7 @@ struct I915Buffer {
 }
 
 impl I915 {
-    pub fn new(physical_device: Arc<dyn PhysicalDevice>) -> MesaResult<I915> {
+    pub fn new(physical_device: Arc<dyn PhysicalDevice>) -> MagmaGpuResult<I915> {
         let mut val: i32 = 0;
         let mut getparam = drm_i915_getparam {
             param: I915_PARAM_HAS_ALIASING_PPGTT as i32,
@@ -282,13 +282,13 @@ impl I915 {
 }
 
 impl GenericDevice for I915 {
-    fn get_memory_properties(&self) -> MesaResult<MagmaMemoryProperties> {
+    fn get_memory_properties(&self) -> MagmaGpuResult<MagmaMemoryProperties> {
         Ok(self.mem_props.clone())
     }
 
-    fn get_memory_budget(&self, heap_idx: u32) -> MesaResult<MagmaHeapBudget> {
+    fn get_memory_budget(&self, heap_idx: u32) -> MagmaGpuResult<MagmaHeapBudget> {
         if heap_idx >= self.mem_props.memory_heap_count {
-            return Err(MesaError::WithContext("Heap Index out of bounds"));
+            return Err(MagmaGpuError::WithContext("Heap Index out of bounds"));
         }
 
         let mem_info = i915_query_memory_regions(&self.physical_device)?;
@@ -304,7 +304,7 @@ impl GenericDevice for I915 {
                 mem_info.vram_unmappable_free,
             )
         } else {
-            return Err(MesaError::Unsupported);
+            return Err(MagmaGpuError::Unsupported);
         };
 
         Ok(MagmaHeapBudget {
@@ -313,7 +313,7 @@ impl GenericDevice for I915 {
         })
     }
 
-    fn create_context(&self, _device: &Arc<dyn Device>) -> MesaResult<Arc<dyn Context>> {
+    fn create_context(&self, _device: &Arc<dyn Device>) -> MagmaGpuResult<Arc<dyn Context>> {
         let ctx = I915Context::new(self.physical_device.clone())?;
         Ok(Arc::new(ctx))
     }
@@ -322,7 +322,7 @@ impl GenericDevice for I915 {
         &self,
         _device: &Arc<dyn Device>,
         create_info: &MagmaCreateBufferInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let buf = I915Buffer::new(self.physical_device.clone(), create_info)?;
         Ok(Arc::new(buf))
     }
@@ -331,7 +331,7 @@ impl GenericDevice for I915 {
         &self,
         _device: &Arc<dyn Device>,
         info: MagmaImportHandleInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let gem_handle = self.physical_device.import(info.handle)?;
         let buf = I915Buffer::from_existing(
             self.physical_device.clone(),
@@ -346,7 +346,7 @@ impl Device for I915 {}
 impl PlatformDevice for I915 {}
 
 impl I915Context {
-    fn new(physical_device: Arc<dyn PhysicalDevice>) -> MesaResult<I915Context> {
+    fn new(physical_device: Arc<dyn PhysicalDevice>) -> MagmaGpuResult<I915Context> {
         let mut ctx_create = drm_i915_gem_context_create_ext::default();
 
         // SAFETY:
@@ -391,7 +391,7 @@ impl I915Buffer {
     fn new(
         physical_device: Arc<dyn PhysicalDevice>,
         create_info: &MagmaCreateBufferInfo,
-    ) -> MesaResult<I915Buffer> {
+    ) -> MagmaGpuResult<I915Buffer> {
         let mut gem_create = drm_i915_gem_create {
             size: create_info.size,
             handle: 0,
@@ -417,7 +417,7 @@ impl I915Buffer {
         physical_device: Arc<dyn PhysicalDevice>,
         gem_handle: u32,
         size: usize,
-    ) -> MesaResult<I915Buffer> {
+    ) -> MagmaGpuResult<I915Buffer> {
         Ok(I915Buffer {
             physical_device,
             gem_handle,
@@ -427,7 +427,7 @@ impl I915Buffer {
 }
 
 impl GenericBuffer for I915Buffer {
-    fn map(&self, _buffer: &Arc<dyn Buffer>) -> MesaResult<Arc<dyn MappedRegion>> {
+    fn map(&self, _buffer: &Arc<dyn Buffer>) -> MagmaGpuResult<Arc<dyn MappedRegion>> {
         let mut gem_mmap = drm_i915_gem_mmap_offset {
             handle: self.gem_handle,
             pad: 0,
@@ -449,7 +449,7 @@ impl GenericBuffer for I915Buffer {
         Ok(Arc::new(mapping))
     }
 
-    fn export(&self) -> MesaResult<MesaHandle> {
+    fn export(&self) -> MagmaGpuResult<MagmaGpuHandle> {
         self.physical_device.export(self.gem_handle)
     }
 
@@ -457,16 +457,16 @@ impl GenericBuffer for I915Buffer {
         &self,
         _sync_flags: u64,
         _ranges: &[crate::magma_defines::MagmaMappedMemoryRange],
-    ) -> MesaResult<()> {
-        Err(MesaError::Unsupported)
+    ) -> MagmaGpuResult<()> {
+        Err(MagmaGpuError::Unsupported)
     }
 
     fn flush(
         &self,
         _sync_flags: u64,
         _ranges: &[crate::magma_defines::MagmaMappedMemoryRange],
-    ) -> MesaResult<()> {
-        Err(MesaError::Unsupported)
+    ) -> MagmaGpuResult<()> {
+        Err(MagmaGpuError::Unsupported)
     }
 }
 

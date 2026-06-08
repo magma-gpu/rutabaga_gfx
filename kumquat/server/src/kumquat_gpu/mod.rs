@@ -11,17 +11,17 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use log::error;
-use mesa3d_protocols::ipc::KumquatStream;
-use mesa3d_protocols::protocols::kumquat_gpu_protocol::*;
-use mesa3d_util::AsBorrowedDescriptor;
-use mesa3d_util::Event;
-use mesa3d_util::MemoryMapping;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::OwnedDescriptor;
-use mesa3d_util::SharedMemory;
-use mesa3d_util::Tube;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
+use magma_gpu::protocols::ipc::KumquatStream;
+use magma_gpu::protocols::kumquat_gpu_protocol::*;
+use magma_gpu::util::AsBorrowedDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Event;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MemoryMapping;
+use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::SharedMemory;
+use magma_gpu::util::Tube;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 use remain::sorted;
 use rutabaga_gfx::calculate_capset_mask;
 use rutabaga_gfx::ResourceCreate3D;
@@ -48,14 +48,14 @@ const SNAPSHOT_DIR: &str = "/tmp/";
 #[derive(Error, Debug)]
 pub enum KumquatGpuError {
     #[error("Mesa Error {0}")]
-    MesaError(MesaError),
+    MagmaGpuError(MagmaGpuError),
     #[error("Rutabaga Error {0}")]
     RutabagaError(RutabagaError),
 }
 
-impl From<MesaError> for KumquatGpuError {
-    fn from(e: MesaError) -> KumquatGpuError {
-        KumquatGpuError::MesaError(e)
+impl From<MagmaGpuError> for KumquatGpuError {
+    fn from(e: MagmaGpuError) -> KumquatGpuError {
+        KumquatGpuError::MagmaGpuError(e)
     }
 }
 
@@ -109,7 +109,7 @@ impl KumquatGpu {
     pub fn new(capset_names: String, renderer_features: String) -> KumquatGpuResult<KumquatGpu> {
         let capset_mask = calculate_capset_mask(capset_names.as_str().split(":"));
         if capset_mask == 0 {
-            return Err(MesaError::Unsupported.into());
+            return Err(MagmaGpuError::Unsupported.into());
         }
 
         let fence_state = Arc::new(Mutex::new(FenceData {
@@ -193,7 +193,7 @@ impl KumquatGpuConnection {
                         payload: capset
                             .len()
                             .try_into()
-                            .map_err(MesaError::TryFromIntError)?,
+                            .map_err(MagmaGpuError::TryFromIntError)?,
                     };
 
                     self.stream
@@ -264,7 +264,7 @@ impl KumquatGpuConnection {
                     let descriptor: OwnedDescriptor =
                         SharedMemory::new("rutabaga_server", size as u64)?.into();
 
-                    let clone = descriptor.try_clone().map_err(MesaError::IoError)?;
+                    let clone = descriptor.try_clone().map_err(MagmaGpuError::IoError)?;
                     let mut vecs: Vec<RutabagaIovec> = Vec::new();
 
                     let mapping = MemoryMapping::from_safe_descriptor(
@@ -309,9 +309,9 @@ impl KumquatGpuConnection {
 
                     self.stream.write(KumquatGpuProtocolWrite::CmdWithHandle(
                         resp,
-                        MesaHandle {
+                        MagmaGpuHandle {
                             os_handle: descriptor,
-                            handle_type: MESA_HANDLE_TYPE_MEM_SHM,
+                            handle_type: MAGMA_GPU_HANDLE_TYPE_MEM_SHM,
                         },
                     ))?;
                 }
@@ -377,12 +377,12 @@ impl KumquatGpuConnection {
                             ring_idx: cmd.ring_idx,
                         };
 
-                        let mut fence_descriptor_opt: Option<MesaHandle> = None;
+                        let mut fence_descriptor_opt: Option<MagmaGpuHandle> = None;
                         let actual_fence = cmd.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0;
                         if !actual_fence {
                             let event: Event = Event::new()?;
                             let clone = event.try_clone()?;
-                            let emulated_fence: MesaHandle = clone.into();
+                            let emulated_fence: MagmaGpuHandle = clone.into();
 
                             fence_descriptor_opt = Some(emulated_fence);
                             let mut fence_state = kumquat_gpu.fence_state.lock().unwrap();
@@ -398,7 +398,7 @@ impl KumquatGpuConnection {
                         }
 
                         let fence_descriptor = fence_descriptor_opt
-                            .ok_or(MesaError::WithContext("No fence descriptor"))?;
+                            .ok_or(MagmaGpuError::WithContext("No fence descriptor"))?;
 
                         let resp = kumquat_gpu_protocol_resp_cmd_submit_3d {
                             hdr: kumquat_gpu_protocol_ctrl_hdr {
@@ -435,7 +435,7 @@ impl KumquatGpuConnection {
                     )?;
 
                     let handle = kumquat_gpu.rutabaga.export_blob(resource_id)?;
-                    let handle = MesaHandle::try_from(handle)?;
+                    let handle = MagmaGpuHandle::try_from(handle)?;
                     let mut vk_info: RutabagaVulkanInfo = Default::default();
                     if let Ok(vulkan_info) = kumquat_gpu.rutabaga.vulkan_info(resource_id) {
                         vk_info = vulkan_info;
@@ -465,10 +465,8 @@ impl KumquatGpuConnection {
                         },
                     };
 
-                    self.stream.write(KumquatGpuProtocolWrite::CmdWithHandle(
-                        resp,
-                        handle,
-                    ))?;
+                    self.stream
+                        .write(KumquatGpuProtocolWrite::CmdWithHandle(resp, handle))?;
 
                     kumquat_gpu
                         .rutabaga
@@ -499,7 +497,7 @@ impl KumquatGpuConnection {
                 }
                 _ => {
                     error!("Unsupported protocol {protocol:?}");
-                    return Err(MesaError::Unsupported.into());
+                    return Err(MagmaGpuError::Unsupported.into());
                 }
             };
         }

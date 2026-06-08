@@ -16,12 +16,12 @@ use std::convert::TryInto;
 use std::sync::Arc;
 
 use log::warn;
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaMapping;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MesaMapping;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD;
 use vulkano::device::physical::PhysicalDeviceType;
 use vulkano::device::Device;
 use vulkano::device::DeviceCreateInfo;
@@ -212,7 +212,7 @@ impl VulkanoGralloc {
         }
 
         if devices.is_empty() {
-            return Err(MesaError::WithContext("no matching VK devices available").into());
+            return Err(MagmaGpuError::WithContext("no matching VK devices available").into());
         }
 
         Ok(Box::new(VulkanoGralloc {
@@ -398,7 +398,7 @@ impl Gralloc for VulkanoGralloc {
                 .chain(second_loop)
                 .filter(|&(i, _, _)| (memory_requirements.memory_type_bits & (1 << i)) != 0)
                 .find(|&(_, t, rq)| filter(t) == rq)
-                .ok_or(MesaError::WithContext(
+                .ok_or(MagmaGpuError::WithContext(
                     "unable to find required memory type",
                 ))?;
             (found_type.0, found_type.1)
@@ -432,7 +432,7 @@ impl Gralloc for VulkanoGralloc {
         Ok(reqs)
     }
 
-    fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MesaHandle> {
+    fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MagmaGpuHandle> {
         let (raw_image, memory_requirements) = unsafe { self.create_image(reqs.info)? };
 
         let vulkan_info = reqs.vulkan_info.ok_or(RutabagaError::InvalidVulkanInfo)?;
@@ -462,12 +462,12 @@ impl Gralloc for VulkanoGralloc {
                 true => (
                     ExternalMemoryHandleType::DmaBuf,
                     ExternalMemoryHandleTypes::DMA_BUF,
-                    MESA_HANDLE_TYPE_MEM_DMABUF,
+                    MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF,
                 ),
                 false => (
                     ExternalMemoryHandleType::OpaqueFd,
                     ExternalMemoryHandleTypes::OPAQUE_FD,
-                    MESA_HANDLE_TYPE_MEM_OPAQUE_FD,
+                    MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD,
                 ),
             };
 
@@ -495,7 +495,7 @@ impl Gralloc for VulkanoGralloc {
 
         let descriptor = device_memory.export_fd(export_handle_type)?.into();
 
-        Ok(MesaHandle {
+        Ok(MagmaGpuHandle {
             os_handle: descriptor,
             handle_type: rutabaga_type,
         })
@@ -504,7 +504,7 @@ impl Gralloc for VulkanoGralloc {
     /// Implementations must map the memory associated with the `resource_id` upon success.
     fn import_and_map(
         &mut self,
-        handle: MesaHandle,
+        handle: MagmaGpuHandle,
         vulkan_info: VulkanInfo,
         size: u64,
     ) -> RutabagaResult<Box<dyn MappedRegion>> {
@@ -529,7 +529,7 @@ impl Gralloc for VulkanoGralloc {
 
         Ok(Box::new(VulkanoMapping::new(
             mapped_memory,
-            size.try_into().map_err(MesaError::TryFromIntError)?,
+            size.try_into().map_err(MagmaGpuError::TryFromIntError)?,
         )))
     }
 }

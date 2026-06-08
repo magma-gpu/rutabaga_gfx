@@ -22,15 +22,15 @@ mod rutabaga_utils;
 mod snapshot;
 mod virgl_renderer;
 
-pub use mesa3d_util::FromRawDescriptor as RutabagaFromRawDescriptor;
-pub use mesa3d_util::IntoRawDescriptor as RutabagaIntoRawDescriptor;
-pub use mesa3d_util::MappedRegion as RutabagaMappedRegion;
-pub use mesa3d_util::MesaError::Unsupported as RutabagaUnsupported;
-pub use mesa3d_util::MesaHandle as RutabagaMesaHandle;
-pub use mesa3d_util::OwnedDescriptor as RutabagaDescriptor;
-pub use mesa3d_util::RawDescriptor as RutabagaRawDescriptor;
-pub use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF as RUTABAGA_HANDLE_TYPE_MEM_DMABUF;
-pub use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD as RUTABAGA_HANDLE_TYPE_MEM_OPAQUE_FD;
+pub use magma_gpu::util::FromRawDescriptor as RutabagaFromRawDescriptor;
+pub use magma_gpu::util::IntoRawDescriptor as RutabagaIntoRawDescriptor;
+pub use magma_gpu::util::MappedRegion as RutabagaMappedRegion;
+pub use magma_gpu::util::Error::Unsupported as RutabagaUnsupported;
+pub use magma_gpu::util::Handle as RutabagaMagmaHandle;
+pub use magma_gpu::util::OwnedDescriptor as RutabagaDescriptor;
+pub use magma_gpu::util::RawDescriptor as RutabagaRawDescriptor;
+pub use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF as RUTABAGA_HANDLE_TYPE_MEM_DMABUF;
+pub use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD as RUTABAGA_HANDLE_TYPE_MEM_OPAQUE_FD;
 
 pub use crate::handle::AhbInfo;
 pub use crate::handle::RutabagaHandle;

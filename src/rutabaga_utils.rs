@@ -10,7 +10,7 @@ use std::os::raw::c_void;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use mesa3d_util::MesaError;
+use magma_gpu::util::Error as MagmaGpuError;
 use remain::sorted;
 use serde::Deserialize;
 use serde::Serialize;
@@ -313,12 +313,12 @@ pub enum RutabagaError {
     /// An error with VulkanInfo
     #[error("invalid vulkan info")]
     InvalidVulkanInfo,
+    /// A Magma Error
+    #[error("An mesa error was returned {0}")]
+    MagmaGpuError(MagmaGpuError),
     /// The mapping failed.
     #[error("The mapping failed with library error: {0}")]
     MappingFailed(i32),
-    /// A Mesa Error
-    #[error("An mesa error was returned {0}")]
-    MesaError(MesaError),
     /// A snapshot JSON error was returned
     #[error("An serde json snapshot error was returned {0}")]
     SerdeJsonError(SerdeJsonError),
@@ -355,9 +355,9 @@ pub enum RutabagaError {
     VkMemoryMapError(MemoryMapError),
 }
 
-impl From<MesaError> for RutabagaError {
-    fn from(e: MesaError) -> RutabagaError {
-        RutabagaError::MesaError(e)
+impl From<MagmaGpuError> for RutabagaError {
+    fn from(e: MagmaGpuError) -> RutabagaError {
+        RutabagaError::MagmaGpuError(e)
     }
 }
 

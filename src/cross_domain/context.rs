@@ -9,30 +9,44 @@ use std::thread;
 
 use log::error;
 
-use mesa3d_util::create_pipe;
-use mesa3d_util::AsBorrowedDescriptor;
-use mesa3d_util::Event;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::OwnedDescriptor;
-use mesa3d_util::Tube;
-use mesa3d_util::TubeType;
-use mesa3d_util::WaitContext;
-use mesa3d_util::WritePipe;
+use magma_gpu::util::create_pipe;
+use magma_gpu::util::AsBorrowedDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Event;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::Tube;
+use magma_gpu::util::TubeType;
+use magma_gpu::util::WaitContext;
+use magma_gpu::util::WritePipe;
 
 use zerocopy::FromBytes;
 use zerocopy::IntoBytes;
 
 use crate::context_common::ContextResource;
 use crate::context_common::ContextResources;
-use crate::cross_domain::common::CROSS_DOMAIN_CONTEXT_CHANNEL_ID;
+use crate::cross_domain::common::add_item;
 use crate::cross_domain::common::CrossDomainItem;
 use crate::cross_domain::common::CrossDomainItemState;
 use crate::cross_domain::common::CrossDomainJob;
 use crate::cross_domain::common::CrossDomainState;
 use crate::cross_domain::common::RingWrite;
 use crate::cross_domain::common::SentinelManager;
-use crate::cross_domain::common::add_item;
+use crate::cross_domain::common::CROSS_DOMAIN_CONTEXT_CHANNEL_ID;
+use crate::cross_domain::cross_domain_protocol::CrossDomainAssignSocketUuid;
+use crate::cross_domain::cross_domain_protocol::CrossDomainCreateAtomicMemorySentinel;
+use crate::cross_domain::cross_domain_protocol::CrossDomainCreateEvent;
+use crate::cross_domain::cross_domain_protocol::CrossDomainDestroyAtomicMemorySentinel;
+use crate::cross_domain::cross_domain_protocol::CrossDomainGetImageRequirements;
+use crate::cross_domain::cross_domain_protocol::CrossDomainHeader;
+use crate::cross_domain::cross_domain_protocol::CrossDomainImageRequirements;
+use crate::cross_domain::cross_domain_protocol::CrossDomainImportVirtioFsHandle;
+use crate::cross_domain::cross_domain_protocol::CrossDomainInit;
+use crate::cross_domain::cross_domain_protocol::CrossDomainInitLegacy;
+use crate::cross_domain::cross_domain_protocol::CrossDomainInitV1;
+use crate::cross_domain::cross_domain_protocol::CrossDomainReadWrite;
+use crate::cross_domain::cross_domain_protocol::CrossDomainSendReceive;
+use crate::cross_domain::cross_domain_protocol::CrossDomainSignalAtomicMemorySentinel;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_CHANNEL_RING;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_CHANNEL_TYPE_INTERNAL_SOCKET;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_CMD_ASSIGN_SOCKET_UUID;
@@ -51,20 +65,6 @@ use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLO
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_ID_TYPE_VIRTIO_FS_BLOB;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_MAX_IDENTIFIERS;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_QUERY_RING;
-use crate::cross_domain::cross_domain_protocol::CrossDomainAssignSocketUuid;
-use crate::cross_domain::cross_domain_protocol::CrossDomainCreateAtomicMemorySentinel;
-use crate::cross_domain::cross_domain_protocol::CrossDomainCreateEvent;
-use crate::cross_domain::cross_domain_protocol::CrossDomainDestroyAtomicMemorySentinel;
-use crate::cross_domain::cross_domain_protocol::CrossDomainGetImageRequirements;
-use crate::cross_domain::cross_domain_protocol::CrossDomainHeader;
-use crate::cross_domain::cross_domain_protocol::CrossDomainImageRequirements;
-use crate::cross_domain::cross_domain_protocol::CrossDomainImportVirtioFsHandle;
-use crate::cross_domain::cross_domain_protocol::CrossDomainInit;
-use crate::cross_domain::cross_domain_protocol::CrossDomainInitLegacy;
-use crate::cross_domain::cross_domain_protocol::CrossDomainInitV1;
-use crate::cross_domain::cross_domain_protocol::CrossDomainReadWrite;
-use crate::cross_domain::cross_domain_protocol::CrossDomainSendReceive;
-use crate::cross_domain::cross_domain_protocol::CrossDomainSignalAtomicMemorySentinel;
 use crate::cross_domain::worker::CrossDomainWorker;
 use crate::handle::RutabagaHandle;
 use crate::rutabaga_core::RutabagaContext;
@@ -269,7 +269,7 @@ impl CrossDomainContext {
         let num_identifiers = cmd_send.num_identifiers as usize;
 
         if num_identifiers > CROSS_DOMAIN_MAX_IDENTIFIERS {
-            return Err(MesaError::WithContext("max cross domain identifiers exceeded").into());
+            return Err(MagmaGpuError::WithContext("max cross domain identifiers exceeded").into());
         }
 
         let iter = cmd_send
@@ -297,16 +297,16 @@ impl CrossDomainContext {
                         mesa_handle
                             .os_handle
                             .try_clone()
-                            .map_err(MesaError::IoError)?,
+                            .map_err(MagmaGpuError::IoError)?,
                     );
                 } else {
-                    return Err(MesaError::InvalidMesaHandle.into());
+                    return Err(MagmaGpuError::InvalidMagmaHandle.into());
                 }
             } else if *identifier_type == CROSS_DOMAIN_ID_TYPE_READ_PIPE {
                 // In practice, just 1 pipe pair per send is observed.  If we encounter
                 // more, this can be changed later.
                 if write_pipe_opt.is_some() {
-                    return Err(MesaError::WithContext("expected just one pipe pair").into());
+                    return Err(MagmaGpuError::WithContext("expected just one pipe pair").into());
                 }
 
                 let (read_pipe, write_pipe) = create_pipe()?;
@@ -315,7 +315,7 @@ impl CrossDomainContext {
                     write_pipe
                         .as_borrowed_descriptor()
                         .try_clone()
-                        .map_err(MesaError::IoError)?,
+                        .map_err(MagmaGpuError::IoError)?,
                 );
                 let read_pipe_id: u32 = add_item(
                     &self.item_state,
@@ -478,7 +478,7 @@ impl CrossDomainContext {
         let len: usize = cmd_write
             .opaque_data_size
             .try_into()
-            .map_err(MesaError::TryFromIntError)?;
+            .map_err(MagmaGpuError::TryFromIntError)?;
         match item {
             CrossDomainItem::WaylandWritePipe(write_pipe) => {
                 if len != 0 {
@@ -547,7 +547,7 @@ impl RutabagaContext for CrossDomainContext {
         // Items that are kept in the table after usage.
         if let CrossDomainItem::ImageRequirements(reqs) = item {
             if reqs.size != resource_create_blob.size {
-                return Err(MesaError::WithContext("blob size mismatch").into());
+                return Err(MagmaGpuError::WithContext("blob size mismatch").into());
             }
 
             // Strictly speaking, it's against the virtio-gpu spec to allocate memory in the context
@@ -597,7 +597,7 @@ impl RutabagaContext for CrossDomainContext {
                 let map_access = hnd
                     .os_handle
                     .determine_map_access_mode()
-                    .map_err(|e| RutabagaError::MesaError(e.into()))?;
+                    .map_err(|e| RutabagaError::MagmaGpuError(e.into()))?;
                 let map_info = Some(RUTABAGA_MAP_CACHE_CACHED | map_access);
 
                 Ok(RutabagaResource {
@@ -624,7 +624,7 @@ impl RutabagaContext for CrossDomainContext {
         &mut self,
         mut commands: &mut [u8],
         _fence_ids: &[u64],
-        _shareable_fences: Vec<MesaHandle>,
+        _shareable_fences: Vec<MagmaGpuHandle>,
     ) -> RutabagaResult<()> {
         while !commands.is_empty() {
             let (hdr, _) = CrossDomainHeader::read_from_prefix(commands)
@@ -714,7 +714,7 @@ impl RutabagaContext for CrossDomainContext {
                             .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
                     self.import_virtiofs_handle(&cmd_imp_handle)?;
                 }
-                _ => return Err(MesaError::WithContext("invalid cross domain command").into()),
+                _ => return Err(MagmaGpuError::WithContext("invalid cross domain command").into()),
             }
 
             commands = commands
@@ -752,7 +752,10 @@ impl RutabagaContext for CrossDomainContext {
             .remove(&resource.resource_id);
     }
 
-    fn context_create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<Option<MesaHandle>> {
+    fn context_create_fence(
+        &mut self,
+        fence: RutabagaFence,
+    ) -> RutabagaResult<Option<MagmaGpuHandle>> {
         match fence.ring_idx as u32 {
             CROSS_DOMAIN_QUERY_RING => self.fence_handler.call(fence),
             CROSS_DOMAIN_CHANNEL_RING => {
@@ -760,7 +763,7 @@ impl RutabagaContext for CrossDomainContext {
                     state.add_job(CrossDomainJob::HandleFence(fence));
                 }
             }
-            _ => return Err(MesaError::WithContext("unexpected ring type").into()),
+            _ => return Err(MagmaGpuError::WithContext("unexpected ring type").into()),
         }
 
         Ok(None)

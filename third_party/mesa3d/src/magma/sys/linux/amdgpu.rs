@@ -5,11 +5,11 @@ use std::os::fd::BorrowedFd;
 use std::sync::Arc;
 
 use log::error;
-use mesa3d_util::log_status;
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaResult;
+use magma_gpu::log_status;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::Result as MagmaGpuResult;
 
 use crate::ioctl_readwrite;
 use crate::ioctl_write_ptr;
@@ -59,7 +59,7 @@ macro_rules! amdgpu_info_ioctl {
         $(#[$attr])*
         pub unsafe fn $name(fd: BorrowedFd<'_>,
                             data: *mut $ty)
-                            -> MesaResult<()> {
+                            -> MagmaGpuResult<()> {
             let mut info: drm_amdgpu_info = Default::default();
             info.query = $nr;
             info.return_size = ::std::mem::size_of::<$ty>() as u32;
@@ -127,7 +127,7 @@ struct AmdGpuBuffer {
 }
 
 impl AmdGpu {
-    pub fn new(physical_device: Arc<dyn PhysicalDevice>) -> MesaResult<AmdGpu> {
+    pub fn new(physical_device: Arc<dyn PhysicalDevice>) -> MagmaGpuResult<AmdGpu> {
         let mut mem_props: MagmaMemoryProperties = Default::default();
         let mut memory_info: drm_amdgpu_memory_info = Default::default();
 
@@ -182,13 +182,13 @@ impl AmdGpu {
 }
 
 impl GenericDevice for AmdGpu {
-    fn get_memory_properties(&self) -> MesaResult<MagmaMemoryProperties> {
+    fn get_memory_properties(&self) -> MagmaGpuResult<MagmaMemoryProperties> {
         Ok(self.mem_props.clone())
     }
 
-    fn get_memory_budget(&self, heap_idx: u32) -> MesaResult<MagmaHeapBudget> {
+    fn get_memory_budget(&self, heap_idx: u32) -> MagmaGpuResult<MagmaHeapBudget> {
         if heap_idx >= self.mem_props.memory_heap_count {
-            return Err(MesaError::WithContext("Heap Index out of bounds"));
+            return Err(MagmaGpuError::WithContext("Heap Index out of bounds"));
         }
 
         let mut vram_gtt: drm_amdgpu_info_vram_gtt = Default::default();
@@ -241,13 +241,13 @@ impl GenericDevice for AmdGpu {
                 drm_ioctl_amdgpu_info_gtt_usage(self.physical_device.as_fd().unwrap(), &mut usage)?;
             };
         } else {
-            return Err(MesaError::Unsupported);
+            return Err(MagmaGpuError::Unsupported);
         }
 
         Ok(MagmaHeapBudget { budget, usage })
     }
 
-    fn create_context(&self, _device: &Arc<dyn Device>) -> MesaResult<Arc<dyn Context>> {
+    fn create_context(&self, _device: &Arc<dyn Device>) -> MagmaGpuResult<Arc<dyn Context>> {
         let ctx = AmdGpuContext::new(self.physical_device.clone(), 0)?;
         Ok(Arc::new(ctx))
     }
@@ -256,7 +256,7 @@ impl GenericDevice for AmdGpu {
         &self,
         _device: &Arc<dyn Device>,
         create_info: &MagmaCreateBufferInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let buf = AmdGpuBuffer::new(self.physical_device.clone(), create_info, &self.mem_props)?;
         Ok(Arc::new(buf))
     }
@@ -265,7 +265,7 @@ impl GenericDevice for AmdGpu {
         &self,
         _device: &Arc<dyn Device>,
         info: MagmaImportHandleInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let gem_handle = self.physical_device.import(info.handle)?;
         let buf = AmdGpuBuffer::from_existing(
             self.physical_device.clone(),
@@ -280,7 +280,10 @@ impl Device for AmdGpu {}
 impl PlatformDevice for AmdGpu {}
 
 impl AmdGpuContext {
-    fn new(physical_device: Arc<dyn PhysicalDevice>, _priority: i32) -> MesaResult<AmdGpuContext> {
+    fn new(
+        physical_device: Arc<dyn PhysicalDevice>,
+        _priority: i32,
+    ) -> MagmaGpuResult<AmdGpuContext> {
         let mut ctx_arg = drm_amdgpu_ctx::default();
         ctx_arg.in_.op = AMDGPU_CTX_OP_ALLOC_CTX;
 
@@ -323,7 +326,7 @@ impl AmdGpuBuffer {
         physical_device: Arc<dyn PhysicalDevice>,
         create_info: &MagmaCreateBufferInfo,
         mem_props: &MagmaMemoryProperties,
-    ) -> MesaResult<AmdGpuBuffer> {
+    ) -> MagmaGpuResult<AmdGpuBuffer> {
         let mut gem_create_in: drm_amdgpu_gem_create_in = Default::default();
         let mut gem_create: drm_amdgpu_gem_create = Default::default();
 
@@ -380,7 +383,7 @@ impl AmdGpuBuffer {
         physical_device: Arc<dyn PhysicalDevice>,
         gem_handle: u32,
         size: usize,
-    ) -> MesaResult<AmdGpuBuffer> {
+    ) -> MagmaGpuResult<AmdGpuBuffer> {
         Ok(AmdGpuBuffer {
             physical_device,
             gem_handle,
@@ -390,7 +393,7 @@ impl AmdGpuBuffer {
 }
 
 impl GenericBuffer for AmdGpuBuffer {
-    fn map(&self, _buffer: &Arc<dyn Buffer>) -> MesaResult<Arc<dyn MappedRegion>> {
+    fn map(&self, _buffer: &Arc<dyn Buffer>) -> MagmaGpuResult<Arc<dyn MappedRegion>> {
         let mut gem_mmap: drm_amdgpu_gem_mmap = Default::default();
 
         // SAFETY:
@@ -407,16 +410,20 @@ impl GenericBuffer for AmdGpuBuffer {
         Ok(Arc::new(mapping))
     }
 
-    fn export(&self) -> MesaResult<MesaHandle> {
+    fn export(&self) -> MagmaGpuResult<MagmaGpuHandle> {
         self.physical_device.export(self.gem_handle)
     }
 
-    fn invalidate(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()> {
-        Err(MesaError::Unsupported)
+    fn invalidate(
+        &self,
+        _sync_flags: u64,
+        _ranges: &[MagmaMappedMemoryRange],
+    ) -> MagmaGpuResult<()> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn flush(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()> {
-        Err(MesaError::Unsupported)
+    fn flush(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MagmaGpuResult<()> {
+        Err(MagmaGpuError::Unsupported)
     }
 }
 

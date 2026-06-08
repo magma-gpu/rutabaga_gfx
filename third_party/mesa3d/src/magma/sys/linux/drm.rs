@@ -7,9 +7,9 @@ use std::os::raw::c_char;
 use std::os::raw::c_uint;
 use std::ptr::null_mut;
 
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaResult;
-use mesa3d_util::OwnedDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::Result as MagmaGpuResult;
 
 use crate::ioctl_readwrite;
 use crate::ioctl_write_ptr;
@@ -47,7 +47,7 @@ ioctl_readwrite!(
 
 ioctl_write_ptr!(drm_ioctl_gem_close, DRM_IOCTL_BASE, 0x09, drm_gem_close);
 
-pub fn get_drm_device_name(descriptor: &OwnedDescriptor) -> MesaResult<String> {
+pub fn get_drm_device_name(descriptor: &OwnedDescriptor) -> MagmaGpuResult<String> {
     let mut version = drm_version {
         version_major: 0,
         version_minor: 0,
@@ -88,5 +88,5 @@ pub fn get_drm_device_name(descriptor: &OwnedDescriptor) -> MesaResult<String> {
 
     CString::new(&name_bytes[..(version.name_len as usize)])?
         .into_string()
-        .map_err(|_| MesaError::WithContext("couldn't convert string"))
+        .map_err(|_| MagmaGpuError::WithContext("couldn't convert string"))
 }

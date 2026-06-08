@@ -5,8 +5,8 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
 
 use crate::context_common::ContextResource;
 use crate::context_common::ContextResources;
@@ -41,14 +41,14 @@ impl RutabagaContext for MagmaVirtioGpuContext {
         _resource_create_blob: ResourceCreateBlob,
         _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     fn submit_cmd(
         &mut self,
         _commands: &mut [u8],
         _fence_ids: &[u64],
-        _shareable_fences: Vec<MesaHandle>,
+        _shareable_fences: Vec<MagmaGpuHandle>,
     ) -> RutabagaResult<()> {
         Ok(())
     }
@@ -83,7 +83,7 @@ impl RutabagaContext for MagmaVirtioGpuContext {
     fn context_create_fence(
         &mut self,
         _fence: RutabagaFence,
-    ) -> RutabagaResult<Option<MesaHandle>> {
+    ) -> RutabagaResult<Option<MagmaGpuHandle>> {
         Ok(None)
     }
 

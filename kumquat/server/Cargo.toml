@@ -16,8 +16,7 @@ path = "src/main.rs"
 gfxstream = ["rutabaga_gfx/gfxstream"]
 
 [dependencies]
-mesa3d_util = { path = "../../third_party/mesa3d/src/util/rust/", version = "0.1.76" }
-mesa3d_protocols = { path = "../../third_party/mesa3d/src/virtio/protocols", version = "0.1.76" }
+magma-gpu = { path = "../../third_party/mesa3d/src/virtio/magma-gpu-rs/lib", version = "0.1.76-alpha.0" }
 rutabaga_gfx = { path = "../../", version = "0.1.76"}
 zerocopy = { version = "0.8.13", features = ["derive"] }
 log = "0.4"

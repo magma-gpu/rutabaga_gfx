@@ -3,10 +3,10 @@
 
 use std::sync::Arc;
 
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaResult;
-use virtgpu_kumquat::VirtGpuKumquat;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::Result as MagmaGpuResult;
+use magma_gpu::virtgpu_kumquat::VirtGpuKumquat;
 
 use crate::magma_defines::MagmaCreateBufferInfo;
 use crate::magma_defines::MagmaHeapBudget;
@@ -28,37 +28,37 @@ pub trait GenericPhysicalDevice {
         &self,
         physical_device: &Arc<dyn PhysicalDevice>,
         pci_info: &MagmaPciInfo,
-    ) -> MesaResult<Arc<dyn Device>>;
+    ) -> MagmaGpuResult<Arc<dyn Device>>;
 }
 
 pub trait GenericDevice {
-    fn get_memory_properties(&self) -> MesaResult<MagmaMemoryProperties>;
+    fn get_memory_properties(&self) -> MagmaGpuResult<MagmaMemoryProperties>;
 
-    fn get_memory_budget(&self, _heap_idx: u32) -> MesaResult<MagmaHeapBudget>;
+    fn get_memory_budget(&self, _heap_idx: u32) -> MagmaGpuResult<MagmaHeapBudget>;
 
-    fn create_context(&self, device: &Arc<dyn Device>) -> MesaResult<Arc<dyn Context>>;
+    fn create_context(&self, device: &Arc<dyn Device>) -> MagmaGpuResult<Arc<dyn Context>>;
 
     fn create_buffer(
         &self,
         device: &Arc<dyn Device>,
         create_info: &MagmaCreateBufferInfo,
-    ) -> MesaResult<Arc<dyn Buffer>>;
+    ) -> MagmaGpuResult<Arc<dyn Buffer>>;
 
     fn import(
         &self,
         _device: &Arc<dyn Device>,
         _info: MagmaImportHandleInfo,
-    ) -> MesaResult<Arc<dyn Buffer>>;
+    ) -> MagmaGpuResult<Arc<dyn Buffer>>;
 }
 
 pub trait GenericBuffer {
-    fn map(&self, buffer: &Arc<dyn Buffer>) -> MesaResult<Arc<dyn MappedRegion>>;
+    fn map(&self, buffer: &Arc<dyn Buffer>) -> MagmaGpuResult<Arc<dyn MappedRegion>>;
 
-    fn export(&self) -> MesaResult<MesaHandle>;
+    fn export(&self) -> MagmaGpuResult<MagmaGpuHandle>;
 
-    fn invalidate(&self, sync_flags: u64, ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()>;
+    fn invalidate(&self, sync_flags: u64, ranges: &[MagmaMappedMemoryRange]) -> MagmaGpuResult<()>;
 
-    fn flush(&self, sync_flags: u64, ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()>;
+    fn flush(&self, sync_flags: u64, ranges: &[MagmaMappedMemoryRange]) -> MagmaGpuResult<()>;
 }
 
 pub trait PhysicalDevice: PlatformPhysicalDevice + AsVirtGpu + GenericPhysicalDevice {}

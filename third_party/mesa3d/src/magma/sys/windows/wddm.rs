@@ -1,7 +1,7 @@
 // Copyright 2025 Google
 // SPDX-License-Identifier: MIT
 
-use mesa3d_util::MesaResult;
+use magma_gpu::util::Result as MagmaGpuResult;
 use std::sync::Arc;
 
 use crate::magma::MagmaPhysicalDevice;
@@ -23,7 +23,7 @@ pub trait VendorPrivateData {
     }
 }
 
-pub fn enumerate_devices() -> MesaResult<Vec<MagmaPhysicalDevice>> {
+pub fn enumerate_devices() -> MagmaGpuResult<Vec<MagmaPhysicalDevice>> {
     let mut devices: Vec<MagmaPhysicalDevice> = Vec::new();
     let adapters = d3dkmt_common::enumerate_adapters()?;
 

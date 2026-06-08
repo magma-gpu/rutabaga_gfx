@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use log::error;
 
-use mesa3d_util::log_status;
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaResult;
+use magma_gpu::log_status;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::Result as MagmaGpuResult;
 
 use crate::ioctl_readwrite;
 use crate::ioctl_write_ptr;
@@ -135,7 +135,7 @@ struct XeContext {
 fn xe_device_query<T, S>(
     physical_device: &Arc<dyn PhysicalDevice>,
     query_id: u32,
-) -> MesaResult<FlexibleArrayWrapper<T, S>>
+) -> MagmaGpuResult<FlexibleArrayWrapper<T, S>>
 where
     T: FlexibleArray<S> + Default,
 {
@@ -169,7 +169,7 @@ where
 }
 
 /// Determines and sets the graphics version of the Intel device based on its ID.
-fn determine_graphics_version(pci_device_id: u16) -> MesaResult<u32> {
+fn determine_graphics_version(pci_device_id: u16) -> MagmaGpuResult<u32> {
     let mut graphics_version = 0;
     if ADLP_IDS.contains(&pci_device_id) {
         graphics_version = 12;
@@ -198,7 +198,7 @@ fn determine_graphics_version(pci_device_id: u16) -> MesaResult<u32> {
     if graphics_version != 0 {
         Ok(graphics_version)
     } else {
-        Err(MesaError::WithContext("missing intel pci-id"))
+        Err(MagmaGpuError::WithContext("missing intel pci-id"))
     }
 }
 
@@ -214,7 +214,9 @@ struct XeMemoryInfo {
     vram_instance: u16,
 }
 
-fn xe_query_memory_regions(physical_device: &Arc<dyn PhysicalDevice>) -> MesaResult<XeMemoryInfo> {
+fn xe_query_memory_regions(
+    physical_device: &Arc<dyn PhysicalDevice>,
+) -> MagmaGpuResult<XeMemoryInfo> {
     let mut memory_info: XeMemoryInfo = Default::default();
     let query_mem_regions = xe_device_query::<drm_xe_query_mem_regions, drm_xe_mem_region>(
         physical_device,
@@ -226,7 +228,7 @@ fn xe_query_memory_regions(physical_device: &Arc<dyn PhysicalDevice>) -> MesaRes
         match region.mem_class as u32 {
             DRM_XE_MEM_REGION_CLASS_SYSMEM => {
                 if memory_info.sysmem_size != 0 {
-                    return Err(MesaError::WithContext("sysmem_size should not be set"));
+                    return Err(MagmaGpuError::WithContext("sysmem_size should not be set"));
                 }
 
                 // this should really use sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGE_SIZE) for the
@@ -237,7 +239,7 @@ fn xe_query_memory_regions(physical_device: &Arc<dyn PhysicalDevice>) -> MesaRes
             }
             DRM_XE_MEM_REGION_CLASS_VRAM => {
                 if memory_info.vram_size != 0 || memory_info.vram_cpu_visible_size != 0 {
-                    return Err(MesaError::WithContext("one vram value should be zero"));
+                    return Err(MagmaGpuError::WithContext("one vram value should be zero"));
                 }
 
                 memory_info.vram_cpu_visible_size = region.cpu_visible_size;
@@ -246,7 +248,7 @@ fn xe_query_memory_regions(physical_device: &Arc<dyn PhysicalDevice>) -> MesaRes
                 memory_info.vram_used = region.used - region.cpu_visible_used;
                 memory_info.vram_instance = region.instance;
             }
-            _ => return Err(MesaError::Unsupported),
+            _ => return Err(MagmaGpuError::Unsupported),
         }
     }
 
@@ -257,7 +259,7 @@ impl Xe {
     pub fn new(
         physical_device: Arc<dyn PhysicalDevice>,
         pci_info: &MagmaPciInfo,
-    ) -> MesaResult<Xe> {
+    ) -> MagmaGpuResult<Xe> {
         let _graphics_version = determine_graphics_version(pci_info.device_id)?;
         let mut mem_props: MagmaMemoryProperties = Default::default();
 
@@ -317,13 +319,13 @@ impl Xe {
 }
 
 impl GenericDevice for Xe {
-    fn get_memory_properties(&self) -> MesaResult<MagmaMemoryProperties> {
+    fn get_memory_properties(&self) -> MagmaGpuResult<MagmaMemoryProperties> {
         Ok(self.mem_props.clone())
     }
 
-    fn get_memory_budget(&self, heap_idx: u32) -> MesaResult<MagmaHeapBudget> {
+    fn get_memory_budget(&self, heap_idx: u32) -> MagmaGpuResult<MagmaHeapBudget> {
         if heap_idx >= self.mem_props.memory_heap_count {
-            return Err(MesaError::WithContext("Heap Index out of bounds"));
+            return Err(MagmaGpuError::WithContext("Heap Index out of bounds"));
         }
 
         let memory_info = xe_query_memory_regions(&self.physical_device)?;
@@ -339,13 +341,13 @@ impl GenericDevice for Xe {
         } else if heap.is_cpu_visible() {
             (memory_info.sysmem_size, memory_info.sysmem_used)
         } else {
-            return Err(MesaError::Unsupported);
+            return Err(MagmaGpuError::Unsupported);
         };
 
         Ok(MagmaHeapBudget { budget, usage })
     }
 
-    fn create_context(&self, _device: &Arc<dyn Device>) -> MesaResult<Arc<dyn Context>> {
+    fn create_context(&self, _device: &Arc<dyn Device>) -> MagmaGpuResult<Arc<dyn Context>> {
         let ctx = XeContext::new(self.physical_device.clone(), 0)?;
         Ok(Arc::new(ctx))
     }
@@ -354,7 +356,7 @@ impl GenericDevice for Xe {
         &self,
         _device: &Arc<dyn Device>,
         create_info: &MagmaCreateBufferInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let buf = XeBuffer::new(
             self.physical_device.clone(),
             create_info,
@@ -369,7 +371,7 @@ impl GenericDevice for Xe {
         &self,
         _device: &Arc<dyn Device>,
         info: MagmaImportHandleInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let gem_handle = self.physical_device.import(info.handle)?;
         let buf = XeBuffer::from_existing(
             self.physical_device.clone(),
@@ -384,7 +386,7 @@ impl PlatformDevice for Xe {}
 impl Device for Xe {}
 
 impl XeContext {
-    fn new(physical_device: Arc<dyn PhysicalDevice>, _priority: i32) -> MesaResult<XeContext> {
+    fn new(physical_device: Arc<dyn PhysicalDevice>, _priority: i32) -> MagmaGpuResult<XeContext> {
         let mut vm_create = drm_xe_vm_create {
             flags: DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE,
             ..Default::default()
@@ -431,7 +433,7 @@ impl XeBuffer {
         mem_props: &MagmaMemoryProperties,
         sysmem_instance: u16,
         vram_instance: u16,
-    ) -> MesaResult<XeBuffer> {
+    ) -> MagmaGpuResult<XeBuffer> {
         let mut gem_create: drm_xe_gem_create = Default::default();
         let mut pxp_ext: drm_xe_ext_set_property = Default::default();
 
@@ -481,7 +483,7 @@ impl XeBuffer {
         physical_device: Arc<dyn PhysicalDevice>,
         gem_handle: u32,
         size: usize,
-    ) -> MesaResult<XeBuffer> {
+    ) -> MagmaGpuResult<XeBuffer> {
         Ok(XeBuffer {
             physical_device,
             gem_handle,
@@ -491,7 +493,7 @@ impl XeBuffer {
 }
 
 impl GenericBuffer for XeBuffer {
-    fn map(&self, _buffer: &Arc<dyn Buffer>) -> MesaResult<Arc<dyn MappedRegion>> {
+    fn map(&self, _buffer: &Arc<dyn Buffer>) -> MagmaGpuResult<Arc<dyn MappedRegion>> {
         let mut xe_offset: drm_xe_gem_mmap_offset = Default::default();
 
         // SAFETY:
@@ -508,16 +510,20 @@ impl GenericBuffer for XeBuffer {
         Ok(Arc::new(mapping))
     }
 
-    fn export(&self) -> MesaResult<MesaHandle> {
+    fn export(&self) -> MagmaGpuResult<MagmaGpuHandle> {
         self.physical_device.export(self.gem_handle)
     }
 
-    fn invalidate(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()> {
-        Err(MesaError::Unsupported)
+    fn invalidate(
+        &self,
+        _sync_flags: u64,
+        _ranges: &[MagmaMappedMemoryRange],
+    ) -> MagmaGpuResult<()> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn flush(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()> {
-        Err(MesaError::Unsupported)
+    fn flush(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MagmaGpuResult<()> {
+        Err(MagmaGpuError::Unsupported)
     }
 }
 

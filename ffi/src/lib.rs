@@ -44,7 +44,7 @@ use rutabaga_gfx::RutabagaHandle;
 use rutabaga_gfx::RutabagaImportData;
 use rutabaga_gfx::RutabagaIntoRawDescriptor;
 use rutabaga_gfx::RutabagaIovec;
-use rutabaga_gfx::RutabagaMesaHandle;
+use rutabaga_gfx::RutabagaMagmaHandle;
 use rutabaga_gfx::RutabagaPath;
 use rutabaga_gfx::RutabagaRawDescriptor;
 use rutabaga_gfx::RutabagaResult;
@@ -432,7 +432,7 @@ pub unsafe extern "C" fn rutabaga_resource_import(
     import_data: &rutabaga_import_data,
 ) -> i32 {
     catch_unwind(AssertUnwindSafe(|| {
-        let internal_handle = RutabagaMesaHandle {
+        let internal_handle = RutabagaMagmaHandle {
             os_handle: RutabagaDescriptor::from_raw_descriptor(
                 import_handle.os_handle as RutabagaRawDescriptor,
             ),
@@ -586,7 +586,7 @@ pub unsafe extern "C" fn rutabaga_resource_create_blob(
         // Windows.
         if let Some(hnd) = handle {
             handle_opt = Some(
-                RutabagaMesaHandle {
+                RutabagaMagmaHandle {
                     os_handle: RutabagaDescriptor::from_raw_descriptor(
                         hnd.os_handle as RutabagaRawDescriptor,
                     ),
@@ -624,7 +624,7 @@ pub extern "C" fn rutabaga_resource_export_blob(
     catch_unwind(AssertUnwindSafe(|| {
         let result = ptr.export_blob(resource_id);
         let hnd = return_on_error!(result);
-        let hnd = return_on_error!(RutabagaMesaHandle::try_from(hnd));
+        let hnd = return_on_error!(RutabagaMagmaHandle::try_from(hnd));
 
         handle.handle_type = hnd.handle_type;
         handle.os_handle = hnd.os_handle.into_raw_descriptor() as i64;

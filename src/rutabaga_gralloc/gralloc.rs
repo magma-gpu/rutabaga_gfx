@@ -9,10 +9,10 @@ use std::collections::BTreeMap as Map;
 
 #[cfg(feature = "vulkano")]
 use log::error;
-use mesa3d_util::round_up_to_page_size;
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
+use magma_gpu::util::round_up_to_page_size;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
 
 use crate::rutabaga_gralloc::formats::*;
 #[cfg(feature = "gbm")]
@@ -212,7 +212,7 @@ pub trait Gralloc: Send {
     /// This function must return true if the implementation can:
     ///
     ///   (1) allocate GPU memory and
-    ///   (2) {export to}/{import from} into a OS-specific MesaHandle.
+    ///   (2) {export to}/{import from} into a OS-specific MagmaGpuHandle.
     fn supports_external_gpu_memory(&self) -> bool;
 
     /// This function must return true the implementation can {export to}/{import from} a Linux
@@ -226,19 +226,19 @@ pub trait Gralloc: Send {
         info: ImageAllocationInfo,
     ) -> RutabagaResult<ImageMemoryRequirements>;
 
-    /// Implementations must allocate memory given the requirements and return a MesaHandle
+    /// Implementations must allocate memory given the requirements and return a MagmaGpuHandle
     /// upon success.
-    fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MesaHandle>;
+    fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MagmaGpuHandle>;
 
     /// Implementations must import the given `handle` and return a mapping, suitable for use with
     /// KVM and other hypervisors.  This is optional and only works with the Vulkano backend.
     fn import_and_map(
         &mut self,
-        _handle: MesaHandle,
+        _handle: MagmaGpuHandle,
         _vulkan_info: VulkanInfo,
         _size: u64,
     ) -> RutabagaResult<Box<dyn MappedRegion>> {
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 }
 
@@ -362,7 +362,7 @@ impl RutabagaGralloc {
     }
 
     /// Allocates memory given the particular `reqs` upon success.
-    pub fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MesaHandle> {
+    pub fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MagmaGpuHandle> {
         let backend = self.determine_optimal_backend(reqs.info);
 
         let gralloc = self
@@ -377,7 +377,7 @@ impl RutabagaGralloc {
     /// success.  Should not be used with minigbm or system gralloc backends.
     pub fn import_and_map(
         &mut self,
-        handle: MesaHandle,
+        handle: MagmaGpuHandle,
         vulkan_info: VulkanInfo,
         size: u64,
     ) -> RutabagaResult<Box<dyn MappedRegion>> {

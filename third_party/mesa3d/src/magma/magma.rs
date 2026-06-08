@@ -3,13 +3,13 @@
 
 //! Magma: Rust implementation of Fuchsia's driver model.
 //!
-//! Design found at <https://fuchsia.dev/fuchsia-third_party/mesa3d/src/development/graphics/magma/concepts/design>.
+//! Design found at <https://fuchsia.dev/fuchsia-third_party/magma_gpu/src/development/graphics/magma/concepts/design>.
 
 use std::sync::Arc;
 
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::OwnedDescriptor;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::OwnedDescriptor;
 
 use crate::magma_defines::MagmaCreateBufferInfo;
 use crate::magma_defines::MagmaError;
@@ -153,7 +153,7 @@ impl MagmaBuffer {
         Ok(region)
     }
 
-    pub fn export(&self) -> MagmaResult<MesaHandle> {
+    pub fn export(&self) -> MagmaResult<MagmaGpuHandle> {
         let handle = self.buffer.export()?;
         Ok(handle)
     }

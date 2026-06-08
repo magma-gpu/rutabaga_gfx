@@ -5,26 +5,28 @@ use std::mem::size_of;
 use std::sync::Arc;
 
 use log::error;
-use mesa3d_util::AsBorrowedDescriptor;
-use mesa3d_util::AsRawDescriptor;
-use mesa3d_util::DescriptorType;
-use mesa3d_util::Event;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::WaitContext;
-use mesa3d_util::WaitTimeout;
-use mesa3d_util::WritePipe;
-use mesa3d_util::MESA_HANDLE_TYPE_SIGNAL_EVENT_FD;
+use magma_gpu::util::AsBorrowedDescriptor;
+use magma_gpu::util::AsRawDescriptor;
+use magma_gpu::util::DescriptorType;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Event;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::WaitContext;
+use magma_gpu::util::WaitTimeout;
+use magma_gpu::util::WritePipe;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD;
 
-use crate::cross_domain::common::CROSS_DOMAIN_CONTEXT_CHANNEL_ID;
-use crate::cross_domain::common::CROSS_DOMAIN_KILL_ID;
-use crate::cross_domain::common::CROSS_DOMAIN_RESAMPLE_ID;
+use crate::cross_domain::common::add_item;
 use crate::cross_domain::common::CrossDomainItem;
 use crate::cross_domain::common::CrossDomainItemState;
 use crate::cross_domain::common::CrossDomainJob;
 use crate::cross_domain::common::CrossDomainState;
 use crate::cross_domain::common::RingWrite;
-use crate::cross_domain::common::add_item;
+use crate::cross_domain::common::CROSS_DOMAIN_CONTEXT_CHANNEL_ID;
+use crate::cross_domain::common::CROSS_DOMAIN_KILL_ID;
+use crate::cross_domain::common::CROSS_DOMAIN_RESAMPLE_ID;
+use crate::cross_domain::cross_domain_protocol::CrossDomainReadWrite;
+use crate::cross_domain::cross_domain_protocol::CrossDomainSendReceive;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_ATOMIC_MEMORY_SENTINEL_START;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_CMD_READ;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_CMD_RECEIVE;
@@ -33,8 +35,6 @@ use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_ID_TYPE_SOCKET;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_ID_TYPE_WRITE_PIPE;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_PIPE_READ_START;
-use crate::cross_domain::cross_domain_protocol::CrossDomainReadWrite;
-use crate::cross_domain::cross_domain_protocol::CrossDomainSendReceive;
 use crate::rutabaga_utils::RutabagaError;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaFenceHandler;
@@ -117,7 +117,7 @@ impl CrossDomainWorker {
                     && id < CROSS_DOMAIN_PIPE_READ_START as u64 =>
                 {
                     let memory_watcher_id: u32 =
-                        id.try_into().map_err(MesaError::TryFromIntError)?;
+                        id.try_into().map_err(MagmaGpuError::TryFromIntError)?;
                     let mut manager = self.state.sentinel_manager.lock().unwrap();
                     let mut remove = false;
                     let mut fence_opt = Some(fence);
@@ -151,7 +151,7 @@ impl CrossDomainWorker {
                     let item_id: u32 = event
                         .connection_id
                         .try_into()
-                        .map_err(MesaError::TryFromIntError)?;
+                        .map_err(MagmaGpuError::TryFromIntError)?;
                     let bytes_read;
 
                     cmd_read.hdr.cmd = CROSS_DOMAIN_CMD_READ;
@@ -209,8 +209,11 @@ impl CrossDomainWorker {
 
         let num_files = files.len();
         cmd_receive.hdr.cmd = CROSS_DOMAIN_CMD_RECEIVE;
-        cmd_receive.num_identifiers = files.len().try_into().map_err(MesaError::TryFromIntError)?;
-        cmd_receive.opaque_data_size = len.try_into().map_err(MesaError::TryFromIntError)?;
+        cmd_receive.num_identifiers = files
+            .len()
+            .try_into()
+            .map_err(MagmaGpuError::TryFromIntError)?;
+        cmd_receive.opaque_data_size = len.try_into().map_err(MagmaGpuError::TryFromIntError)?;
 
         let iter = cmd_receive
             .identifiers
@@ -226,15 +229,15 @@ impl CrossDomainWorker {
                 // Determine the descriptor type using the platform abstraction
                 let desc_type = file
                     .determine_type()
-                    .map_err(|e| RutabagaError::MesaError(e.into()))?;
+                    .map_err(|e| RutabagaError::MagmaGpuError(e.into()))?;
 
                 match desc_type {
                     DescriptorType::Event => {
                         *identifier_type = CROSS_DOMAIN_ID_TYPE_EVENT;
                         *identifier_size = 0;
-                        let event = Event::try_from(MesaHandle {
+                        let event = Event::try_from(MagmaGpuHandle {
                             os_handle: file,
-                            handle_type: MESA_HANDLE_TYPE_SIGNAL_EVENT_FD,
+                            handle_type: MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD,
                         })?;
                         *identifier = add_item(&self.item_state, CrossDomainItem::Event(event));
                     }
@@ -242,7 +245,7 @@ impl CrossDomainWorker {
                         *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
                         *identifier_size = size;
 
-                        let mesa_handle = MesaHandle {
+                        let mesa_handle = MagmaGpuHandle {
                             os_handle: file,
                             handle_type,
                         };

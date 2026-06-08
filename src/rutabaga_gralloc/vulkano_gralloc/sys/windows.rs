@@ -4,10 +4,10 @@
 
 use std::sync::Arc;
 
-use mesa3d_util::AsRawDescriptor;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_WIN32;
+use magma_gpu::util::AsRawDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_WIN32;
 use vulkano::device::Device;
 use vulkano::device::DeviceExtensions;
 use vulkano::memory::DeviceMemory;
@@ -38,12 +38,12 @@ impl VulkanoGralloc {
     pub(crate) unsafe fn import_memory(
         device: Arc<Device>,
         allocate_info: MemoryAllocateInfo,
-        handle: MesaHandle,
+        handle: MagmaGpuHandle,
     ) -> RutabagaResult<DeviceMemory> {
         let import_info = MemoryImportInfo::Win32 {
             handle_type: match handle.handle_type {
-                MESA_HANDLE_TYPE_MEM_OPAQUE_WIN32 => ExternalMemoryHandleType::OpaqueWin32,
-                _ => return Err(MesaError::InvalidMesaHandle.into()),
+                MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_WIN32 => ExternalMemoryHandleType::OpaqueWin32,
+                _ => return Err(MagmaGpuError::InvalidMagmaHandle.into()),
             },
             handle: handle.os_handle.as_raw_descriptor(),
         };

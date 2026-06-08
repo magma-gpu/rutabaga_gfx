@@ -10,7 +10,7 @@ use std::cmp::Ordering;
 use std::io::IoSlice;
 use std::io::IoSliceMut;
 
-use mesa3d_util::MesaError;
+use magma_gpu::util::Error as MagmaGpuError;
 
 use crate::handle::RutabagaHandle;
 use crate::rutabaga_core::Rutabaga2DInfo;
@@ -215,7 +215,7 @@ impl RutabagaComponent for Rutabaga2D {
         _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         if resource_create_blob.blob_mem != RUTABAGA_BLOB_MEM_GUEST {
-            return Err(MesaError::Unsupported.into());
+            return Err(MagmaGpuError::Unsupported.into());
         }
 
         let info_2d = Rutabaga2DInfo {
@@ -254,7 +254,7 @@ impl RutabagaComponent for Rutabaga2D {
         }
 
         if buf.is_some() {
-            return Err(MesaError::Unsupported.into());
+            return Err(MagmaGpuError::Unsupported.into());
         }
 
         let info_2d = resource
@@ -316,7 +316,7 @@ impl RutabagaComponent for Rutabaga2D {
         let src_offset = 0;
         let dst_offset = 0;
 
-        let dst_slice = buf.ok_or(MesaError::WithContext(
+        let dst_slice = buf.ok_or(MagmaGpuError::WithContext(
             "need a destination slice for transfer read",
         ))?;
 

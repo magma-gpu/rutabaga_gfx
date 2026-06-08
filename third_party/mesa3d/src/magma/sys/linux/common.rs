@@ -12,16 +12,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use log::error;
-use mesa3d_util::log_status;
-use mesa3d_util::AsRawDescriptor;
-use mesa3d_util::FromRawDescriptor;
-use mesa3d_util::MemoryMapping;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaResult;
-use mesa3d_util::OwnedDescriptor;
-use mesa3d_util::RawDescriptor;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
+use magma_gpu::log_status;
+use magma_gpu::util::AsRawDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::FromRawDescriptor;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MemoryMapping;
+use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::RawDescriptor;
+use magma_gpu::util::Result as MagmaGpuResult;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
 
 use rustix::fs::major;
 use rustix::fs::minor;
@@ -84,16 +84,16 @@ pub trait PlatformPhysicalDevice {
         -1
     }
 
-    fn cpu_map(&self, _offset: u64, _size: usize) -> MesaResult<MemoryMapping> {
-        Err(MesaError::Unsupported)
+    fn cpu_map(&self, _offset: u64, _size: usize) -> MagmaGpuResult<MemoryMapping> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn export(&self, _gem_handle: u32) -> MesaResult<MesaHandle> {
-        Err(MesaError::Unsupported)
+    fn export(&self, _gem_handle: u32) -> MagmaGpuResult<MagmaGpuHandle> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn import(&self, _handle: MesaHandle) -> MesaResult<u32> {
-        Err(MesaError::Unsupported)
+    fn import(&self, _handle: MagmaGpuHandle) -> MagmaGpuResult<u32> {
+        Err(MagmaGpuError::Unsupported)
     }
 
     fn close(&self, _gem_handle: u32) {}
@@ -104,7 +104,7 @@ impl GenericPhysicalDevice for LinuxPhysicalDevice {
         &self,
         physical_device: &Arc<dyn PhysicalDevice>,
         pci_info: &MagmaPciInfo,
-    ) -> MesaResult<Arc<dyn Device>> {
+    ) -> MagmaGpuResult<Arc<dyn Device>> {
         let device: Arc<dyn Device> = match pci_info.vendor_id {
             MAGMA_VENDOR_ID_AMD => Arc::new(AmdGpu::new(physical_device.clone())?),
             MAGMA_VENDOR_ID_QCOM => Arc::new(Msm::new(physical_device.clone())),
@@ -125,7 +125,7 @@ impl GenericPhysicalDevice for LinuxPhysicalDevice {
 pub trait PlatformDevice {}
 
 impl LinuxPhysicalDevice {
-    pub fn new(device_node: PathBuf) -> MesaResult<LinuxPhysicalDevice> {
+    pub fn new(device_node: PathBuf) -> MagmaGpuResult<LinuxPhysicalDevice> {
         let descriptor: OwnedDescriptor = OpenOptions::new()
             .read(true)
             .write(true)
@@ -149,11 +149,11 @@ impl PlatformPhysicalDevice for LinuxPhysicalDevice {
         self.descriptor.as_raw_descriptor()
     }
 
-    fn cpu_map(&self, offset: u64, size: usize) -> MesaResult<MemoryMapping> {
+    fn cpu_map(&self, offset: u64, size: usize) -> MagmaGpuResult<MemoryMapping> {
         MemoryMapping::from_offset(&self.descriptor, offset.try_into()?, size)
     }
 
-    fn export(&self, gem_handle: u32) -> MesaResult<MesaHandle> {
+    fn export(&self, gem_handle: u32) -> MagmaGpuResult<MagmaGpuHandle> {
         let mut arg: drm_prime_handle = drm_prime_handle {
             handle: gem_handle,
             flags: (O_CLOEXEC | O_RDWR) as u32,
@@ -173,13 +173,13 @@ impl PlatformPhysicalDevice for LinuxPhysicalDevice {
         // `fd` is valid after a successful PRIME_HANDLE_TO_HANDLE syscall.
         let descriptor = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
 
-        Ok(MesaHandle {
+        Ok(MagmaGpuHandle {
             os_handle: descriptor,
-            handle_type: MESA_HANDLE_TYPE_MEM_DMABUF,
+            handle_type: MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF,
         })
     }
 
-    fn import(&self, handle: MesaHandle) -> MesaResult<u32> {
+    fn import(&self, handle: MagmaGpuHandle) -> MagmaGpuResult<u32> {
         let mut arg: drm_prime_handle = drm_prime_handle {
             ..Default::default()
         };
@@ -217,12 +217,12 @@ impl AsVirtGpu for LinuxPhysicalDevice {}
 impl PhysicalDevice for LinuxPhysicalDevice {}
 
 // Helper function to parse hexadecimal string to u16
-fn parse_hex_u16(s: &str) -> MesaResult<u16> {
+fn parse_hex_u16(s: &str) -> MagmaGpuResult<u16> {
     let valid_str = s.trim().strip_prefix("0x").unwrap_or(s.trim());
     Ok(u16::from_str_radix(valid_str, 16)?)
 }
 
-pub fn enumerate_devices() -> MesaResult<Vec<MagmaPhysicalDevice>> {
+pub fn enumerate_devices() -> MagmaGpuResult<Vec<MagmaPhysicalDevice>> {
     let mut devices: Vec<MagmaPhysicalDevice> = Vec::new();
     let dir_fd = open(
         DRM_DIR_NAME,

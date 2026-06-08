@@ -32,18 +32,18 @@ use log::info;
 use log::log;
 use log::warn;
 use log::Level;
-use mesa3d_util::FromRawDescriptor;
-use mesa3d_util::IntoRawDescriptor;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaMapping;
-use mesa3d_util::OwnedDescriptor;
-use mesa3d_util::RawDescriptor;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_DMABUF;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_OPAQUE_FD;
-use mesa3d_util::MESA_HANDLE_TYPE_MEM_SHM;
+use magma_gpu::util::FromRawDescriptor;
+use magma_gpu::util::IntoRawDescriptor;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MesaMapping;
+use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::RawDescriptor;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 #[cfg(virgl_renderer_unstable)]
-use mesa3d_util::MESA_HANDLE_TYPE_SIGNAL_SYNC_FD;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_SIGNAL_SYNC_FD;
 
 use crate::generated::virgl_renderer_bindings::*;
 use crate::handle::RutabagaHandle;
@@ -103,7 +103,7 @@ fn dup(rd: RawDescriptor) -> RutabagaResult<OwnedDescriptor> {
 
     // We have to clone rd because we have no guarantee ownership was transferred (rd is
     // borrowed).
-    Ok(rd_as_safe_desc.try_clone().map_err(MesaError::IoError)?)
+    Ok(rd_as_safe_desc.try_clone().map_err(MagmaGpuError::IoError)?)
 }
 
 /// The virtio-gpu backend state tracker which supports accelerated rendering.
@@ -120,11 +120,11 @@ fn import_resource(resource: &mut RutabagaResource) -> RutabagaResult<()> {
 
     if let Some(mesa_handle) = resource.handle.as_ref().and_then(|h| h.as_mesa_handle()) {
         #[cfg(target_os = "linux")]
-        if mesa_handle.handle_type == MESA_HANDLE_TYPE_MEM_DMABUF {
+        if mesa_handle.handle_type == MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF {
             let dmabuf_fd = mesa_handle
                 .os_handle
                 .try_clone()
-                .map_err(MesaError::IoError)?
+                .map_err(MagmaGpuError::IoError)?
                 .into_raw_descriptor();
 
             // SAFETY:
@@ -164,11 +164,11 @@ impl RutabagaContext for VirglRendererContext {
         &mut self,
         commands: &mut [u8],
         fence_ids: &[u64],
-        _shareable_fences: Vec<MesaHandle>,
+        _shareable_fences: Vec<MagmaGpuHandle>,
     ) -> RutabagaResult<()> {
         #[cfg(not(virgl_renderer_unstable))]
         if !fence_ids.is_empty() {
-            return Err(MesaError::Unsupported.into());
+            return Err(MagmaGpuError::Unsupported.into());
         }
         if commands.len() % size_of::<u32>() != 0 {
             return Err(RutabagaError::InvalidCommandSize(commands.len()));
@@ -228,7 +228,7 @@ impl RutabagaContext for VirglRendererContext {
         RutabagaComponentType::VirglRenderer
     }
 
-    fn context_create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<Option<MesaHandle>> {
+    fn context_create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<Option<MagmaGpuHandle>> {
         // RutabagaFence::flags are not compatible with virglrenderer's fencing API and currently
         // virglrenderer context's assume all fences on a single timeline are MERGEABLE, and enforce
         // this assumption.
@@ -490,7 +490,7 @@ impl VirglRenderer {
     fn query(&self, resource_id: u32) -> RutabagaResult<Resource3DInfo> {
         let query = export_query(resource_id)?;
         if query.out_num_fds == 0 {
-            return Err(MesaError::Unsupported.into());
+            return Err(MagmaGpuError::Unsupported.into());
         }
 
         // virglrenderer unfortunately doesn't return the width or height, so map to zero.
@@ -519,16 +519,16 @@ impl VirglRenderer {
         let handle = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
 
         let handle_type = match fd_type {
-            VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF => MESA_HANDLE_TYPE_MEM_DMABUF,
-            VIRGL_RENDERER_BLOB_FD_TYPE_SHM => MESA_HANDLE_TYPE_MEM_SHM,
-            VIRGL_RENDERER_BLOB_FD_TYPE_OPAQUE => MESA_HANDLE_TYPE_MEM_OPAQUE_FD,
+            VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF => MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF,
+            VIRGL_RENDERER_BLOB_FD_TYPE_SHM => MAGMA_GPU_HANDLE_TYPE_MEM_SHM,
+            VIRGL_RENDERER_BLOB_FD_TYPE_OPAQUE => MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD,
             _ => {
-                return Err(MesaError::Unsupported.into());
+                return Err(MagmaGpuError::Unsupported.into());
             }
         };
 
         Ok(Arc::new(
-            MesaHandle {
+            MagmaGpuHandle {
                 os_handle: handle,
                 handle_type,
             }
@@ -666,9 +666,9 @@ impl RutabagaComponent for VirglRenderer {
                     let owned_fd = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
 
                     resource_handle = Some(Arc::new(
-                        MesaHandle {
+                        MagmaGpuHandle {
                             os_handle: owned_fd,
-                            handle_type: MESA_HANDLE_TYPE_MEM_DMABUF,
+                            handle_type: MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF,
                         }
                         .into(),
                     ));
@@ -748,7 +748,7 @@ impl RutabagaComponent for VirglRenderer {
         }
 
         if buf.is_some() {
-            return Err(MesaError::Unsupported.into());
+            return Err(MagmaGpuError::Unsupported.into());
         }
 
         let mut transfer_box = VirglBox {
@@ -897,11 +897,11 @@ impl RutabagaComponent for VirglRenderer {
                 Ok(())
             } else {
                 // virgl_renderer_resource_map_fixed requires a fixed address
-                Err(MesaError::Unsupported.into())
+                Err(MagmaGpuError::Unsupported.into())
             }
         }
         #[cfg(not(virgl_renderer_unstable))]
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     fn map(&self, resource_id: u32) -> RutabagaResult<MesaMapping> {
@@ -928,7 +928,7 @@ impl RutabagaComponent for VirglRenderer {
     }
 
     #[allow(unused_variables)]
-    fn export_fence(&self, fence_id: u64) -> RutabagaResult<MesaHandle> {
+    fn export_fence(&self, fence_id: u64) -> RutabagaResult<MagmaGpuHandle> {
         #[cfg(virgl_renderer_unstable)]
         {
             let mut fd: i32 = 0;
@@ -941,13 +941,13 @@ impl RutabagaComponent for VirglRenderer {
             // Safe because the FD was just returned by a successful virglrenderer call so it must
             // be valid and owned by us.
             let fence = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
-            Ok(MesaHandle {
+            Ok(MagmaGpuHandle {
                 os_handle: fence,
-                handle_type: MESA_HANDLE_TYPE_SIGNAL_SYNC_FD,
+                handle_type: MAGMA_GPU_HANDLE_TYPE_SIGNAL_SYNC_FD,
             })
         }
         #[cfg(not(virgl_renderer_unstable))]
-        Err(MesaError::Unsupported.into())
+        Err(MagmaGpuError::Unsupported.into())
     }
 
     #[allow(unused_variables)]

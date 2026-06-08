@@ -7,7 +7,7 @@ dep_windows_sys = null_dep
 if host_machine.system() == 'linux' or host_machine.system() == 'android'
   drm_bindgen = rust.bindgen(
     input : drm_h,
-    output : 'mesa3d_magma_drm_bindgen.rs',
+    output : 'magma_gpu_magma_drm_bindgen.rs',
     include_directories : [inc_include],
     args : [
       '--with-derive-default',
@@ -22,7 +22,7 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
 
   amdgpu_bindgen = rust.bindgen(
     input : amdgpu_drm_h,
-    output : 'mesa3d_magma_amdgpu_bindgen.rs',
+    output : 'magma_gpu_magma_amdgpu_bindgen.rs',
     include_directories : [inc_include],
     args : [
       '--with-derive-default',
@@ -37,7 +37,7 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
 
   msm_bindgen = rust.bindgen(
     input : msm_drm_h,
-    output : 'mesa3d_magma_msm_bindgen.rs',
+    output : 'magma_gpu_magma_msm_bindgen.rs',
     include_directories : [inc_include],
     args : [
       '--with-derive-default',
@@ -52,7 +52,7 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
 
   virtgpu_bindgen = rust.bindgen(
     input : virtgpu_drm_h,
-    output : 'mesa3d_magma_virtgpu_bindgen.rs',
+    output : 'magma_gpu_magma_virtgpu_bindgen.rs',
     include_directories : [inc_include],
     args : [
       '--with-derive-default',
@@ -67,7 +67,7 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
 
   xe_bindgen = rust.bindgen(
     input : xe_drm_h,
-    output : 'mesa3d_magma_xe_bindgen.rs',
+    output : 'magma_gpu_magma_xe_bindgen.rs',
     include_directories : [inc_include],
     args : [
       '--with-derive-default',
@@ -82,7 +82,7 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
 
   i915_bindgen = rust.bindgen(
     input : i915_drm_h,
-    output : 'mesa3d_magma_i915_bindgen.rs',
+    output : 'magma_gpu_magma_i915_bindgen.rs',
     include_directories : [inc_include],
     args : [
       '--with-derive-default',
@@ -96,42 +96,42 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
   )
 
   drm_bindgen_gen = static_library(
-    'mesa3d_magma_drm_bindgen',
+    'magma_gpu_magma_drm_bindgen',
     drm_bindgen,
     gnu_symbol_visibility : 'hidden',
     rust_abi : 'rust',
   )
 
   amdgpu_bindgen_gen = static_library(
-    'mesa3d_magma_amdgpu_bindgen',
+    'magma_gpu_magma_amdgpu_bindgen',
     amdgpu_bindgen,
     gnu_symbol_visibility : 'hidden',
     rust_abi : 'rust',
   )
 
   msm_bindgen_gen = static_library(
-    'mesa3d_magma_msm_bindgen',
+    'magma_gpu_magma_msm_bindgen',
     msm_bindgen,
     gnu_symbol_visibility : 'hidden',
     rust_abi : 'rust',
   )
 
   virtgpu_bindgen_gen = static_library(
-    'mesa3d_magma_virtgpu_bindgen',
+    'magma_gpu_magma_virtgpu_bindgen',
     virtgpu_bindgen,
     gnu_symbol_visibility : 'hidden',
     rust_abi : 'rust',
   )
 
   i915_bindgen_gen = static_library(
-    'mesa3d_magma_i915_bindgen',
+    'magma_gpu_magma_i915_bindgen',
     i915_bindgen,
     gnu_symbol_visibility : 'hidden',
     rust_abi : 'rust',
   )
 
   xe_bindgen_gen = static_library(
-    'mesa3d_magma_xe_bindgen',
+    'magma_gpu_magma_xe_bindgen',
     xe_bindgen,
     gnu_symbol_visibility : 'hidden',
     rust_abi : 'rust',
@@ -152,12 +152,11 @@ magma_args = []
 magma_args += ['--cfg', 'avoid_cargo']
 
 libmesa_magma = static_library(
-  'mesa3d_magma',
+  'magma_gpu_magma',
   'lib.rs',
   gnu_symbol_visibility : 'hidden',
   rust_abi : 'rust',
   rust_args: magma_args,
-  link_with: [magma_generated_libs, libmesa_rust_util, libmesa_protocols,
-              libvirtgpu_kumquat],
-  dependencies: [dep_mesa3d_util, dep_windows_sys]
+  link_with: [magma_generated_libs, libmagma_gpu_rs],
+  dependencies: [dep_magma_gpu_rs, dep_windows_sys]
 )

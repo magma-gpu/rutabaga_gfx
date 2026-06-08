@@ -3,9 +3,9 @@
 
 use std::sync::Arc;
 
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaResult;
-use virtgpu_kumquat::VirtGpuKumquat;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Result as MagmaGpuResult;
+use magma_gpu::virtgpu_kumquat::VirtGpuKumquat;
 
 use crate::magma::MagmaPhysicalDevice;
 use crate::magma_defines::MagmaCreateBufferInfo;
@@ -28,7 +28,7 @@ pub struct MagmaKumquat {
 }
 
 impl MagmaKumquat {
-    pub fn new() -> MesaResult<MagmaKumquat> {
+    pub fn new() -> MagmaGpuResult<MagmaKumquat> {
         Ok(MagmaKumquat {
             virtgpu: VirtGpuKumquat::new("/tmp/kumquat-gpu-0")?,
         })
@@ -49,43 +49,43 @@ impl GenericPhysicalDevice for MagmaKumquat {
         &self,
         physical_device: &Arc<dyn PhysicalDevice>,
         _pci_info: &MagmaPciInfo,
-    ) -> MesaResult<Arc<dyn Device>> {
+    ) -> MagmaGpuResult<Arc<dyn Device>> {
         let _virtgpu = physical_device.as_virtgpu().unwrap();
-        Err(MesaError::Unsupported)
+        Err(MagmaGpuError::Unsupported)
     }
 }
 
 impl GenericDevice for MagmaKumquat {
-    fn get_memory_properties(&self) -> MesaResult<MagmaMemoryProperties> {
-        Err(MesaError::Unsupported)
+    fn get_memory_properties(&self) -> MagmaGpuResult<MagmaMemoryProperties> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn get_memory_budget(&self, _heap_idx: u32) -> MesaResult<MagmaHeapBudget> {
-        Err(MesaError::Unsupported)
+    fn get_memory_budget(&self, _heap_idx: u32) -> MagmaGpuResult<MagmaHeapBudget> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn create_context(&self, _device: &Arc<dyn Device>) -> MesaResult<Arc<dyn Context>> {
-        Err(MesaError::Unsupported)
+    fn create_context(&self, _device: &Arc<dyn Device>) -> MagmaGpuResult<Arc<dyn Context>> {
+        Err(MagmaGpuError::Unsupported)
     }
 
     fn create_buffer(
         &self,
         _device: &Arc<dyn Device>,
         _create_info: &MagmaCreateBufferInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
-        Err(MesaError::Unsupported)
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
+        Err(MagmaGpuError::Unsupported)
     }
 
     fn import(
         &self,
         _device: &Arc<dyn Device>,
         _info: MagmaImportHandleInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
-        Err(MesaError::Unsupported)
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
+        Err(MagmaGpuError::Unsupported)
     }
 }
 
-pub fn enumerate_devices() -> MesaResult<Vec<MagmaPhysicalDevice>> {
+pub fn enumerate_devices() -> MagmaGpuResult<Vec<MagmaPhysicalDevice>> {
     let pci_info: MagmaPciInfo = Default::default();
     let pci_bus_info: MagmaPciBusInfo = Default::default();
     let mut devices: Vec<MagmaPhysicalDevice> = Vec::new();

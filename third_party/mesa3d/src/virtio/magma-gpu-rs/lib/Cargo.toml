@@ -1,0 +1,23 @@
+[package]
+name = "magma-gpu"
+version = "0.1.76-alpha.0"
+authors = ["Magma GPU project"]
+edition = "2021"
+description = "An experimental crate to enable microkernel-gpu"
+license = "MIT"
+
+[lib]
+name = "magma_gpu"
+path = "lib.rs"
+
+[dependencies]
+cfg-if = "1.0.0"
+libc = "0.2.116"
+remain = "0.2"
+thiserror = "2.0.6"
+zerocopy = { version = "0.8.13", features = ["derive"] }
+log = "0.4.22"
+rustix = "1.0.7"
+
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
+rustix = { version = "1.0.7", features = ["event", "fs", "mm", "net", "param", "pipe", "thread"] }

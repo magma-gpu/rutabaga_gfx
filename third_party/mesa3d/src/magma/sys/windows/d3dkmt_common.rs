@@ -8,12 +8,12 @@ use std::sync::Arc;
 use libc::wcslen;
 use log::error;
 
-use mesa3d_util::IntoRawDescriptor;
-use mesa3d_util::MappedRegion;
-use mesa3d_util::MesaError;
-use mesa3d_util::MesaHandle;
-use mesa3d_util::MesaMapping;
-use mesa3d_util::MesaResult;
+use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::IntoRawDescriptor;
+use magma_gpu::util::MappedRegion;
+use magma_gpu::util::MesaMapping;
+use magma_gpu::util::Result as MagmaGpuResult;
 
 use crate::check_ntstatus;
 use crate::log_ntstatus;
@@ -117,7 +117,7 @@ impl WddmAdapter {
         }
     }
 
-    pub fn initialize(&mut self) -> MesaResult<(MagmaPciInfo, MagmaPciBusInfo)> {
+    pub fn initialize(&mut self) -> MagmaGpuResult<(MagmaPciInfo, MagmaPciBusInfo)> {
         let mut pci_info: MagmaPciInfo = Default::default();
         let mut pci_bus_info: MagmaPciBusInfo = Default::default();
 
@@ -211,9 +211,9 @@ impl WddmAdapter {
             unsafe { from_raw_parts(&registry_info.ChipType[0] as *const _, chip_type_len) };
 
         self.adapter_name = String::from_utf16(adapter_name_slice)
-            .map_err(|_| MesaError::WithContext("invalid utf-16 data"))?;
+            .map_err(|_| MagmaGpuError::WithContext("invalid utf-16 data"))?;
         self.chip_type = String::from_utf16(chip_type_slice)
-            .map_err(|_| MesaError::WithContext("invalid utf-16 data"))?;
+            .map_err(|_| MagmaGpuError::WithContext("invalid utf-16 data"))?;
 
         let device_ids = query_device_ids.DeviceIds;
         pci_info.revision_id = device_ids.RevisionID.try_into()?;
@@ -236,7 +236,7 @@ impl GenericPhysicalDevice for WddmAdapter {
         &self,
         physical_device: &Arc<dyn PhysicalDevice>,
         pci_info: &MagmaPciInfo,
-    ) -> MesaResult<Arc<dyn Device>> {
+    ) -> MagmaGpuResult<Arc<dyn Device>> {
         let vendor_private_data = match pci_info.vendor_id {
             MAGMA_VENDOR_ID_AMD => Box::new(Amd(())),
             _ => todo!(),
@@ -270,7 +270,7 @@ impl Drop for WddmAdapter {
     }
 }
 
-pub fn enumerate_adapters() -> MesaResult<Vec<(WddmAdapter, MagmaPciInfo, MagmaPciBusInfo)>> {
+pub fn enumerate_adapters() -> MagmaGpuResult<Vec<(WddmAdapter, MagmaPciInfo, MagmaPciBusInfo)>> {
     let mut enum_adapters = D3DKMT_ENUMADAPTERS2::default();
 
     // SAFETY:
@@ -308,7 +308,7 @@ impl WddmDevice {
     pub fn new(
         adapter: Arc<dyn PhysicalDevice>,
         vendor_private_data: Box<dyn VendorPrivateData>,
-    ) -> MesaResult<WddmDevice> {
+    ) -> MagmaGpuResult<WddmDevice> {
         let mut mem_props: MagmaMemoryProperties = Default::default();
 
         let mut arg = D3DKMT_CREATEDEVICE {
@@ -353,13 +353,13 @@ impl WddmDevice {
 }
 
 impl GenericDevice for WddmDevice {
-    fn get_memory_properties(&self) -> MesaResult<MagmaMemoryProperties> {
+    fn get_memory_properties(&self) -> MagmaGpuResult<MagmaMemoryProperties> {
         Ok(self.mem_props.clone())
     }
 
-    fn get_memory_budget(&self, heap_idx: u32) -> MesaResult<MagmaHeapBudget> {
+    fn get_memory_budget(&self, heap_idx: u32) -> MagmaGpuResult<MagmaHeapBudget> {
         if heap_idx >= self.mem_props.memory_heap_count {
-            return Err(MesaError::WithContext("Heap Index out of bounds"));
+            return Err(MagmaGpuError::WithContext("Heap Index out of bounds"));
         }
 
         let mut segment_group = D3DKMT_MEMORY_SEGMENT_GROUP_NON_LOCAL;
@@ -388,7 +388,7 @@ impl GenericDevice for WddmDevice {
         })
     }
 
-    fn create_context(&self, device: &Arc<dyn Device>) -> MesaResult<Arc<dyn Context>> {
+    fn create_context(&self, device: &Arc<dyn Device>) -> MagmaGpuResult<Arc<dyn Context>> {
         let ctx = WddmContext::new(device.clone())?;
         Ok(Arc::new(ctx))
     }
@@ -397,7 +397,7 @@ impl GenericDevice for WddmDevice {
         &self,
         device: &Arc<dyn Device>,
         create_info: &MagmaCreateBufferInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let buf = WddmBuffer::new(device.clone(), create_info, &self.mem_props)?;
         Ok(Arc::new(buf))
     }
@@ -406,7 +406,7 @@ impl GenericDevice for WddmDevice {
         &self,
         device: &Arc<dyn Device>,
         info: MagmaImportHandleInfo,
-    ) -> MesaResult<Arc<dyn Buffer>> {
+    ) -> MagmaGpuResult<Arc<dyn Buffer>> {
         let mut open_alloc_info: D3DDDI_OPENALLOCATIONINFO2 = Default::default();
 
         let mut arg = D3DKMT_OPENRESOURCEFROMNTHANDLE {
@@ -460,7 +460,7 @@ impl WindowsDevice for WddmDevice {
 impl Device for WddmDevice {}
 
 impl WddmContext {
-    pub fn new(device: Arc<dyn Device>) -> MesaResult<WddmContext> {
+    pub fn new(device: Arc<dyn Device>) -> MagmaGpuResult<WddmContext> {
         // TODO: Fill in NodeOrdinal, EngineAffinity, pPrivateDriverData
         let mut arg = D3DKMT_CREATECONTEXTVIRTUAL {
             hDevice: device.as_wddm_handle(),
@@ -507,7 +507,7 @@ impl WddmBuffer {
         device: Arc<dyn Device>,
         create_info: &MagmaCreateBufferInfo,
         mem_props: &MagmaMemoryProperties,
-    ) -> MesaResult<WddmBuffer> {
+    ) -> MagmaGpuResult<WddmBuffer> {
         let vendor_private_data = device.vendor_private_data().unwrap();
 
         let flags: D3DKMT_CREATEALLOCATIONFLAGS = Default::default();
@@ -561,7 +561,7 @@ impl WddmBuffer {
         device: Arc<dyn Device>,
         handle: D3dkmtHandle,
         size: u64,
-    ) -> MesaResult<WddmBuffer> {
+    ) -> MagmaGpuResult<WddmBuffer> {
         Ok(WddmBuffer {
             handle,
             device,
@@ -591,7 +591,7 @@ unsafe impl MappedRegion for WddmMapping {
 }
 
 impl GenericBuffer for WddmBuffer {
-    fn map(&self, buffer: &Arc<dyn Buffer>) -> MesaResult<Arc<dyn MappedRegion>> {
+    fn map(&self, buffer: &Arc<dyn Buffer>) -> MagmaGpuResult<Arc<dyn MappedRegion>> {
         let mut arg = D3DKMT_LOCK2 {
             hDevice: self.device.as_wddm_handle(),
             hAllocation: self.handle,
@@ -607,11 +607,11 @@ impl GenericBuffer for WddmBuffer {
         }))
     }
 
-    fn export(&self) -> MesaResult<MesaHandle> {
-        Err(MesaError::Unsupported)
+    fn export(&self) -> MagmaGpuResult<MagmaGpuHandle> {
+        Err(MagmaGpuError::Unsupported)
     }
 
-    fn invalidate(&self, sync_flags: u64, ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()> {
+    fn invalidate(&self, sync_flags: u64, ranges: &[MagmaMappedMemoryRange]) -> MagmaGpuResult<()> {
         let mut arg = D3DKMT_INVALIDATECACHE {
             hDevice: self.device.as_wddm_handle(),
             hAllocation: self.handle,
@@ -636,7 +636,7 @@ impl GenericBuffer for WddmBuffer {
         Ok(())
     }
 
-    fn flush(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MesaResult<()> {
+    fn flush(&self, _sync_flags: u64, _ranges: &[MagmaMappedMemoryRange]) -> MagmaGpuResult<()> {
         Ok(())
     }
 }
