@@ -18,6 +18,7 @@ libc = "0.2.93"
 log = "0.4"
 
 [features]
+capi = []
 gbm = ["rutabaga_gfx/gbm"]
 gfxstream = ["rutabaga_gfx/gfxstream"]
 vulkano = ["rutabaga_gfx/vulkano"]
