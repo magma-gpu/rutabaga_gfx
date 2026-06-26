@@ -10,9 +10,9 @@ use std::io::IoSliceMut;
 use std::path::Path;
 use std::sync::Arc;
 
-use magma_gpu::util::MemoryMapping;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MemoryMapping;
 use magma_gpu::util::MesaMapping;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
@@ -1022,9 +1022,10 @@ impl Rutabaga {
                 Some(handle) => {
                     if let Some(mesa_handle) = handle.as_mesa_handle() {
                         if mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_SHM {
-                            return Err(
-                                MagmaGpuError::WithContext("expected a shared memory handle").into()
-                            );
+                            return Err(MagmaGpuError::WithContext(
+                                "expected a shared memory handle",
+                            )
+                            .into());
                         }
 
                         let clone = mesa_handle.try_clone()?;

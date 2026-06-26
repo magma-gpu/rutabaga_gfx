@@ -16,9 +16,9 @@ use std::convert::TryInto;
 use std::sync::Arc;
 
 use log::warn;
-use magma_gpu::util::MappedRegion;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MappedRegion;
 use magma_gpu::util::MesaMapping;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD;

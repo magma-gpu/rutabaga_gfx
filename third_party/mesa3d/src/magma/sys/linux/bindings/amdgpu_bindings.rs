@@ -11,4 +11,7 @@
 pub use magma_gpu_magma_amdgpu_bindgen::*;
 
 #[cfg(not(avoid_cargo))]
-include!(concat!(env!("OUT_DIR"), "/magma_gpu_magma_amdgpu_bindgen.rs"));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/magma_gpu_magma_amdgpu_bindgen.rs"
+));

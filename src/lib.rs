@@ -22,11 +22,11 @@ mod rutabaga_utils;
 mod snapshot;
 mod virgl_renderer;
 
+pub use magma_gpu::util::Error::Unsupported as RutabagaUnsupported;
 pub use magma_gpu::util::FromRawDescriptor as RutabagaFromRawDescriptor;
+pub use magma_gpu::util::Handle as RutabagaMagmaHandle;
 pub use magma_gpu::util::IntoRawDescriptor as RutabagaIntoRawDescriptor;
 pub use magma_gpu::util::MappedRegion as RutabagaMappedRegion;
-pub use magma_gpu::util::Error::Unsupported as RutabagaUnsupported;
-pub use magma_gpu::util::Handle as RutabagaMagmaHandle;
 pub use magma_gpu::util::OwnedDescriptor as RutabagaDescriptor;
 pub use magma_gpu::util::RawDescriptor as RutabagaRawDescriptor;
 pub use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF as RUTABAGA_HANDLE_TYPE_MEM_DMABUF;

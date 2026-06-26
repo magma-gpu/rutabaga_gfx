@@ -7,8 +7,8 @@
 
 use std::sync::Arc;
 
-use magma_gpu::util::MappedRegion;
 use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MappedRegion;
 use magma_gpu::util::OwnedDescriptor;
 
 use crate::magma_defines::MagmaCreateBufferInfo;

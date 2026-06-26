@@ -7,8 +7,8 @@ use std::collections::BTreeMap as Map;
 use std::path::PathBuf;
 
 use magma_gpu::util::AsBorrowedDescriptor;
-use magma_gpu::util::Listener;
 use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Listener;
 use magma_gpu::util::WaitContext;
 use magma_gpu::util::WaitTimeout;
 

@@ -23,10 +23,10 @@ use std::ptr::null;
 use std::ptr::null_mut;
 use std::sync::Arc;
 
-use magma_gpu::util::FromRawDescriptor;
-use magma_gpu::util::IntoRawDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::FromRawDescriptor;
 use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::IntoRawDescriptor;
 use magma_gpu::util::MesaMapping;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::RawDescriptor;
@@ -356,7 +356,10 @@ impl RutabagaContext for GfxstreamContext {
         RutabagaComponentType::Gfxstream
     }
 
-    fn context_create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<Option<MagmaGpuHandle>> {
+    fn context_create_fence(
+        &mut self,
+        fence: RutabagaFence,
+    ) -> RutabagaResult<Option<MagmaGpuHandle>> {
         if fence.ring_idx as u32 == 1 {
             self.fence_handler.call(fence);
             return Ok(None);
@@ -381,7 +384,8 @@ impl RutabagaContext for GfxstreamContext {
         };
 
         let mut buffer = std::io::Cursor::new(Vec::new());
-        serde_json::to_writer(&mut buffer, &snapshot).map_err(|e| MagmaGpuError::IoError(e.into()))?;
+        serde_json::to_writer(&mut buffer, &snapshot)
+            .map_err(|e| MagmaGpuError::IoError(e.into()))?;
 
         Ok(buffer.into_inner())
     }

@@ -32,10 +32,10 @@ use log::info;
 use log::log;
 use log::warn;
 use log::Level;
-use magma_gpu::util::FromRawDescriptor;
-use magma_gpu::util::IntoRawDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::FromRawDescriptor;
 use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::IntoRawDescriptor;
 use magma_gpu::util::MesaMapping;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::RawDescriptor;
@@ -103,7 +103,9 @@ fn dup(rd: RawDescriptor) -> RutabagaResult<OwnedDescriptor> {
 
     // We have to clone rd because we have no guarantee ownership was transferred (rd is
     // borrowed).
-    Ok(rd_as_safe_desc.try_clone().map_err(MagmaGpuError::IoError)?)
+    Ok(rd_as_safe_desc
+        .try_clone()
+        .map_err(MagmaGpuError::IoError)?)
 }
 
 /// The virtio-gpu backend state tracker which supports accelerated rendering.
@@ -228,7 +230,10 @@ impl RutabagaContext for VirglRendererContext {
         RutabagaComponentType::VirglRenderer
     }
 
-    fn context_create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<Option<MagmaGpuHandle>> {
+    fn context_create_fence(
+        &mut self,
+        fence: RutabagaFence,
+    ) -> RutabagaResult<Option<MagmaGpuHandle>> {
         // RutabagaFence::flags are not compatible with virglrenderer's fencing API and currently
         // virglrenderer context's assume all fences on a single timeline are MERGEABLE, and enforce
         // this assumption.

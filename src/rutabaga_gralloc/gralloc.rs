@@ -10,9 +10,9 @@ use std::collections::BTreeMap as Map;
 #[cfg(feature = "vulkano")]
 use log::error;
 use magma_gpu::util::round_up_to_page_size;
-use magma_gpu::util::MappedRegion;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MappedRegion;
 
 use crate::rutabaga_gralloc::formats::*;
 #[cfg(feature = "gbm")]
@@ -362,7 +362,10 @@ impl RutabagaGralloc {
     }
 
     /// Allocates memory given the particular `reqs` upon success.
-    pub fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MagmaGpuHandle> {
+    pub fn allocate_memory(
+        &mut self,
+        reqs: ImageMemoryRequirements,
+    ) -> RutabagaResult<MagmaGpuHandle> {
         let backend = self.determine_optimal_backend(reqs.info);
 
         let gralloc = self

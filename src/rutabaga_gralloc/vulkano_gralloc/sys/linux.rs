@@ -5,10 +5,10 @@
 use std::fs::File;
 use std::sync::Arc;
 
-use magma_gpu::util::FromRawDescriptor;
-use magma_gpu::util::IntoRawDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::FromRawDescriptor;
 use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::IntoRawDescriptor;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD;
 use vulkano::device::Device;

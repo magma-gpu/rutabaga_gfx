@@ -16,9 +16,9 @@ use std::thread;
 
 use log::info;
 use magma_gpu::util::AtomicMemorySentinel;
+use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Event;
 use magma_gpu::util::MemoryMapping;
-use magma_gpu::util::Error as MagmaGpuError;
 
 use crate::rutabaga_core::VirtioFsLookup;
 use crate::rutabaga_utils::RutabagaError;
