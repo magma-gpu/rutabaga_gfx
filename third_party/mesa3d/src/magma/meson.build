@@ -4,142 +4,56 @@
 magma_generated_libs = []
 
 dep_windows_sys = null_dep
+dep_libc_rs = null_dep
 if host_machine.system() == 'linux' or host_machine.system() == 'android'
-  drm_bindgen = rust.bindgen(
-    input : drm_h,
-    output : 'magma_gpu_magma_drm_bindgen.rs',
-    include_directories : [inc_include],
-    args : [
-      '--with-derive-default',
-      '--allowlist-var', 'DRM_.+',
-      '--allowlist-var', 'drm_.+',
-      '--allowlist-type', 'drm_.+',
-      '--no-prepend-enum-name',
-      '--no-doc-comments',
-      '--no-layout-tests'
-    ],
-  )
+  bindgen_configs = [
+    ['drm',     drm_h,        ['DRM_.+', 'drm_.+'],               ['drm_.+']],
+    ['amdgpu',  amdgpu_drm_h, ['DRM_AMDGPU_.+', 'AMDGPU_.+'],     ['drm_amdgpu_.+']],
+    ['msm',     msm_drm_h,    ['DRM_MSM_.+', 'MSM_.+'],           ['drm_msm_.+']],
+    ['virtgpu', virtgpu_drm_h,['DRM_VIRTGPU_.+', 'VIRTGPU_.+'],   ['drm_virtgpu_.+']],
+    ['i915',    i915_drm_h,   ['DRM_I915_.+', 'I915_.+'],         ['drm_i915_.+']],
+    ['xe',      xe_drm_h,     ['DRM_XE_.+', 'XE_.+'],             ['drm_xe_.+']]
+  ]
 
-  amdgpu_bindgen = rust.bindgen(
-    input : amdgpu_drm_h,
-    output : 'magma_gpu_magma_amdgpu_bindgen.rs',
-    include_directories : [inc_include],
-    args : [
-      '--with-derive-default',
-      '--allowlist-var', 'DRM_AMDGPU_.+',
-      '--allowlist-var', 'AMDGPU_.+',
-      '--allowlist-type', 'drm_amdgpu_.+',
-      '--no-prepend-enum-name',
-      '--no-doc-comments',
-      '--no-layout-tests'
-    ],
-  )
+  foreach config : bindgen_configs
+    name = config[0]
+    header = config[1]
 
-  msm_bindgen = rust.bindgen(
-    input : msm_drm_h,
-    output : 'magma_gpu_magma_msm_bindgen.rs',
-    include_directories : [inc_include],
-    args : [
+    bindgen_args = [
       '--with-derive-default',
-      '--allowlist-var', 'DRM_MSM_.+',
-      '--allowlist-var', 'MSM_.+',
-      '--allowlist-type', 'drm_msm_.+',
-      '--no-prepend-enum-name',
-      '--no-doc-comments',
-      '--no-layout-tests'
-    ],
-  )
-
-  virtgpu_bindgen = rust.bindgen(
-    input : virtgpu_drm_h,
-    output : 'magma_gpu_magma_virtgpu_bindgen.rs',
-    include_directories : [inc_include],
-    args : [
-      '--with-derive-default',
-      '--allowlist-var', 'DRM_VIRTGPU_.+',
-      '--allowlist-var', 'VIRTGPU_.+',
-      '--allowlist-type', 'drm_virtgpu_.+',
       '--no-prepend-enum-name',
       '--no-doc-comments',
       '--no-layout-tests'
     ]
-  )
 
-  xe_bindgen = rust.bindgen(
-    input : xe_drm_h,
-    output : 'magma_gpu_magma_xe_bindgen.rs',
-    include_directories : [inc_include],
-    args : [
-      '--with-derive-default',
-      '--allowlist-var', 'DRM_XE.+',
-      '--allowlist-var', 'XE_.+',
-      '--allowlist-type', 'drm_xe_.+',
-      '--no-prepend-enum-name',
-      '--no-doc-comments',
-      '--no-layout-tests'
-    ],
-  )
+    foreach var_pattern : config[2]
+      bindgen_args += ['--allowlist-var', var_pattern]
+    endforeach
 
-  i915_bindgen = rust.bindgen(
-    input : i915_drm_h,
-    output : 'magma_gpu_magma_i915_bindgen.rs',
-    include_directories : [inc_include],
-    args : [
-      '--with-derive-default',
-      '--allowlist-var', 'DRM_I915.+',
-      '--allowlist-var', 'I915_.+',
-      '--allowlist-type', 'drm_i915_.+',
-      '--no-prepend-enum-name',
-      '--no-doc-comments',
-      '--no-layout-tests'
-    ],
-  )
+    foreach type_pattern : config[3]
+      bindgen_args += ['--allowlist-type', type_pattern]
+    endforeach
 
-  drm_bindgen_gen = static_library(
-    'magma_gpu_magma_drm_bindgen',
-    drm_bindgen,
-    gnu_symbol_visibility : 'hidden',
-    rust_abi : 'rust',
-  )
+    generated_rs = rust.bindgen(
+      input : header,
+      output : 'magma_gpu_magma_' + name + '_bindgen.rs',
+      include_directories : [inc_include],
+      args : bindgen_args,
+    )
 
-  amdgpu_bindgen_gen = static_library(
-    'magma_gpu_magma_amdgpu_bindgen',
-    amdgpu_bindgen,
-    gnu_symbol_visibility : 'hidden',
-    rust_abi : 'rust',
-  )
+    magma_generated_libs += static_library(
+      'magma_gpu_magma_' + name + '_bindgen',
+      generated_rs,
+      gnu_symbol_visibility : 'hidden',
+      rust_abi : 'rust',
+    )
 
-  msm_bindgen_gen = static_library(
-    'magma_gpu_magma_msm_bindgen',
-    msm_bindgen,
-    gnu_symbol_visibility : 'hidden',
-    rust_abi : 'rust',
-  )
-
-  virtgpu_bindgen_gen = static_library(
-    'magma_gpu_magma_virtgpu_bindgen',
-    virtgpu_bindgen,
-    gnu_symbol_visibility : 'hidden',
-    rust_abi : 'rust',
-  )
-
-  i915_bindgen_gen = static_library(
-    'magma_gpu_magma_i915_bindgen',
-    i915_bindgen,
-    gnu_symbol_visibility : 'hidden',
-    rust_abi : 'rust',
-  )
-
-  xe_bindgen_gen = static_library(
-    'magma_gpu_magma_xe_bindgen',
-    xe_bindgen,
-    gnu_symbol_visibility : 'hidden',
-    rust_abi : 'rust',
-  )
-
-  magma_generated_libs += [drm_bindgen_gen, amdgpu_bindgen_gen,
-                           msm_bindgen_gen, virtgpu_bindgen_gen,
-                           i915_bindgen_gen, xe_bindgen_gen]
+    dep_libc_rs = dependency('rust-libc',
+      version: '>= 0.2.185',
+      fallback: ['libc-0.2-rs', 'dep_libc'],
+      required: true,
+    )
+  endforeach
 elif host_machine.system() == 'windows'
   dep_windows_sys = dependency('windows-sys-rs',
     version: '>= 0.61.1',
@@ -158,5 +72,5 @@ libmesa_magma = static_library(
   rust_abi : 'rust',
   rust_args: magma_args,
   link_with: [magma_generated_libs, libmagma_gpu_rs],
-  dependencies: [dep_magma_gpu_rs, dep_windows_sys]
+  dependencies: [dep_magma_gpu_rs, dep_windows_sys, dep_libc_rs]
 )
