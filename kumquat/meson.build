@@ -1,7 +1,7 @@
 # Copyright 2025 Magma-GPU
 # SPDX-License-Identifier: MIT
 
-dep_clap = dependency('clap-4-rs',
+dep_clap = dependency('rust-clap',
   version: '>= 4.1.8',
   fallback: ['clap-4-rs', 'dep_clap'],
   required: true,

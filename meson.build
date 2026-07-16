@@ -45,6 +45,7 @@ if with_gfxstream
   dep_gfxstream = dependency('gfxstream_backend', version: '>= 0.1.2')
   rutabaga_args += ['--cfg', 'feature="gfxstream"']
   dep_rutabaga_gfx += dep_gfxstream
+  dep_rutabaga_gfx += dependency('libc++', required: false)
 endif
 
 if with_virgl_renderer
