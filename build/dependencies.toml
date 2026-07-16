@@ -1,0 +1,58 @@
+# Copyright 2026 The Magma GPU Project
+# SPDX-License-Identifier: MIT
+[shared_libraries]
+android-base = [
+    { target_name = "libbase" }
+]
+"libc++" = [
+    { target_name = "libc++" }
+]
+
+[static_libraries]
+gfxstream_backend = [
+    { target_name = "libgfxstream_backend" }
+]
+
+[rust_libraries]
+cfg-if = [
+    { target_name = "libcfg_if" }
+]
+bitflags = [
+    { target_name = "libbitflags" }
+]
+errno = [
+    { target_name = "liberrno" }
+]
+rust-nativewindow = [
+    { target_name = "libnativewindow_rs" }
+]
+remain = [
+    { target_name = "libremain", proc_macro = true }
+]
+rustix = [
+    { target_name = "librustix" }
+]
+rust-clap = [
+    { target_name = "libclap" }
+]
+rust-libc = [
+    { target_name = "liblibc" }
+]
+rust-log = [
+    { target_name = "liblog_rust" }
+]
+thiserror = [
+    { target_name = "libthiserror" }
+]
+rust-serde = [
+    { target_name = "libserde" }
+]
+rust-serde-json = [
+    { target_name = "libserde_json" }
+]
+zerocopy = [
+    { target_name = "libzerocopy" }
+]
+zerocopy-derive = [
+    { target_name = "libzerocopy_derive", proc_macro = true }
+]

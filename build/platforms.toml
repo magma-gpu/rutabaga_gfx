@@ -1,0 +1,75 @@
+# Copyright 2026 The Magma GPU Project
+# SPDX-License-Identifier: MIT
+
+[[platform]]
+name = "android_arm64"
+
+[platform.machine_info]
+cpu_family = "aarch64"
+cpu = "aarch64"
+system = "android"
+endian = "little"
+
+[platform.rust]
+compiler_id = "rustc"
+linker_id = "ld.lld"
+version = "1.90.0"
+
+[[platform]]
+name = "android_x86"
+
+[platform.machine_info]
+cpu_family = "x86"
+cpu = "i686"
+system = "android"
+endian = "little"
+
+[platform.rust]
+compiler_id = "rustc"
+linker_id = "ld.lld"
+version = "1.90.0"
+
+[[platform]]
+name = "android_x86_64"
+
+[platform.machine_info]
+cpu_family = "x86_64"
+cpu = "x86_64"
+system = "android"
+endian = "little"
+
+[platform.rust]
+compiler_id = "rustc"
+linker_id = "ld.lld"
+version = "1.90.0"
+
+[[platform]]
+name = "linux_glibc_x86_64"
+
+[platform.machine_info]
+cpu_family = "x86_64"
+cpu = "x86_64"
+system = "linux"
+endian = "little"
+
+[[platform]]
+name = "linux_musl_x86_64"
+
+[platform.machine_info]
+cpu_family = "x86_64"
+cpu = "x86_64"
+system = "linux"
+endian = "little"
+
+[platform.rust]
+compiler_id = "rustc"
+linker_id = "ld.lld"
+version = "1.90.0"
+
+[[platform]]
+name = "linux_musl_aarch64"
+
+[platform.rust]
+compiler_id = "rustc"
+linker_id = "ld.lld"
+version = "1.90.0"

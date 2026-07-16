@@ -1,0 +1,39 @@
+# Copyright 2026 The Magma GPU Project
+# SPDX-License-Identifier: MIT
+[project]
+project_name = 'rutabaga_gfx'
+project_path = 'external/rust/rutabaga_gfx'
+build_system = 'soong'
+
+[copyright]
+license_name = "external_rutabaga_gfx_license"
+licenses = ["BSD", "MIT"]
+license_texts = ["LICENSE"]
+
+[target_renames]
+magma_gpu = "magma_gpu_rutabaga"
+rust_global_args = "rust_global_args_rutabaga"
+
+[soong_properties]
+partition_type = 'vendor_available'
+apex_available = 'com.android.virt'
+compile_multilib = '64'
+
+[[config]]
+config_name = 'aosp_rutabaga_gfx'
+
+[config.platforms]
+host_platforms = [
+    "android_arm64",
+    "android_x86_64",
+    "linux_glibc_x86_64",
+    "linux_musl_x86_64",
+]
+build_platforms = [
+    "linux_glibc_x86_64",
+    "linux_musl_x86_64",
+]
+
+[config.static_options]
+features = "gfxstream"
+kumquat = true
