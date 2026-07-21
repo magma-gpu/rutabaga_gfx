@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.81-chromeos
+
+### API and dependencies
+
+- `rutabaga_gfx`
+  - `RutabagaMesaHandle` --> RutabagaMagmaHandle
+  - `RutabagaError::MesaError` --> RutabagaError::MagmaGpuError
+
 ## [v0.1.76](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.76)
 
 ### API and dependencies
