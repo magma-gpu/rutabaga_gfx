@@ -1121,12 +1121,6 @@ impl Rutabaga {
             .ok_or(MagmaGpuError::WithContext("no 3d info available").into())
     }
 
-    /// Returns true if the resource is mappable by the guest CPU.
-    #[deprecated(since = "0.1.76", note = "ChromeOS specific API, do not use")]
-    pub fn guest_cpu_mappable(&self, _resource_id: u32) -> RutabagaResult<bool> {
-        unimplemented!();
-    }
-
     /// Exports a blob resource.  See virtio-gpu spec for blob flag use flags.
     pub fn export_blob(&mut self, resource_id: u32) -> RutabagaResult<RutabagaHandle> {
         let resource = self
