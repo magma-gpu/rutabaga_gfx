@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.1.80](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.80)
+
+### API and dependencies
+
+- `rutabaga_gfx`
+  - Various Mesa3D crates deprecated; consolidated into `magma-gpu` crate as part of
+    [upstream refactor](https://gitlab.freedesktop.org/mesa/mesa/-/work_items/15548)
+  - `RutabagaMesaHandle` --> `RutabagaMagmaHandle`
+
+### Development
+
+- Major changes to cross-domain to support X11/Pipewire channel types
+- meson2hermetic TOML files added
+
 ## [v0.1.76](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.76)
 
 ### API and dependencies
