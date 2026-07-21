@@ -1,6 +1,6 @@
 [package]
 name = "magma-gpu"
-version = "0.1.76-alpha.0"
+version = "0.1.80"
 authors = ["Magma GPU project"]
 edition = "2021"
 description = "An experimental crate to enable microkernel-gpu"

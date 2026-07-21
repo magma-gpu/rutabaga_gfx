@@ -1,6 +1,6 @@
 [package]
 name = "rutabaga_gfx_ffi"
-version = "0.1.76"
+version = "0.1.80"
 authors = ["Magma GPU project"]
 edition = "2021"
 description = "FFI interface to rutabaga_gfx"
@@ -13,7 +13,7 @@ name = "rutabaga_gfx_ffi"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-rutabaga_gfx = { path = "../", version = "0.1.61"}
+rutabaga_gfx = { path = "../", version = "0.1.80"}
 libc = "0.2.93"
 log = "0.4"
 
