@@ -460,7 +460,7 @@ impl XeBuffer {
         if memory_type.is_protected() {
             pxp_ext.base.name = DRM_XE_GEM_CREATE_EXTENSION_SET_PROPERTY;
             pxp_ext.property = DRM_XE_GEM_CREATE_SET_PROPERTY_PXP_TYPE;
-            pxp_ext.value = DRM_XE_PXP_TYPE_HWDRM as u64;
+            pxp_ext.__bindgen_anon_1.value = DRM_XE_PXP_TYPE_HWDRM as u64;
             gem_create.extensions = &pxp_ext as *const drm_xe_ext_set_property as u64;
         }
 
