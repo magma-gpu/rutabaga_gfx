@@ -317,9 +317,7 @@ pub trait RutabagaComponent {
         Err(MagmaGpuError::Unsupported.into())
     }
 
-    /// Implementations must map the blob resource on success. If addr is Some, the resource
-    /// should be mapped at the specified address. Otherwise, the implementation may choose
-    /// the address.
+    /// Implementations must map the blob resource at `placed_addr` on success.
     fn map_placed(&self, _resource_id: u32, _placed_addr: u64) -> RutabagaResult<()> {
         Err(MagmaGpuError::Unsupported.into())
     }

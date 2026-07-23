@@ -15,7 +15,7 @@ fn gbm() -> PkgConfigResult<()> {
 
 fn virglrenderer() -> PkgConfigResult<()> {
     let lib = pkg_config::Config::new()
-        .atleast_version("1.0.0")
+        .atleast_version("1.3.0")
         .probe("virglrenderer")?;
     if lib.defines.contains_key("VIRGL_RENDERER_UNSTABLE_APIS") {
         println!("cargo:rustc-cfg=virgl_renderer_unstable");
