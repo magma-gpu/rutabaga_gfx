@@ -19,7 +19,7 @@ use log::warn;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::MappedRegion;
-use magma_gpu::util::MesaMapping;
+use magma_gpu::util::RawMapping;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD;
 use vulkano::device::physical::PhysicalDeviceType;
@@ -111,7 +111,7 @@ unsafe impl MappedRegion for VulkanoMapping {
     }
 
     /// Returns rutabaga mapping representation of the region
-    fn as_mesa_mapping(&self) -> MesaMapping {
+    fn as_raw_mapping(&self) -> RawMapping {
         let ptr: u64 = unsafe {
             // Will not panic since the requested range of the device memory was verified on
             // creation
@@ -119,7 +119,7 @@ unsafe impl MappedRegion for VulkanoMapping {
             x.as_mut_ptr() as u64
         };
 
-        MesaMapping {
+        RawMapping {
             ptr,
             size: self.size as u64,
         }

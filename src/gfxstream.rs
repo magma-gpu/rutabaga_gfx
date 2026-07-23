@@ -27,9 +27,9 @@ use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::FromRawDescriptor;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::IntoRawDescriptor;
-use magma_gpu::util::MesaMapping;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::RawDescriptor;
+use magma_gpu::util::RawMapping;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -948,7 +948,7 @@ impl RutabagaComponent for Gfxstream {
         })
     }
 
-    fn map(&self, resource_id: u32) -> RutabagaResult<MesaMapping> {
+    fn map(&self, resource_id: u32) -> RutabagaResult<RawMapping> {
         let mut map: *mut c_void = null_mut();
         let mut size: u64 = 0;
 
@@ -958,7 +958,7 @@ impl RutabagaComponent for Gfxstream {
         if ret != 0 {
             return Err(RutabagaError::MappingFailed(ret));
         }
-        Ok(MesaMapping {
+        Ok(RawMapping {
             ptr: map as u64,
             size,
         })

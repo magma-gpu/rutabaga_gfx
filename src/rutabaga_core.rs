@@ -13,8 +13,8 @@ use std::sync::Arc;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::MemoryMapping;
-use magma_gpu::util::MesaMapping;
 use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::RawMapping;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 use serde::Deserialize;
 use serde::Serialize;
@@ -324,7 +324,7 @@ pub trait RutabagaComponent {
 
     /// Implementations must map the blob resource on success.  This is typically done by
     /// glMapBufferRange(...) or vkMapMemory.
-    fn map(&self, _resource_id: u32) -> RutabagaResult<MesaMapping> {
+    fn map(&self, _resource_id: u32) -> RutabagaResult<RawMapping> {
         Err(MagmaGpuError::Unsupported.into())
     }
 
@@ -1007,7 +1007,7 @@ impl Rutabaga {
     }
 
     /// Returns a memory mapping of the blob resource.
-    pub fn map(&mut self, resource_id: u32) -> RutabagaResult<MesaMapping> {
+    pub fn map(&mut self, resource_id: u32) -> RutabagaResult<RawMapping> {
         let resource = self
             .resources
             .get_mut(&resource_id)
@@ -1041,11 +1041,11 @@ impl Rutabaga {
                             resource_size,
                             map_info,
                         )?;
-                        let mesa_mapping = mapping.as_mesa_mapping();
+                        let raw_mapping = mapping.as_raw_mapping();
                         resource.handle = Some(handle);
                         resource.mapping = Some(mapping);
 
-                        return Ok(mesa_mapping);
+                        return Ok(raw_mapping);
                     } else {
                         return Err(MagmaGpuError::WithContext("mesa handle is expected").into());
                     }

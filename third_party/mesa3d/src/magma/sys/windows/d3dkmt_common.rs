@@ -12,7 +12,7 @@ use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::IntoRawDescriptor;
 use magma_gpu::util::MappedRegion;
-use magma_gpu::util::MesaMapping;
+use magma_gpu::util::RawMapping;
 use magma_gpu::util::Result as MagmaGpuResult;
 
 use crate::check_ntstatus;
@@ -582,8 +582,8 @@ unsafe impl MappedRegion for WddmMapping {
         self.size
     }
 
-    fn as_mesa_mapping(&self) -> MesaMapping {
-        MesaMapping {
+    fn as_raw_mapping(&self) -> RawMapping {
+        RawMapping {
             ptr: self.pdata as u64,
             size: self.size as u64,
         }
