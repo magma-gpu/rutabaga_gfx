@@ -36,9 +36,9 @@ use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::FromRawDescriptor;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::IntoRawDescriptor;
-use magma_gpu::util::MesaMapping;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::RawDescriptor;
+use magma_gpu::util::RawMapping;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
@@ -904,7 +904,7 @@ impl RutabagaComponent for VirglRenderer {
         }
     }
 
-    fn map(&self, resource_id: u32) -> RutabagaResult<MesaMapping> {
+    fn map(&self, resource_id: u32) -> RutabagaResult<RawMapping> {
         let mut map: *mut c_void = null_mut();
         let mut size: u64 = 0;
         // SAFETY:
@@ -914,7 +914,7 @@ impl RutabagaComponent for VirglRenderer {
             return Err(RutabagaError::MappingFailed(ret));
         }
 
-        Ok(MesaMapping {
+        Ok(RawMapping {
             ptr: map as u64,
             size,
         })

@@ -272,7 +272,7 @@ impl KumquatGpuConnection {
                         size,
                         RUTABAGA_MAP_CACHE_CACHED | RUTABAGA_MAP_ACCESS_RW,
                     )?;
-                    let rutabaga_mapping = mapping.as_mesa_mapping();
+                    let rutabaga_mapping = mapping.as_raw_mapping();
 
                     vecs.push(RutabagaIovec {
                         base: rutabaga_mapping.ptr as *mut c_void,
