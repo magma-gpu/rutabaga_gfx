@@ -437,7 +437,6 @@ extern "C" {
         out_size: *mut u64,
     ) -> ::std::os::raw::c_int;
 }
-#[cfg(virgl_renderer_unstable)]
 extern "C" {
     pub fn virgl_renderer_resource_map_fixed(
         res_handle: u32,
