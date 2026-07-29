@@ -32,7 +32,7 @@ jobs:
       - name: Build Project
         run: >
           cargo build --package rutabaga_gfx --package kumquat_virtio
-          --package rutabaga_gfx_ffi --features=gfxstream
+          --package rutabaga_gfx_ffi --features=gfxstream,vulkano
           --target=x86_64-unknown-linux-gnu
 
   meson-test-with-gfxstream:
