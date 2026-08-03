@@ -57,7 +57,7 @@ pub enum CrossDomainJob {
 pub enum RingWrite<'a, T> {
     Write(T, Option<&'a [u8]>),
     WriteFromPipe(CrossDomainReadWrite, &'a mut ReadPipe, bool),
-    WriteFromEvent(CrossDomainReadWrite, &'a mut Event, bool),
+    WriteFromEvent(CrossDomainReadWrite, &'a Event, bool),
 }
 
 pub type CrossDomainJobs = Mutex<Option<VecDeque<CrossDomainJob>>>;
@@ -192,7 +192,7 @@ impl CrossDomainState {
                     .map_err(MagmaGpuError::TryFromIntError)?;
                 cmd_slice.copy_from_slice(cmd_read.as_bytes());
             }
-            RingWrite::WriteFromEvent(mut cmd_read, ref mut event, readable) => {
+            RingWrite::WriteFromEvent(mut cmd_read, event, readable) => {
                 if slice.len() < size_of::<CrossDomainReadWrite>() {
                     return Err(RutabagaError::InvalidIovec);
                 }
