@@ -51,7 +51,7 @@ impl AtomicMemorySentinelThread {
         }
     }
 
-    fn run(mut self) {
+    fn run(self) {
         // The goal of this code is to ensure that the other side observes at least
         // the latest wake event along with the value that the futex had when that
         // wake event was signaled.

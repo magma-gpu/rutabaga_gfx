@@ -87,7 +87,7 @@ pub fn create_fence_handler(fence_state: FenceState) -> RutabagaFenceHandler {
         let mut state = fence_state.lock().unwrap();
         match state.pending_fences.entry(completed_fence.fence_id) {
             Entry::Occupied(o) => {
-                let (_, mut event) = o.remove_entry();
+                let (_, event) = o.remove_entry();
                 event.signal().unwrap();
             }
             Entry::Vacant(_) => {
@@ -335,7 +335,7 @@ impl KumquatGpuConnection {
                         .rutabaga
                         .transfer_write(cmd.ctx_id, resource_id, transfer, None)?;
 
-                    let mut event: Event = emulated_fence.try_into()?;
+                    let event: Event = emulated_fence.try_into()?;
                     event.signal()?;
                 }
                 KumquatGpuProtocol::TransferFromHost3d(cmd, emulated_fence) => {
@@ -358,7 +358,7 @@ impl KumquatGpuConnection {
                         .rutabaga
                         .transfer_read(cmd.ctx_id, resource_id, transfer, None)?;
 
-                    let mut event: Event = emulated_fence.try_into()?;
+                    let event: Event = emulated_fence.try_into()?;
                     event.signal()?;
                 }
                 KumquatGpuProtocol::CmdSubmit3d(cmd, mut cmd_buf, fence_ids) => {

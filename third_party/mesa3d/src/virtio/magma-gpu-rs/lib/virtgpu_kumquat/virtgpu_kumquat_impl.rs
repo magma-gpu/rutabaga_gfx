@@ -497,7 +497,7 @@ impl VirtGpuKumquat {
 
         let new_fences: Vec<Handle> = std::mem::take(&mut resource.attached_fences);
         for fence in new_fences {
-            let mut event: Event = fence.try_into()?;
+            let event: Event = fence.try_into()?;
             event.wait()?;
         }
 

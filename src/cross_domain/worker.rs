@@ -71,7 +71,7 @@ impl CrossDomainWorker {
     fn handle_fence(
         &mut self,
         fence: RutabagaFence,
-        thread_resample_evt: &mut Event,
+        thread_resample_evt: &Event,
         receive_buf: &mut [u8],
     ) -> RutabagaResult<()> {
         let events = self.wait_ctx.wait(WaitTimeout::NoTimeout)?;
@@ -176,7 +176,7 @@ impl CrossDomainWorker {
                                 self.wait_ctx.delete(readpipe.as_borrowed_descriptor())?;
                             }
                         }
-                        CrossDomainItem::Event(ref mut evt) => {
+                        CrossDomainItem::Event(ref evt) => {
                             let ring_write =
                                 RingWrite::WriteFromEvent(cmd_read, evt, event.readable);
                             bytes_read = self.state.write_to_ring::<CrossDomainReadWrite>(
@@ -283,7 +283,7 @@ impl CrossDomainWorker {
     pub fn run(
         &mut self,
         thread_kill_evt: Event,
-        mut thread_resample_evt: Event,
+        thread_resample_evt: Event,
     ) -> RutabagaResult<()> {
         self.wait_ctx.add(
             CROSS_DOMAIN_RESAMPLE_ID,
@@ -298,7 +298,7 @@ impl CrossDomainWorker {
         while let Some(job) = self.state.wait_for_job() {
             match job {
                 CrossDomainJob::HandleFence(fence) => {
-                    match self.handle_fence(fence, &mut thread_resample_evt, &mut receive_buf) {
+                    match self.handle_fence(fence, &thread_resample_evt, &mut receive_buf) {
                         Ok(()) => (),
                         Err(e) => {
                             error!("Worker halting due to: {e}");

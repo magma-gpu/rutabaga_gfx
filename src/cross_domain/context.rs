@@ -349,7 +349,7 @@ impl CrossDomainContext {
             }
         }
 
-        if let (Some(state), Some(ref mut resample_evt)) = (&self.state, &mut self.resample_evt) {
+        if let (Some(state), Some(ref resample_evt)) = (&self.state, &self.resample_evt) {
             state.send_msg(opaque_data, &descriptors)?;
 
             if let Some(read_pipe_id) = read_pipe_id_opt {
@@ -408,7 +408,7 @@ impl CrossDomainContext {
                     .as_ref()
                     .unwrap()
                     .add_job(CrossDomainJob::AddReadEvent(cmd_event_new.id));
-                self.resample_evt.as_mut().unwrap().signal()?;
+                self.resample_evt.as_ref().unwrap().signal()?;
                 Ok(())
             } else {
                 Err(RutabagaError::InvalidCrossDomainItemType)
@@ -780,7 +780,7 @@ impl Drop for CrossDomainContext {
             state.add_job(CrossDomainJob::Finish);
         }
 
-        if let Some(mut kill_evt) = self.kill_evt.take() {
+        if let Some(kill_evt) = self.kill_evt.take() {
             // Log the error, but still try to join the worker thread
             match kill_evt.signal() {
                 Ok(_) => (),
