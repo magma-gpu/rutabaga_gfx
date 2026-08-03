@@ -41,7 +41,7 @@ pub enum CrossDomainItem {
     Blob(MagmaGpuHandle),
     WaylandReadPipe(ReadPipe),
     WaylandWritePipe(WritePipe),
-    Event(Event),
+    Event(Arc<Event>),
     RegularFile(OwnedDescriptor),
     Socket(OwnedDescriptor),
 }

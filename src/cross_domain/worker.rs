@@ -239,7 +239,8 @@ impl CrossDomainWorker {
                             os_handle: file,
                             handle_type: MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD,
                         })?;
-                        *identifier = add_item(&self.item_state, CrossDomainItem::Event(event));
+                        *identifier =
+                            add_item(&self.item_state, CrossDomainItem::Event(Arc::new(event)));
                     }
                     DescriptorType::Memory(size, handle_type) => {
                         *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;

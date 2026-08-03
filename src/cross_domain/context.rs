@@ -465,20 +465,48 @@ impl CrossDomainContext {
     }
 
     fn write(&self, cmd_write: &CrossDomainReadWrite, opaque_data: &[u8]) -> RutabagaResult<()> {
-        let mut items = self.item_state.lock().unwrap();
+        let len: usize = cmd_write
+            .opaque_data_size
+            .try_into()
+            .map_err(MagmaGpuError::TryFromIntError)?;
 
-        // Most of the time, hang-up and writing will be paired.  In lieu of this, remove the
-        // item rather than getting a reference.  In case of an error, there's not much to do
-        // besides reporting it.
+        // For Event items (e.g. PipeWire per-period eventfd wakeups), clone
+        // the Arc under the lock and perform the actual write lock-free.
+        // This avoids serializing every CMD_WRITE behind unrelated
+        // item_state operations (such as add_item from process_receive),
+        // which can exceed audio period budgets under stream-create churn.
+        {
+            let items = self.item_state.lock().unwrap();
+            let item = items
+                .table
+                .get(&cmd_write.identifier)
+                .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
+            if let CrossDomainItem::Event(event) = item {
+                let event = Arc::clone(event);
+
+                let Ok(bytes) = <[u8; 8]>::try_from(opaque_data) else {
+                    return Err(RutabagaError::InvalidCrossDomainWriteLength);
+                };
+
+                drop(items);
+                event.add(u64::from_le_bytes(bytes))?;
+
+                if cmd_write.hang_up != 0 {
+                    let mut items = self.item_state.lock().unwrap();
+                    items.table.remove(&cmd_write.identifier);
+                }
+
+                return Ok(());
+            }
+        }
+
+        // For non-Event items, use the original remove-and-reinsert pattern.
+        let mut items = self.item_state.lock().unwrap();
         let item = items
             .table
             .remove(&cmd_write.identifier)
             .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
 
-        let len: usize = cmd_write
-            .opaque_data_size
-            .try_into()
-            .map_err(MagmaGpuError::TryFromIntError)?;
         match item {
             CrossDomainItem::WaylandWritePipe(write_pipe) => {
                 if len != 0 {
@@ -490,21 +518,6 @@ impl CrossDomainContext {
                         cmd_write.identifier,
                         CrossDomainItem::WaylandWritePipe(write_pipe),
                     );
-                }
-
-                Ok(())
-            }
-            CrossDomainItem::Event(mut event) => {
-                let Ok(bytes) = <[u8; 8]>::try_from(opaque_data) else {
-                    return Err(RutabagaError::InvalidCrossDomainWriteLength);
-                };
-
-                event.add(u64::from_le_bytes(bytes))?;
-
-                if cmd_write.hang_up == 0 {
-                    items
-                        .table
-                        .insert(cmd_write.identifier, CrossDomainItem::Event(event));
                 }
 
                 Ok(())
