@@ -5,7 +5,6 @@ mod amdgpu;
 mod bindings;
 mod common;
 mod drm;
-pub mod flexible_array;
 mod i915;
 mod macros;
 mod msm;

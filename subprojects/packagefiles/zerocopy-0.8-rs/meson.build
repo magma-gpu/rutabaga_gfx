@@ -9,7 +9,7 @@ project(
   meson_version : '>= 1.7.0',
 )
 
-zerocopy_args = ['--cfg', 'feature="derive"']
+zerocopy_args = ['--cfg', 'feature="derive"', '--cfg', 'feature="alloc"']
 zerocopy_derive = subproject('zerocopy-derive-0.8-rs').get_variable('lib')
 
 lib = static_library(
