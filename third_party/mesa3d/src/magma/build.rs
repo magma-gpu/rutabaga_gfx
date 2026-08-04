@@ -4,13 +4,40 @@
 use std::env;
 use std::path::PathBuf;
 
+#[derive(Debug)]
+struct ParseDerives<'a> {
+    types: &'a [&'a str],
+    derives: &'a [&'a str],
+}
+
+impl bindgen::callbacks::ParseCallbacks for ParseDerives<'_> {
+    fn add_derives(&self, info: &bindgen::callbacks::DeriveInfo<'_>) -> Vec<String> {
+        if self.types.contains(&info.name) {
+            self.derives.iter().map(|s| s.to_string()).collect()
+        } else {
+            vec![]
+        }
+    }
+}
+
+fn add_zerocopy_derives(
+    builder: bindgen::Builder,
+    types: &'static [&'static str],
+) -> bindgen::Builder {
+    let zerocopy_derives = &[
+        "zerocopy::FromBytes",
+        "zerocopy::Immutable",
+        "zerocopy::KnownLayout",
+    ];
+    builder.parse_callbacks(Box::new(ParseDerives {
+        types,
+        derives: zerocopy_derives,
+    }))
+}
+
 fn generate_linux_bindgen(source_dir: PathBuf, out_dir: PathBuf) {
     println!("cargo::rustc-check-cfg=cfg(avoid_cargo)");
-
-    let generated_path = std::path::Path::new(&out_dir).join("magma_gpu_magma_drm_bindgen.rs");
-    if generated_path.exists() {
-        return;
-    }
+    println!("cargo::rerun-if-changed=build.rs");
 
     let drm_header = format!("{}/headers/drm.h", source_dir.display());
     let i915_drm_header = format!("{}/headers/i915_drm.h", source_dir.display());
@@ -33,31 +60,63 @@ fn generate_linux_bindgen(source_dir: PathBuf, out_dir: PathBuf) {
         .write_to_file(out_dir.join("magma_gpu_magma_drm_bindgen.rs"))
         .expect("Unable to generate bindings");
 
-    bindgen::Builder::default()
-        .header(i915_drm_header)
-        .derive_default(true)
-        .derive_debug(true)
-        .allowlist_var("DRM_I915_.+")
-        .allowlist_var("I915_.+")
-        .allowlist_type("drm_i915_.+")
-        .prepend_enum_name(false)
-        .generate_comments(false)
-        .layout_tests(false)
+    let i915_zerocopy_types = &[
+        "drm_i915_gem_memory_class_instance",
+        "drm_i915_memory_region_info",
+        "drm_i915_memory_region_info__bindgen_ty_1",
+        "drm_i915_memory_region_info__bindgen_ty_1__bindgen_ty_1",
+        "drm_i915_query_memory_regions",
+    ];
+
+    let i915_builder = add_zerocopy_derives(
+        bindgen::Builder::default()
+            .header(i915_drm_header)
+            .flexarray_dst(true)
+            .derive_default(true)
+            .derive_debug(true)
+            .allowlist_var("DRM_I915_.+")
+            .allowlist_var("I915_.+")
+            .allowlist_type("drm_i915_.+")
+            .prepend_enum_name(false)
+            .generate_comments(false)
+            .layout_tests(false),
+        i915_zerocopy_types,
+    );
+
+    i915_builder
         .generate()
         .expect("Unable to generate i915 bindings")
         .write_to_file(out_dir.join("magma_gpu_magma_i915_bindgen.rs"))
         .expect("Unable to generate bindings");
 
-    bindgen::Builder::default()
-        .header(xe_drm_header)
-        .derive_default(true)
-        .derive_debug(true)
-        .allowlist_var("DRM_XE_.+")
-        .allowlist_var("XE_.+")
-        .allowlist_type("drm_xe_.+")
-        .prepend_enum_name(false)
-        .generate_comments(false)
-        .layout_tests(false)
+    let xe_zerocopy_types = &[
+        "drm_xe_mem_region",
+        "drm_xe_query_mem_regions",
+        "drm_xe_query_config",
+        "drm_xe_query_engines",
+        "drm_xe_query_gt_list",
+        "drm_xe_query_topology_mask",
+        "drm_xe_oa_unit",
+        "drm_xe_query_oa_units",
+        "drm_xe_query_eu_stall",
+    ];
+
+    let xe_builder = add_zerocopy_derives(
+        bindgen::Builder::default()
+            .header(xe_drm_header)
+            .flexarray_dst(true)
+            .derive_default(true)
+            .derive_debug(true)
+            .allowlist_var("DRM_XE_.+")
+            .allowlist_var("XE_.+")
+            .allowlist_type("drm_xe_.+")
+            .prepend_enum_name(false)
+            .generate_comments(false)
+            .layout_tests(false),
+        xe_zerocopy_types,
+    );
+
+    xe_builder
         .generate()
         .expect("Unable to generate xe bindings")
         .write_to_file(out_dir.join("magma_gpu_magma_xe_bindgen.rs"))

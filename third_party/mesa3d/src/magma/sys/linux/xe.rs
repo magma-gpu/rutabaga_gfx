@@ -21,6 +21,9 @@ use crate::traits::GenericBuffer;
 use crate::traits::GenericDevice;
 use crate::traits::PhysicalDevice;
 
+use zerocopy::FromZeros;
+use zerocopy::KnownLayout;
+
 use crate::magma_defines::MagmaCreateBufferInfo;
 use crate::magma_defines::MagmaHeapBudget;
 use crate::magma_defines::MagmaImportHandleInfo;
@@ -34,12 +37,9 @@ use crate::magma_defines::MAGMA_MEMORY_PROPERTY_HOST_CACHED_BIT;
 use crate::magma_defines::MAGMA_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 use crate::magma_defines::MAGMA_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-use crate::flexible_array_impl;
 use crate::sys::linux::bindings::drm_bindings::DRM_COMMAND_BASE;
 use crate::sys::linux::bindings::drm_bindings::DRM_IOCTL_BASE;
 use crate::sys::linux::bindings::xe_bindings::*;
-use crate::sys::linux::flexible_array::FlexibleArray;
-use crate::sys::linux::flexible_array::FlexibleArrayWrapper;
 use crate::sys::linux::PlatformDevice;
 
 // This information is also useful to the system side of a driver.  Should be separated
@@ -104,13 +104,17 @@ ioctl_write_ptr!(
     drm_xe_vm_destroy
 );
 
-flexible_array_impl!(drm_xe_query_config, __u64, num_params, info);
-flexible_array_impl!(
-    drm_xe_query_mem_regions,
-    drm_xe_mem_region,
-    num_mem_regions,
-    mem_regions
-);
+#[derive(Default)]
+struct XeMemoryInfo {
+    sysmem_size: u64,
+    vram_size: u64,
+    sysmem_used: u64,
+    vram_used: u64,
+    vram_cpu_visible_size: u64,
+    vram_cpu_visible_used: u64,
+    sysmem_instance: u16,
+    vram_instance: u16,
+}
 
 pub struct Xe {
     physical_device: Arc<dyn PhysicalDevice>,
@@ -130,42 +134,6 @@ struct XeBuffer {
 struct XeContext {
     physical_device: Arc<dyn PhysicalDevice>,
     vm_id: u32,
-}
-
-fn xe_device_query<T, S>(
-    physical_device: &Arc<dyn PhysicalDevice>,
-    query_id: u32,
-) -> MagmaGpuResult<FlexibleArrayWrapper<T, S>>
-where
-    T: FlexibleArray<S> + Default,
-{
-    let mut device_query: drm_xe_device_query = drm_xe_device_query {
-        query: query_id,
-        ..Default::default()
-    };
-
-    // SAFETY:
-    // Valid arguments are supplied for the following arguments:
-    //   - Underlying descriptor
-    //   - drm_xe_device_query
-    unsafe {
-        drm_ioctl_xe_device_query(physical_device.as_fd().unwrap(), &mut device_query)?;
-    };
-
-    let total_size = device_query.size;
-    let mut wrapper = FlexibleArrayWrapper::<T, S>::from_total_size(total_size as usize);
-
-    // SAFETY:
-    // Valid arguments are supplied for the following arguments:
-    //   - Underlying descriptor
-    //   - drm_xe_device_query
-    //   - drm_xe_device_query.data: we trust the FlexibleArrayWrapper to hold enough space
-    unsafe {
-        device_query.data = wrapper.as_mut_ptr() as __u64;
-        drm_ioctl_xe_device_query(physical_device.as_fd().unwrap(), &mut device_query)?;
-    };
-
-    Ok(wrapper)
 }
 
 /// Determines and sets the graphics version of the Intel device based on its ID.
@@ -202,28 +170,61 @@ fn determine_graphics_version(pci_device_id: u16) -> MagmaGpuResult<u32> {
     }
 }
 
-#[derive(Default)]
-struct XeMemoryInfo {
-    vram_size: u64,
-    vram_used: u64,
-    sysmem_size: u64,
-    sysmem_used: u64,
-    vram_cpu_visible_size: u64,
-    vram_cpu_visible_used: u64,
-    sysmem_instance: u16,
-    vram_instance: u16,
+fn xe_device_query<T, S, H>(
+    physical_device: &Arc<dyn PhysicalDevice>,
+    query_id: u32,
+) -> MagmaGpuResult<Box<T>>
+where
+    T: ?Sized + FromZeros + KnownLayout<PointerMetadata = usize>,
+{
+    let mut device_query = drm_xe_device_query {
+        query: query_id,
+        ..Default::default()
+    };
+
+    // Ask kernel for the size
+    unsafe {
+        drm_ioctl_xe_device_query(physical_device.as_fd().unwrap(), &mut device_query)?;
+    }
+
+    let total_size = device_query.size as usize;
+    let header_size = std::mem::size_of::<H>();
+    let element_size = std::mem::size_of::<S>();
+    let count = total_size
+        .saturating_sub(header_size)
+        .div_ceil(element_size);
+
+    // Allocate Box<T> directly for the dynamically size type (DST)
+    let mut query_data = T::new_box_zeroed_with_elems(count)
+        .map_err(|_| MagmaGpuError::WithContext("Failed to allocate query data"))?;
+
+    // Tell kernel to write data into the allocated DST Box
+    device_query.size = total_size as u32;
+    device_query.data = &mut *query_data as *mut T as *mut () as u64;
+
+    unsafe {
+        drm_ioctl_xe_device_query(physical_device.as_fd().unwrap(), &mut device_query)?;
+    }
+
+    Ok(query_data)
 }
 
 fn xe_query_memory_regions(
     physical_device: &Arc<dyn PhysicalDevice>,
 ) -> MagmaGpuResult<XeMemoryInfo> {
     let mut memory_info: XeMemoryInfo = Default::default();
-    let query_mem_regions = xe_device_query::<drm_xe_query_mem_regions, drm_xe_mem_region>(
-        physical_device,
-        DRM_XE_DEVICE_QUERY_MEM_REGIONS,
-    )?;
 
-    let mem_regions = query_mem_regions.entries_slice();
+    let query_mem_regions = xe_device_query::<
+        drm_xe_query_mem_regions<[drm_xe_mem_region]>,
+        drm_xe_mem_region,
+        drm_xe_query_mem_regions<[drm_xe_mem_region; 0]>,
+    >(physical_device, DRM_XE_DEVICE_QUERY_MEM_REGIONS)?;
+
+    let num_regions = std::cmp::min(
+        query_mem_regions.num_mem_regions as usize,
+        query_mem_regions.mem_regions.len(),
+    );
+    let mem_regions = &query_mem_regions.mem_regions[..num_regions];
     for region in mem_regions {
         match region.mem_class as u32 {
             DRM_XE_MEM_REGION_CLASS_SYSMEM => {
@@ -263,11 +264,14 @@ impl Xe {
         let _graphics_version = determine_graphics_version(pci_info.device_id)?;
         let mut mem_props: MagmaMemoryProperties = Default::default();
 
-        let query_config = xe_device_query::<drm_xe_query_config, __u64>(
-            &physical_device,
-            DRM_XE_DEVICE_QUERY_CONFIG,
-        )?;
-        let config = query_config.entries_slice();
+        let query_config = xe_device_query::<
+            drm_xe_query_config<[__u64]>,
+            __u64,
+            drm_xe_query_config<[__u64; 0]>,
+        >(&physical_device, DRM_XE_DEVICE_QUERY_CONFIG)?;
+
+        let num_params = std::cmp::min(query_config.num_params as usize, query_config.info.len());
+        let config = &query_config.info[..num_params];
         let _config_len = config.len();
 
         let gtt_size = 1u64 << config[DRM_XE_QUERY_CONFIG_VA_BITS as usize];

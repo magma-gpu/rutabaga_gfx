@@ -16,7 +16,7 @@ cfg-if = "1.0.0"
 libc = "0.2.116"
 remain = "0.2"
 thiserror = "2.0.6"
-zerocopy = { version = "0.8.13", features = ["derive"] }
+zerocopy = { version = "0.8.13", features = ["derive", "alloc"] }
 log = "0.4.22"
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
@@ -33,6 +33,6 @@ features = [
 ]
 
 [build-dependencies.bindgen]
-version = "^0.68.1"
+version = "0.70"
 features = ["runtime"]
 default-features = false

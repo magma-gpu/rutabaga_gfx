@@ -11,11 +11,8 @@ use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::MappedRegion;
 use magma_gpu::util::Result as MagmaGpuResult;
 
-use crate::flexible_array_impl;
-use crate::ioctl_readwrite;
-use crate::ioctl_write_ptr;
-use crate::sys::linux::flexible_array::FlexibleArray;
-use crate::sys::linux::flexible_array::FlexibleArrayWrapper;
+use zerocopy::FromZeros;
+use zerocopy::KnownLayout;
 
 use crate::magma_defines::MagmaCreateBufferInfo;
 use crate::magma_defines::MagmaHeapBudget;
@@ -27,6 +24,9 @@ use crate::magma_defines::MAGMA_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 use crate::magma_defines::MAGMA_MEMORY_PROPERTY_HOST_CACHED_BIT;
 use crate::magma_defines::MAGMA_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 use crate::magma_defines::MAGMA_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+
+use crate::ioctl_readwrite;
+use crate::ioctl_write_ptr;
 
 use crate::sys::linux::bindings::drm_bindings::DRM_COMMAND_BASE;
 use crate::sys::linux::bindings::drm_bindings::DRM_IOCTL_BASE;
@@ -82,22 +82,25 @@ ioctl_write_ptr!(
     drm_i915_gem_context_destroy
 );
 
-flexible_array_impl!(
-    drm_i915_query_memory_regions,
-    drm_i915_memory_region_info,
-    num_regions,
-    regions
-);
+#[derive(Default)]
+struct I915MemoryInfo {
+    sysmem_total: u64,
+    sysmem_free: u64,
+    vram_mappable_total: u64,
+    vram_mappable_free: u64,
+    vram_unmappable_total: u64,
+    vram_unmappable_free: u64,
+}
 
-fn i915_query<T, S>(
+fn i915_query<T, S, H>(
     physical_device: &Arc<dyn PhysicalDevice>,
-    query_id: u64,
-) -> MagmaGpuResult<FlexibleArrayWrapper<T, S>>
+    query_id: u32,
+) -> MagmaGpuResult<Box<T>>
 where
-    T: FlexibleArray<S> + Default,
+    T: ?Sized + FromZeros + KnownLayout<PointerMetadata = usize>,
 {
     let mut item = drm_i915_query_item {
-        query_id,
+        query_id: query_id as u64,
         length: 0,
         flags: 0,
         data_ptr: 0,
@@ -121,40 +124,39 @@ where
     }
 
     let total_size = item.length as usize;
-    if total_size == 0 {
-        return Ok(FlexibleArrayWrapper::<T, S>::from_total_size(0));
-    }
+    let header_size = std::mem::size_of::<H>();
+    let element_size = std::mem::size_of::<S>();
+    let count = total_size
+        .saturating_sub(header_size)
+        .div_ceil(element_size);
 
-    let mut wrapper = FlexibleArrayWrapper::<T, S>::from_total_size(total_size);
-    item.data_ptr = wrapper.as_mut_ptr() as u64;
+    let mut query_data = T::new_box_zeroed_with_elems(count)
+        .map_err(|_| MagmaGpuError::WithContext("Failed to allocate query data"))?;
+
+    item.data_ptr = &mut *query_data as *mut T as *mut () as u64;
 
     // SAFETY: Second call to get the data
     unsafe {
         drm_ioctl_i915_query(physical_device.as_fd().unwrap(), &mut query)?;
-    };
+    }
 
-    Ok(wrapper)
-}
-
-#[derive(Default)]
-struct I915MemoryInfo {
-    sysmem_total: u64,
-    sysmem_free: u64,
-    vram_mappable_total: u64,
-    vram_mappable_free: u64,
-    vram_unmappable_total: u64,
-    vram_unmappable_free: u64,
+    Ok(query_data)
 }
 
 fn i915_query_memory_regions(
     physical_device: &Arc<dyn PhysicalDevice>,
 ) -> MagmaGpuResult<I915MemoryInfo> {
-    let query_mem_regions = i915_query::<drm_i915_query_memory_regions, drm_i915_memory_region_info>(
-        physical_device,
-        DRM_I915_QUERY_MEMORY_REGIONS as u64,
-    )?;
+    let query_mem_regions = i915_query::<
+        drm_i915_query_memory_regions<[drm_i915_memory_region_info]>,
+        drm_i915_memory_region_info,
+        drm_i915_query_memory_regions<[drm_i915_memory_region_info; 0]>,
+    >(physical_device, DRM_I915_QUERY_MEMORY_REGIONS)?;
 
-    let regions = query_mem_regions.entries_slice();
+    let num_regions = std::cmp::min(
+        query_mem_regions.num_regions as usize,
+        query_mem_regions.regions.len(),
+    );
+    let regions = &query_mem_regions.regions[..num_regions];
     let mut info = I915MemoryInfo::default();
 
     for region in regions {
