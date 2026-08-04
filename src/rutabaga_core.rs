@@ -1539,6 +1539,7 @@ impl RutabagaBuilder {
             if capset_enabled(RUTABAGA_CAPSET_MAGMA) {
                 let magma = MagmaVirtioGpu::init(self.fence_handler.clone())?;
                 rutabaga_components.insert(RutabagaComponentType::Magma, magma);
+                push_capset(RUTABAGA_CAPSET_MAGMA);
             }
 
             let cross_domain = CrossDomain::init(
