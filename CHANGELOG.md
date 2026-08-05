@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.1.85](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.85)
+
+### API and dependencies
+
+- `virgl_renderer`
+  - version 1.3 now required
+
+### Development
+
+- Mostly bugfixes.
+
 ## [v0.1.80](https://github.com/magma-gpu/rutabaga_gfx/tree/v0.1.80)
 
 ### API and dependencies
