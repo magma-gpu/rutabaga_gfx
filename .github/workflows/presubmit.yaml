@@ -46,6 +46,10 @@ jobs:
           toolchain: stable
           targets: x86_64-unknown-linux-gnu
           components: rust-src
+      - name: Install latest bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: bindgen-cli
       - uses: ./.github/actions/install-deps
       - name: Checkout gfxstream
         run: git clone --depth 1 https://github.com/google/gfxstream
@@ -148,6 +152,10 @@ jobs:
         with:
           toolchain: stable
           components: rust-src
+      - name: Install latest bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: bindgen-cli
       - name: Install homebrew dependencies
         run: brew install meson ninja pkg-config
       - name: Setup Meson build directory
@@ -173,7 +181,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -193,7 +200,10 @@ jobs:
         with:
           toolchain: "1.88.0"
           targets: x86_64-pc-windows-gnu
-
+      - name: Install latest bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: bindgen-cli
       - name: Create Meson cross file
         run: |
           cat <<EOF > cross_file_x86_64_linux_mingw.txt
