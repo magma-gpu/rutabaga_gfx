@@ -13,7 +13,7 @@ use crate::magma_defines::MagmaHeapBudget;
 use crate::magma_defines::MagmaImportHandleInfo;
 use crate::magma_defines::MagmaMappedMemoryRange;
 use crate::magma_defines::MagmaMemoryProperties;
-use crate::magma_defines::MagmaPciInfo;
+use crate::magma_defines::MagmaPhysicalDeviceInfo;
 use crate::sys::platform::PlatformDevice;
 use crate::sys::platform::PlatformPhysicalDevice;
 
@@ -27,7 +27,7 @@ pub trait GenericPhysicalDevice {
     fn create_device(
         &self,
         physical_device: &Arc<dyn PhysicalDevice>,
-        pci_info: &MagmaPciInfo,
+        info: &MagmaPhysicalDeviceInfo,
     ) -> MagmaGpuResult<Arc<dyn Device>>;
 }
 

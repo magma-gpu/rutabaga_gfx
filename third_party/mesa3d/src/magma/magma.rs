@@ -17,8 +17,7 @@ use crate::magma_defines::MagmaHeapBudget;
 use crate::magma_defines::MagmaImportHandleInfo;
 use crate::magma_defines::MagmaMappedMemoryRange;
 use crate::magma_defines::MagmaMemoryProperties;
-use crate::magma_defines::MagmaPciBusInfo;
-use crate::magma_defines::MagmaPciInfo;
+use crate::magma_defines::MagmaPhysicalDeviceInfo;
 use crate::magma_defines::MagmaResult;
 
 use crate::traits::Buffer;
@@ -35,8 +34,7 @@ const VIRTGPU_KUMQUAT_ENABLED: &str = "VIRTGPU_KUMQUAT";
 #[derive(Clone)]
 pub struct MagmaPhysicalDevice {
     physical_device: Arc<dyn PhysicalDevice>,
-    pci_info: MagmaPciInfo,
-    pci_bus_info: MagmaPciBusInfo,
+    info: MagmaPhysicalDeviceInfo,
 }
 
 #[derive(Clone)]
@@ -66,20 +64,22 @@ pub fn magma_enumerate_devices() -> MagmaResult<Vec<MagmaPhysicalDevice>> {
 impl MagmaPhysicalDevice {
     pub(crate) fn new(
         physical_device: Arc<dyn PhysicalDevice>,
-        pci_info: MagmaPciInfo,
-        pci_bus_info: MagmaPciBusInfo,
+        info: MagmaPhysicalDeviceInfo,
     ) -> MagmaPhysicalDevice {
         MagmaPhysicalDevice {
             physical_device,
-            pci_info,
-            pci_bus_info,
+            info,
         }
+    }
+
+    pub fn info(&self) -> &MagmaPhysicalDeviceInfo {
+        &self.info
     }
 
     pub fn create_device(&self) -> MagmaResult<MagmaDevice> {
         let device = self
             .physical_device
-            .create_device(&self.physical_device, &self.pci_info)?;
+            .create_device(&self.physical_device, &self.info)?;
         Ok(MagmaDevice { device })
     }
 }
@@ -209,7 +209,7 @@ mod tests {
         let physical_devices = magma_enumerate_devices().unwrap();
         physical_devices
             .into_iter()
-            .find(|device| valid_vendor_ids.contains(&device.pci_info.vendor_id))
+            .find(|device| valid_vendor_ids.contains(&device.info.vendor_id))
     }
 
     #[test]

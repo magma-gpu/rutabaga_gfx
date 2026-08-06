@@ -12,8 +12,7 @@ use crate::magma_defines::MagmaCreateBufferInfo;
 use crate::magma_defines::MagmaHeapBudget;
 use crate::magma_defines::MagmaImportHandleInfo;
 use crate::magma_defines::MagmaMemoryProperties;
-use crate::magma_defines::MagmaPciBusInfo;
-use crate::magma_defines::MagmaPciInfo;
+use crate::magma_defines::MagmaPhysicalDeviceInfo;
 use crate::sys::platform::PlatformPhysicalDevice;
 use crate::traits::AsVirtGpu;
 use crate::traits::Buffer;
@@ -48,7 +47,7 @@ impl GenericPhysicalDevice for MagmaKumquat {
     fn create_device(
         &self,
         physical_device: &Arc<dyn PhysicalDevice>,
-        _pci_info: &MagmaPciInfo,
+        _info: &MagmaPhysicalDeviceInfo,
     ) -> MagmaGpuResult<Arc<dyn Device>> {
         let _virtgpu = physical_device.as_virtgpu().unwrap();
         Err(MagmaGpuError::Unsupported)
@@ -86,18 +85,13 @@ impl GenericDevice for MagmaKumquat {
 }
 
 pub fn enumerate_devices() -> MagmaGpuResult<Vec<MagmaPhysicalDevice>> {
-    let pci_info: MagmaPciInfo = Default::default();
-    let pci_bus_info: MagmaPciBusInfo = Default::default();
+    let info: MagmaPhysicalDeviceInfo = Default::default();
     let mut devices: Vec<MagmaPhysicalDevice> = Vec::new();
 
     let enc = MagmaKumquat::new()?;
     // TODO): Get data from the server
 
-    devices.push(MagmaPhysicalDevice::new(
-        Arc::new(enc),
-        pci_info,
-        pci_bus_info,
-    ));
+    devices.push(MagmaPhysicalDevice::new(Arc::new(enc), info));
 
     Ok(devices)
 }

@@ -29,7 +29,7 @@ use crate::magma_defines::MagmaHeapBudget;
 use crate::magma_defines::MagmaImportHandleInfo;
 use crate::magma_defines::MagmaMappedMemoryRange;
 use crate::magma_defines::MagmaMemoryProperties;
-use crate::magma_defines::MagmaPciInfo;
+use crate::magma_defines::MagmaPhysicalDeviceInfo;
 use crate::magma_defines::MAGMA_HEAP_CPU_VISIBLE_BIT;
 use crate::magma_defines::MAGMA_HEAP_DEVICE_LOCAL_BIT;
 use crate::magma_defines::MAGMA_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
@@ -259,9 +259,9 @@ fn xe_query_memory_regions(
 impl Xe {
     pub fn new(
         physical_device: Arc<dyn PhysicalDevice>,
-        pci_info: &MagmaPciInfo,
+        info: &MagmaPhysicalDeviceInfo,
     ) -> MagmaGpuResult<Xe> {
-        let _graphics_version = determine_graphics_version(pci_info.device_id)?;
+        let _graphics_version = determine_graphics_version(info.device_id)?;
         let mut mem_props: MagmaMemoryProperties = Default::default();
 
         let query_config = xe_device_query::<

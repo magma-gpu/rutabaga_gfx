@@ -27,12 +27,8 @@ pub fn enumerate_devices() -> MagmaGpuResult<Vec<MagmaPhysicalDevice>> {
     let mut devices: Vec<MagmaPhysicalDevice> = Vec::new();
     let adapters = d3dkmt_common::enumerate_adapters()?;
 
-    for (adapter, pci_info, pci_bus_info) in adapters {
-        devices.push(MagmaPhysicalDevice::new(
-            Arc::new(adapter),
-            pci_info,
-            pci_bus_info,
-        ));
+    for (adapter, info) in adapters {
+        devices.push(MagmaPhysicalDevice::new(Arc::new(adapter), info));
     }
 
     Ok(devices)

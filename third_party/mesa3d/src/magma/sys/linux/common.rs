@@ -36,8 +36,8 @@ use libc::O_CLOEXEC;
 use libc::O_RDWR;
 
 use crate::magma::MagmaPhysicalDevice;
-use crate::magma_defines::MagmaPciBusInfo;
-use crate::magma_defines::MagmaPciInfo;
+use crate::magma_defines::MagmaPhysicalDeviceInfo;
+use crate::magma_defines::MAGMA_BUS_TYPE_PCI;
 use crate::magma_defines::MAGMA_VENDOR_ID_AMD;
 use crate::magma_defines::MAGMA_VENDOR_ID_INTEL;
 use crate::magma_defines::MAGMA_VENDOR_ID_QCOM;
@@ -103,14 +103,14 @@ impl GenericPhysicalDevice for LinuxPhysicalDevice {
     fn create_device(
         &self,
         physical_device: &Arc<dyn PhysicalDevice>,
-        pci_info: &MagmaPciInfo,
+        info: &MagmaPhysicalDeviceInfo,
     ) -> MagmaGpuResult<Arc<dyn Device>> {
-        let device: Arc<dyn Device> = match pci_info.vendor_id {
+        let device: Arc<dyn Device> = match info.vendor_id {
             MAGMA_VENDOR_ID_AMD => Arc::new(AmdGpu::new(physical_device.clone())?),
             MAGMA_VENDOR_ID_QCOM => Arc::new(Msm::new(physical_device.clone())),
             MAGMA_VENDOR_ID_INTEL => {
                 if self.name == "xe" {
-                    Arc::new(Xe::new(physical_device.clone(), pci_info)?)
+                    Arc::new(Xe::new(physical_device.clone(), info)?)
                 } else {
                     Arc::new(I915::new(physical_device.clone())?)
                 }
@@ -255,8 +255,10 @@ pub fn enumerate_devices() -> MagmaGpuResult<Vec<MagmaPhysicalDevice>> {
                 continue;
             }
 
-            let mut pci_info: MagmaPciInfo = Default::default();
-            let mut pci_bus_info: MagmaPciBusInfo = Default::default();
+            let mut info = MagmaPhysicalDeviceInfo {
+                bus_type: MAGMA_BUS_TYPE_PCI,
+                ..Default::default()
+            };
             for attr in PCI_ATTRS {
                 let attr_path = format!("{pci_device_dir}/{attr}");
                 let mut file = File::open(attr_path)?;
@@ -264,11 +266,17 @@ pub fn enumerate_devices() -> MagmaGpuResult<Vec<MagmaPhysicalDevice>> {
                 file.read_to_string(&mut hex_string)?;
 
                 match attr {
-                    "revision" => pci_info.revision_id = parse_hex_u16(&hex_string)?.try_into()?,
-                    "vendor" => pci_info.vendor_id = parse_hex_u16(&hex_string)?,
-                    "device" => pci_info.device_id = parse_hex_u16(&hex_string)?,
-                    "subsystem_vendor" => pci_info.subvendor_id = parse_hex_u16(&hex_string)?,
-                    "subsystem_device" => pci_info.subdevice_id = parse_hex_u16(&hex_string)?,
+                    "revision" => {
+                        info.pci_bus_info.revision_id = parse_hex_u16(&hex_string)?.try_into()?
+                    }
+                    "vendor" => info.vendor_id = parse_hex_u16(&hex_string)?,
+                    "device" => info.device_id = parse_hex_u16(&hex_string)?,
+                    "subsystem_vendor" => {
+                        info.pci_bus_info.subvendor_id = parse_hex_u16(&hex_string)?
+                    }
+                    "subsystem_device" => {
+                        info.pci_bus_info.subdevice_id = parse_hex_u16(&hex_string)?
+                    }
                     _ => unimplemented!(),
                 }
             }
@@ -279,17 +287,16 @@ pub fn enumerate_devices() -> MagmaGpuResult<Vec<MagmaPhysicalDevice>> {
                 if line.contains("PCI_SLOT_NAME") {
                     let v: Vec<&str> = line.split(&['=', ':', '.'][..]).collect();
 
-                    pci_bus_info.domain = v[1].parse::<u16>()?;
-                    pci_bus_info.bus = v[2].parse::<u8>()?;
-                    pci_bus_info.device = v[3].parse::<u8>()?;
-                    pci_bus_info.function = v[4].parse::<u8>()?;
+                    info.pci_bus_info.domain = v[1].parse::<u16>()?;
+                    info.pci_bus_info.bus = v[2].parse::<u8>()?;
+                    info.pci_bus_info.device = v[3].parse::<u8>()?;
+                    info.pci_bus_info.function = v[4].parse::<u8>()?;
                 }
             }
 
             devices.push(MagmaPhysicalDevice::new(
                 Arc::new(LinuxPhysicalDevice::new(path.to_path_buf())?),
-                pci_info,
-                pci_bus_info,
+                info,
             ));
         }
     }

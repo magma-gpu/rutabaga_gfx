@@ -22,8 +22,8 @@ use crate::magma_defines::MagmaHeapBudget;
 use crate::magma_defines::MagmaImportHandleInfo;
 use crate::magma_defines::MagmaMappedMemoryRange;
 use crate::magma_defines::MagmaMemoryProperties;
-use crate::magma_defines::MagmaPciBusInfo;
-use crate::magma_defines::MagmaPciInfo;
+use crate::magma_defines::MagmaPhysicalDeviceInfo;
+use crate::magma_defines::MAGMA_BUS_TYPE_PCI;
 use crate::magma_defines::MAGMA_HEAP_DEVICE_LOCAL_BIT;
 use crate::magma_defines::MAGMA_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 use crate::magma_defines::MAGMA_MEMORY_PROPERTY_HOST_CACHED_BIT;
@@ -117,9 +117,11 @@ impl WddmAdapter {
         }
     }
 
-    pub fn initialize(&mut self) -> MagmaGpuResult<(MagmaPciInfo, MagmaPciBusInfo)> {
-        let mut pci_info: MagmaPciInfo = Default::default();
-        let mut pci_bus_info: MagmaPciBusInfo = Default::default();
+    pub fn initialize(&mut self) -> MagmaGpuResult<MagmaPhysicalDeviceInfo> {
+        let mut info = MagmaPhysicalDeviceInfo {
+            bus_type: MAGMA_BUS_TYPE_PCI,
+            ..Default::default()
+        };
 
         let mut query_device_ids: D3DKMT_QUERY_DEVICE_IDS = Default::default();
         let mut adapter_address: D3DKMT_ADAPTERADDRESS = Default::default();
@@ -216,18 +218,18 @@ impl WddmAdapter {
             .map_err(|_| MagmaGpuError::WithContext("invalid utf-16 data"))?;
 
         let device_ids = query_device_ids.DeviceIds;
-        pci_info.revision_id = device_ids.RevisionID.try_into()?;
-        pci_info.vendor_id = device_ids.VendorID.try_into()?;
-        pci_info.device_id = device_ids.DeviceID.try_into()?;
-        pci_info.subvendor_id = device_ids.SubVendorID.try_into()?;
-        pci_info.subdevice_id = device_ids.SubSystemID.try_into()?;
+        info.pci_bus_info.revision_id = device_ids.RevisionID.try_into()?;
+        info.vendor_id = device_ids.VendorID.try_into()?;
+        info.device_id = device_ids.DeviceID.try_into()?;
+        info.pci_bus_info.subvendor_id = device_ids.SubVendorID.try_into()?;
+        info.pci_bus_info.subdevice_id = device_ids.SubSystemID.try_into()?;
 
-        pci_bus_info.domain = 0;
-        pci_bus_info.bus = adapter_address.BusNumber.try_into()?;
-        pci_bus_info.device = adapter_address.DeviceNumber.try_into()?;
-        pci_bus_info.function = adapter_address.FunctionNumber.try_into()?;
+        info.pci_bus_info.domain = 0;
+        info.pci_bus_info.bus = adapter_address.BusNumber.try_into()?;
+        info.pci_bus_info.device = adapter_address.DeviceNumber.try_into()?;
+        info.pci_bus_info.function = adapter_address.FunctionNumber.try_into()?;
 
-        Ok((pci_info, pci_bus_info))
+        Ok(info)
     }
 }
 
@@ -235,9 +237,9 @@ impl GenericPhysicalDevice for WddmAdapter {
     fn create_device(
         &self,
         physical_device: &Arc<dyn PhysicalDevice>,
-        pci_info: &MagmaPciInfo,
+        info: &MagmaPhysicalDeviceInfo,
     ) -> MagmaGpuResult<Arc<dyn Device>> {
-        let vendor_private_data = match pci_info.vendor_id {
+        let vendor_private_data = match info.vendor_id {
             MAGMA_VENDOR_ID_AMD => Box::new(Amd(())),
             _ => todo!(),
         };
@@ -270,7 +272,7 @@ impl Drop for WddmAdapter {
     }
 }
 
-pub fn enumerate_adapters() -> MagmaGpuResult<Vec<(WddmAdapter, MagmaPciInfo, MagmaPciBusInfo)>> {
+pub fn enumerate_adapters() -> MagmaGpuResult<Vec<(WddmAdapter, MagmaPhysicalDeviceInfo)>> {
     let mut enum_adapters = D3DKMT_ENUMADAPTERS2::default();
 
     // SAFETY:
@@ -297,8 +299,8 @@ pub fn enumerate_adapters() -> MagmaGpuResult<Vec<(WddmAdapter, MagmaPciInfo, Ma
 
     for adapter in &mut adapter_slice[..(enum_adapters.NumAdapters as usize)] {
         let mut adapter = WddmAdapter::new(adapter.hAdapter, adapter.AdapterLuid);
-        let (pci_info, pci_bus_info) = adapter.initialize()?;
-        adapters.push((adapter, pci_info, pci_bus_info));
+        let info = adapter.initialize()?;
+        adapters.push((adapter, info));
     }
 
     Ok(adapters)
