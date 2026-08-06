@@ -43,12 +43,6 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
     ['xe',      xe_drm_h,     ['DRM_XE_.+', 'XE_.+'],             ['drm_xe_.+'],      xe_extra_args]
   ]
 
-  dep_zerocopy = dependency('zerocopy',
-    version: '>= 0.8.13',
-    fallback: ['zerocopy-0.8-rs', 'dep_zerocopy'],
-    required: true,
-  )
-
   foreach config : bindgen_configs
     name = config[0]
     header = config[1]
@@ -60,8 +54,15 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
       '--no-layout-tests'
     ]
 
-    if config.length() > 4
+    if config[4].length() > 0
       bindgen_args += config[4]
+      dep_zerocopy = dependency('zerocopy',
+        version: '>= 0.8.13',
+        fallback: ['zerocopy-0.8-rs', 'dep_zerocopy'],
+        required: true,
+      )
+    else
+      dep_zerocopy = null_dep
     endif
 
     foreach var_pattern : config[2]
@@ -77,6 +78,7 @@ if host_machine.system() == 'linux' or host_machine.system() == 'android'
       output : 'magma_gpu_magma_' + name + '_bindgen.rs',
       include_directories : [inc_include],
       args : bindgen_args,
+      dependencies: [dep_zerocopy],
     )
 
     magma_generated_libs += static_library(
