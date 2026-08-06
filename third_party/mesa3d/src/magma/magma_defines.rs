@@ -5,6 +5,7 @@ use magma_gpu::util::Error as MagmaGpuError;
 use remain::sorted;
 use thiserror::Error;
 use zerocopy::FromBytes;
+use zerocopy::Immutable;
 use zerocopy::IntoBytes;
 
 /// An error type based on magma_common_defs.h
@@ -41,25 +42,31 @@ impl From<MagmaGpuError> for MagmaError {
 
 pub type MagmaResult<T> = std::result::Result<T, MagmaError>;
 
+pub const MAGMA_BUS_TYPE_UNKNOWN: u32 = 0;
+pub const MAGMA_BUS_TYPE_PCI: u32 = 1;
+pub const MAGMA_BUS_TYPE_PLATFORM: u32 = 2;
+
 #[repr(C)]
-#[derive(Clone, Default, Debug, IntoBytes, FromBytes)]
-pub struct MagmaPciInfo {
-    pub vendor_id: u16,
-    pub device_id: u16,
+#[derive(Clone, Copy, Default, Debug, IntoBytes, FromBytes, Immutable)]
+pub struct MagmaPciBusInfo {
+    pub domain: u16,
     pub subvendor_id: u16,
     pub subdevice_id: u16,
     pub revision_id: u8,
-    pub padding: [u8; 7],
-}
-
-#[repr(C)]
-#[derive(Clone, Default, Debug, IntoBytes, FromBytes)]
-pub struct MagmaPciBusInfo {
-    pub domain: u16,
     pub bus: u8,
     pub device: u8,
     pub function: u8,
-    pub padding: [u8; 7],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, IntoBytes, FromBytes, Immutable)]
+pub struct MagmaPhysicalDeviceInfo {
+    pub bus_type: u32,
+    pub vendor_id: u16,
+    pub device_id: u16,
+    pub flags: u32,
+    pub pci_bus_info: MagmaPciBusInfo,
+    pub padding: [u8; 2],
 }
 
 // Should be set in the case of VRAM only
