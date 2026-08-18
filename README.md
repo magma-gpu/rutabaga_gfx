@@ -46,7 +46,7 @@ meson install -C host-build/
 
 ```sh
 cd $(rutabaga_gfx_dir)
-meson setup rutabaga-ffi-build/ -Dfeatures="gfxstream" -Dffi=true build
+meson setup rutabaga-ffi-build/ -Dfeatures="gfxstream" -Dffi=true
 meson install -C rutabaga-ffi-build/
 ```
 
