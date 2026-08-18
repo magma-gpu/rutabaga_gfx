@@ -45,8 +45,8 @@ meson install -C host-build/
 ### Install FFI bindings to Rutabaga
 
 ```sh
-cd $(rutabaga_gfx_dir)/ffi/
-meson setup rutabaga-ffi-build/
+cd $(rutabaga_gfx_dir)
+meson setup rutabaga-ffi-build/ -Dfeatures="gfxstream" -Dffi=true build
 meson install -C rutabaga-ffi-build/
 ```
 
