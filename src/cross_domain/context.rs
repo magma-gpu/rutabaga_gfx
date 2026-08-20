@@ -12,7 +12,8 @@ use log::error;
 use magma_gpu::util::create_pipe;
 use magma_gpu::util::AsBorrowedDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
-use magma_gpu::util::Event;
+use magma_gpu::util::create_event_pair;
+use magma_gpu::util::EventSignaler;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::Tube;
@@ -97,8 +98,8 @@ pub struct CrossDomainContext {
     pub virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
     pub internal_sockets: Arc<Mutex<Map<u128, Tube>>>,
     pub worker_thread: Option<thread::JoinHandle<RutabagaResult<()>>>,
-    pub resample_evt: Option<Event>,
-    pub kill_evt: Option<Event>,
+    pub resample_evt: Option<EventSignaler>,
+    pub kill_evt: Option<EventSignaler>,
 }
 
 impl CrossDomainContext {
@@ -160,11 +161,9 @@ impl CrossDomainContext {
                 self.get_connection(cmd_init)?
             };
 
-            let kill_evt = Event::new()?;
-            let thread_kill_evt = kill_evt.try_clone()?;
-
-            let resample_evt = Event::new()?;
-            let thread_resample_evt = resample_evt.try_clone()?;
+            // This end signals, the worker thread waits.
+            let (kill_evt, thread_kill_evt) = create_event_pair()?;
+            let (resample_evt, thread_resample_evt) = create_event_pair()?;
 
             let mut wait_ctx = WaitContext::new()?;
             wait_ctx.add(
@@ -403,7 +402,7 @@ impl CrossDomainContext {
         let items = self.item_state.lock().unwrap();
 
         if let Some(item) = items.table.get(&cmd_event_new.id) {
-            if let CrossDomainItem::Event(_) = item {
+            if let CrossDomainItem::Event(..) = item {
                 self.state
                     .as_ref()
                     .unwrap()
@@ -481,15 +480,15 @@ impl CrossDomainContext {
                 .table
                 .get(&cmd_write.identifier)
                 .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
-            if let CrossDomainItem::Event(event) = item {
-                let event = Arc::clone(event);
+            if let CrossDomainItem::Event(_, signaler) = item {
+                let signaler = Arc::clone(signaler);
 
                 let Ok(bytes) = <[u8; 8]>::try_from(opaque_data) else {
                     return Err(RutabagaError::InvalidCrossDomainWriteLength);
                 };
 
                 drop(items);
-                event.add(u64::from_le_bytes(bytes))?;
+                signaler.add(u64::from_le_bytes(bytes))?;
 
                 if cmd_write.hang_up != 0 {
                     let mut items = self.item_state.lock().unwrap();

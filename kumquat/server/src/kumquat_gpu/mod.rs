@@ -15,7 +15,8 @@ use magma_gpu::protocols::ipc::KumquatStream;
 use magma_gpu::protocols::kumquat_gpu_protocol::*;
 use magma_gpu::util::AsBorrowedDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
-use magma_gpu::util::Event;
+use magma_gpu::util::create_event_pair;
+use magma_gpu::util::EventSignaler;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::MemoryMapping;
 use magma_gpu::util::OwnedDescriptor;
@@ -77,7 +78,7 @@ pub struct KumquatGpuResource {
 }
 
 pub struct FenceData {
-    pub pending_fences: Map<u64, Event>,
+    pub pending_fences: Map<u64, EventSignaler>,
 }
 
 pub type FenceState = Arc<Mutex<FenceData>>;
@@ -335,8 +336,8 @@ impl KumquatGpuConnection {
                         .rutabaga
                         .transfer_write(cmd.ctx_id, resource_id, transfer, None)?;
 
-                    let event: Event = emulated_fence.try_into()?;
-                    event.signal()?;
+                    let signaler: EventSignaler = emulated_fence.try_into()?;
+                    signaler.signal()?;
                 }
                 KumquatGpuProtocol::TransferFromHost3d(cmd, emulated_fence) => {
                     let resource_id = cmd.resource_id;
@@ -358,8 +359,8 @@ impl KumquatGpuConnection {
                         .rutabaga
                         .transfer_read(cmd.ctx_id, resource_id, transfer, None)?;
 
-                    let event: Event = emulated_fence.try_into()?;
-                    event.signal()?;
+                    let signaler: EventSignaler = emulated_fence.try_into()?;
+                    signaler.signal()?;
                 }
                 KumquatGpuProtocol::CmdSubmit3d(cmd, mut cmd_buf, fence_ids) => {
                     kumquat_gpu.rutabaga.submit_command(
@@ -380,13 +381,14 @@ impl KumquatGpuConnection {
                         let mut fence_descriptor_opt: Option<MagmaGpuHandle> = None;
                         let actual_fence = cmd.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0;
                         if !actual_fence {
-                            let event: Event = Event::new()?;
-                            let clone = event.try_clone()?;
-                            let emulated_fence: MagmaGpuHandle = clone.into();
+                            // This end signals when the fence retires; the
+                            // guest waits, so it gets the other half.
+                            let (signaler, waiter) = create_event_pair()?;
+                            let emulated_fence: MagmaGpuHandle = waiter.into();
 
                             fence_descriptor_opt = Some(emulated_fence);
                             let mut fence_state = kumquat_gpu.fence_state.lock().unwrap();
-                            fence_state.pending_fences.insert(fence_id, event);
+                            fence_state.pending_fences.insert(fence_id, signaler);
                         }
 
                         kumquat_gpu.rutabaga.create_fence(fence)?;

@@ -9,7 +9,8 @@ use std::slice::from_raw_parts_mut;
 use crate::protocols::ipc::KumquatStream;
 use crate::protocols::kumquat_gpu_protocol::*;
 use crate::util::Error;
-use crate::util::Event;
+use crate::util::create_event_pair;
+use crate::util::EventWaiter;
 use crate::util::Handle;
 use crate::util::IntoRawDescriptor;
 use crate::util::MemoryMapping;
@@ -343,10 +344,11 @@ impl VirtGpuKumquat {
             .get_mut(&transfer.bo_handle)
             .ok_or(Error::Unsupported)?;
 
-        let event = Event::new()?;
-        let emulated_fence: Handle = event.into();
+        // The host signals and this end waits, so the halves go opposite ways.
+        let (signaler, waiter) = create_event_pair()?;
+        let emulated_fence: Handle = signaler.into();
 
-        resource.attached_fences.push(emulated_fence.try_clone()?);
+        resource.attached_fences.push(waiter.into());
 
         let transfer_to_host = kumquat_gpu_protocol_transfer_host_3d {
             hdr: kumquat_gpu_protocol_ctrl_hdr {
@@ -376,10 +378,11 @@ impl VirtGpuKumquat {
             .get_mut(&transfer.bo_handle)
             .ok_or(Error::Unsupported)?;
 
-        let event = Event::new()?;
-        let emulated_fence: Handle = event.into();
+        // The host signals and this end waits, so the halves go opposite ways.
+        let (signaler, waiter) = create_event_pair()?;
+        let emulated_fence: Handle = signaler.into();
 
-        resource.attached_fences.push(emulated_fence.try_clone()?);
+        resource.attached_fences.push(waiter.into());
         let transfer_from_host = kumquat_gpu_protocol_transfer_host_3d {
             hdr: kumquat_gpu_protocol_ctrl_hdr {
                 type_: KUMQUAT_GPU_PROTOCOL_TRANSFER_FROM_HOST_3D,
@@ -462,6 +465,13 @@ impl VirtGpuKumquat {
                 }
             };
 
+            // wait() blocks on what is attached here, and waiting is a unique
+            // capability on platforms where an event is a Mach port, so the
+            // fence itself is attached rather than a copy of it. The descriptor
+            // handed out below never waits, so a copy will do for that.
+            let out_fence = fence.try_clone()?;
+            let mut fence = Some(fence);
+
             for handle in bo_handles {
                 // We could support implicit sync with real fences, but the need does not exist.
                 if actual_fence {
@@ -470,10 +480,14 @@ impl VirtGpuKumquat {
 
                 let resource = self.resources.get_mut(handle).ok_or(Error::Unsupported)?;
 
-                resource.attached_fences.push(fence.try_clone()?);
+                let attached = match fence.take() {
+                    Some(fence) => fence,
+                    None => out_fence.try_clone()?,
+                };
+                resource.attached_fences.push(attached);
             }
 
-            fence_opt = Some(fence);
+            fence_opt = Some(out_fence);
         } else {
             self.stream
                 .write(KumquatGpuProtocolWrite::CmdWithData(submit_command, data))?;
@@ -497,8 +511,8 @@ impl VirtGpuKumquat {
 
         let new_fences: Vec<Handle> = std::mem::take(&mut resource.attached_fences);
         for fence in new_fences {
-            let event: Event = fence.try_into()?;
-            event.wait()?;
+            let waiter: EventWaiter = fence.try_into()?;
+            waiter.wait()?;
         }
 
         Ok(())

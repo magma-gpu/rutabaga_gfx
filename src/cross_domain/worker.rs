@@ -9,7 +9,7 @@ use magma_gpu::util::AsBorrowedDescriptor;
 use magma_gpu::util::AsRawDescriptor;
 use magma_gpu::util::DescriptorType;
 use magma_gpu::util::Error as MagmaGpuError;
-use magma_gpu::util::Event;
+use magma_gpu::util::EventWaiter;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::WaitContext;
 use magma_gpu::util::WaitTimeout;
@@ -71,7 +71,7 @@ impl CrossDomainWorker {
     fn handle_fence(
         &mut self,
         fence: RutabagaFence,
-        thread_resample_evt: &Event,
+        thread_resample_evt: &EventWaiter,
         receive_buf: &mut [u8],
     ) -> RutabagaResult<()> {
         let events = self.wait_ctx.wait(WaitTimeout::NoTimeout)?;
@@ -176,7 +176,7 @@ impl CrossDomainWorker {
                                 self.wait_ctx.delete(readpipe.as_borrowed_descriptor())?;
                             }
                         }
-                        CrossDomainItem::Event(ref evt) => {
+                        CrossDomainItem::Event(ref evt, _) => {
                             let ring_write =
                                 RingWrite::WriteFromEvent(cmd_read, evt, event.readable);
                             bytes_read = self.state.write_to_ring::<CrossDomainReadWrite>(
@@ -235,12 +235,17 @@ impl CrossDomainWorker {
                     DescriptorType::Event => {
                         *identifier_type = CROSS_DOMAIN_ID_TYPE_EVENT;
                         *identifier_size = 0;
-                        let event = Event::try_from(MagmaGpuHandle {
+                        let waiter = EventWaiter::try_from(MagmaGpuHandle {
                             os_handle: file,
                             handle_type: MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD,
                         })?;
-                        *identifier =
-                            add_item(&self.item_state, CrossDomainItem::Event(Arc::new(event)));
+                        // Both ends are made once here; CMD_WRITE is hot enough
+                        // that it must not duplicate a descriptor per write.
+                        let signaler = waiter.signaler()?;
+                        *identifier = add_item(
+                            &self.item_state,
+                            CrossDomainItem::Event(Arc::new(waiter), Arc::new(signaler)),
+                        );
                     }
                     DescriptorType::Memory(size, handle_type) => {
                         *identifier_type = CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLOB;
@@ -283,8 +288,8 @@ impl CrossDomainWorker {
 
     pub fn run(
         &mut self,
-        thread_kill_evt: Event,
-        thread_resample_evt: Event,
+        thread_kill_evt: EventWaiter,
+        thread_resample_evt: EventWaiter,
     ) -> RutabagaResult<()> {
         self.wait_ctx.add(
             CROSS_DOMAIN_RESAMPLE_ID,
@@ -329,9 +334,9 @@ impl CrossDomainWorker {
                         .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
 
                     match item {
-                        CrossDomainItem::Event(event) => self
+                        CrossDomainItem::Event(waiter, _) => self
                             .wait_ctx
-                            .add(efd_id as u64, event.as_borrowed_descriptor())?,
+                            .add(efd_id as u64, waiter.as_borrowed_descriptor())?,
                         _ => return Err(RutabagaError::InvalidCrossDomainItemType),
                     }
                 }

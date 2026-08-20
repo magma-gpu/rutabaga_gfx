@@ -10,7 +10,8 @@ use std::sync::Condvar;
 use std::sync::Mutex;
 
 use magma_gpu::util::Error as MagmaGpuError;
-use magma_gpu::util::Event;
+use magma_gpu::util::EventSignaler;
+use magma_gpu::util::EventWaiter;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::ReadPipe;
@@ -41,7 +42,7 @@ pub enum CrossDomainItem {
     Blob(MagmaGpuHandle),
     WaylandReadPipe(ReadPipe),
     WaylandWritePipe(WritePipe),
-    Event(Arc<Event>),
+    Event(Arc<EventWaiter>, Arc<EventSignaler>),
     RegularFile(OwnedDescriptor),
     Socket(OwnedDescriptor),
 }
@@ -50,14 +51,14 @@ pub enum CrossDomainJob {
     HandleFence(RutabagaFence),
     AddReadPipe(u32),
     Finish,
-    AddAtomicMemorySentinel(u32, Event),
+    AddAtomicMemorySentinel(u32, EventWaiter),
     AddReadEvent(u32),
 }
 
 pub enum RingWrite<'a, T> {
     Write(T, Option<&'a [u8]>),
     WriteFromPipe(CrossDomainReadWrite, &'a mut ReadPipe, bool),
-    WriteFromEvent(CrossDomainReadWrite, &'a Event, bool),
+    WriteFromEvent(CrossDomainReadWrite, &'a EventWaiter, bool),
 }
 
 pub type CrossDomainJobs = Mutex<Option<VecDeque<CrossDomainJob>>>;
