@@ -27,6 +27,7 @@ with_virgl_renderer = features.contains('virgl_renderer')
 
 rutabaga_args = []
 dep_rutabaga_gfx = []
+dep_link_args = []
 
 rust_global_args = [
   '-Aclippy::collapsible_else_if',
@@ -44,12 +45,14 @@ endif
 if with_gfxstream
   dep_gfxstream = dependency('gfxstream_backend', version: '>= 0.1.2')
   rutabaga_args += ['--cfg', 'feature="gfxstream"']
+  dep_link_args += ['-L', dep_gfxstream.get_variable('libdir')]
   dep_rutabaga_gfx += dep_gfxstream
   dep_rutabaga_gfx += dependency('libc++', required: false)
 endif
 
 if with_virgl_renderer
   dep_virgl = dependency('virglrenderer', version: '>= 1.0.0')
+  dep_link_args += ['-L', dep_virgl.get_variable('libdir')]
   rutabaga_args += ['--cfg', 'feature="virgl_renderer"']
   dep_rutabaga_gfx += dep_virgl
 endif

@@ -17,5 +17,6 @@ kumquat_exe = executable(
     librutabaga_gfx,
     libmagma_gpu_rs,
   ],
+  rust_args: dep_link_args,
   install: true,
 )
