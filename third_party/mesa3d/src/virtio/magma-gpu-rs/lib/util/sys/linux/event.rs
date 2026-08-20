@@ -15,18 +15,33 @@ use crate::util::OwnedDescriptor;
 use crate::util::Result as MagmaGpuResult;
 use crate::util::MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD;
 
-pub struct Event {
+/// The end of an event that reports progress.
+pub struct EventSignaler {
     descriptor: OwnedDescriptor,
 }
 
-impl Event {
-    pub fn new() -> MagmaGpuResult<Event> {
-        let owned: OwnedFd = eventfd(0, EventfdFlags::empty())?;
-        Ok(Event {
-            descriptor: owned.into(),
-        })
-    }
+/// The end of an event that blocks until progress is reported.
+pub struct EventWaiter {
+    descriptor: OwnedDescriptor,
+}
 
+/// Creates the two ends of one event.
+///
+/// An eventfd is symmetric and either end could do either job, but the callers
+/// are not: one signals and the other waits, and which is which is decided
+/// where the pair is created rather than by a later clone.
+pub fn create_event_pair() -> MagmaGpuResult<(EventSignaler, EventWaiter)> {
+    let owned: OwnedFd = eventfd(0, EventfdFlags::empty())?;
+    let waiter = EventWaiter {
+        descriptor: owned.into(),
+    };
+    let signaler = EventSignaler {
+        descriptor: waiter.descriptor.try_clone()?,
+    };
+    Ok((signaler, waiter))
+}
+
+impl EventSignaler {
     pub fn add(&self, value: u64) -> MagmaGpuResult<()> {
         let _ = write(&self.descriptor, &value.to_le_bytes())?;
         Ok(())
@@ -35,34 +50,65 @@ impl Event {
     pub fn signal(&self) -> MagmaGpuResult<()> {
         self.add(1)
     }
+}
+
+impl EventWaiter {
+    /// Duplicates the waiting end.
+    ///
+    /// An eventfd can be read from two descriptors, so several callers can wait
+    /// on one event. Platforms where waiting is a unique capability cannot do
+    /// this.
+    pub fn try_clone(&self) -> MagmaGpuResult<EventWaiter> {
+        Ok(EventWaiter {
+            descriptor: self.descriptor.try_clone()?,
+        })
+    }
+
+    /// Makes an end that can signal this event.
+    ///
+    /// A caller that holds the waiting end may also have to report on the same
+    /// event, when progress travels in either direction.
+    pub fn signaler(&self) -> MagmaGpuResult<EventSignaler> {
+        Ok(EventSignaler {
+            descriptor: self.descriptor.try_clone()?,
+        })
+    }
 
     pub fn wait(&self) -> MagmaGpuResult<u64> {
         let mut buf = [0; 8];
         read(&self.descriptor, &mut buf)?;
         Ok(u64::from_le_bytes(buf))
     }
-
-    pub fn try_clone(&self) -> MagmaGpuResult<Event> {
-        let clone = self.descriptor.try_clone()?;
-        Ok(Event { descriptor: clone })
-    }
 }
 
-impl TryFrom<Handle> for Event {
+impl TryFrom<Handle> for EventSignaler {
     type Error = Error;
     fn try_from(handle: Handle) -> Result<Self, Self::Error> {
         if handle.handle_type != MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD {
             return Err(Error::InvalidMagmaHandle);
         }
 
-        Ok(Event {
+        Ok(EventSignaler {
             descriptor: handle.os_handle,
         })
     }
 }
 
-impl From<Event> for Handle {
-    fn from(evt: Event) -> Self {
+impl TryFrom<Handle> for EventWaiter {
+    type Error = Error;
+    fn try_from(handle: Handle) -> Result<Self, Self::Error> {
+        if handle.handle_type != MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD {
+            return Err(Error::InvalidMagmaHandle);
+        }
+
+        Ok(EventWaiter {
+            descriptor: handle.os_handle,
+        })
+    }
+}
+
+impl From<EventSignaler> for Handle {
+    fn from(evt: EventSignaler) -> Self {
         Handle {
             os_handle: evt.descriptor,
             handle_type: MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD,
@@ -70,7 +116,22 @@ impl From<Event> for Handle {
     }
 }
 
-impl AsBorrowedDescriptor for Event {
+impl From<EventWaiter> for Handle {
+    fn from(evt: EventWaiter) -> Self {
+        Handle {
+            os_handle: evt.descriptor,
+            handle_type: MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD,
+        }
+    }
+}
+
+impl AsBorrowedDescriptor for EventSignaler {
+    fn as_borrowed_descriptor(&self) -> &OwnedDescriptor {
+        &self.descriptor
+    }
+}
+
+impl AsBorrowedDescriptor for EventWaiter {
     fn as_borrowed_descriptor(&self) -> &OwnedDescriptor {
         &self.descriptor
     }

@@ -17,7 +17,9 @@ use std::thread;
 use log::info;
 use magma_gpu::util::AtomicMemorySentinel;
 use magma_gpu::util::Error as MagmaGpuError;
-use magma_gpu::util::Event;
+use magma_gpu::util::create_event_pair;
+use magma_gpu::util::EventSignaler;
+use magma_gpu::util::EventWaiter;
 use magma_gpu::util::MemoryMapping;
 
 use crate::rutabaga_core::VirtioFsLookup;
@@ -32,7 +34,7 @@ use super::cross_domain_protocol::CrossDomainSignalAtomicMemorySentinel;
 struct AtomicMemorySentinelThread {
     sentinel: Arc<AtomicMemorySentinel>,
     shutdown: Arc<AtomicBool>,
-    sender: Event,
+    sender: EventSignaler,
     initial_value: u32,
 }
 
@@ -40,7 +42,7 @@ impl AtomicMemorySentinelThread {
     fn new(
         sentinel: Arc<AtomicMemorySentinel>,
         shutdown: Arc<AtomicBool>,
-        sender: Event,
+        sender: EventSignaler,
         initial_value: u32,
     ) -> Self {
         Self {
@@ -94,7 +96,7 @@ struct SentinelInstance {
     sentinel: Arc<AtomicMemorySentinel>,
     watcher_thread: Option<thread::JoinHandle<()>>,
     shutdown: Arc<AtomicBool>,
-    evt: Event,
+    evt: EventWaiter,
 }
 
 impl SentinelInstance {
@@ -136,7 +138,7 @@ impl AtomicMemorySentinelManager {
     }
 
     /// Creates a new memory watcher and returns its ID and event descriptor
-    pub fn create_watcher(&mut self, id: u32, fs_id: u64, handle: u64) -> RutabagaResult<Event> {
+    pub fn create_watcher(&mut self, id: u32, fs_id: u64, handle: u64) -> RutabagaResult<EventWaiter> {
         if self.watchers.contains_key(&id) {
             return Err(RutabagaError::AlreadyInUse);
         }
@@ -156,8 +158,8 @@ impl AtomicMemorySentinelManager {
         let sentinel = Arc::new(AtomicMemorySentinel::new(mapping)?);
         let initial_value = sentinel.load();
 
-        let memory_watcher_evt = Event::new()?;
-        let evt_for_waitctx = memory_watcher_evt.try_clone()?;
+        // The watcher thread signals, this end waits.
+        let (memory_watcher_evt, evt_for_waitctx) = create_event_pair()?;
 
         let shutdown = Arc::new(AtomicBool::new(false));
         let thread_shutdown = shutdown.clone();
@@ -246,7 +248,7 @@ impl AtomicMemorySentinelManager {
     }
 
     /// Gets the event descriptor for a watcher
-    pub fn get_event(&self, id: u32) -> Option<&Event> {
+    pub fn get_event(&self, id: u32) -> Option<&EventWaiter> {
         self.watchers.get(&id).map(|w| &w.evt)
     }
 }
