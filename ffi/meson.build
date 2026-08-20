@@ -7,6 +7,7 @@ librutabaga_gfx_ffi = library(
   dependencies: dep_rutabaga_gfx,
   link_with: [librutabaga_gfx, libmagma_gpu_rs],
   rust_abi: 'c',
+  rust_args: dep_link_args,
   install: true,
 )
 
