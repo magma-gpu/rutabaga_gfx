@@ -28,7 +28,7 @@ impl Tube {
     pub fn send(
         &self,
         _opaque_data: &[u8],
-        _descriptors: &[OwnedDescriptor],
+        _descriptors: Vec<OwnedDescriptor>,
     ) -> MagmaGpuResult<usize> {
         Err(Error::Unsupported)
     }
