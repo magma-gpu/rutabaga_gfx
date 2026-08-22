@@ -96,7 +96,7 @@ impl CrossDomainState {
     pub fn send_msg(
         &self,
         opaque_data: &[u8],
-        descriptors: &[OwnedDescriptor],
+        descriptors: Vec<OwnedDescriptor>,
     ) -> RutabagaResult<usize> {
         match self.connection {
             Some(ref connection) => connection

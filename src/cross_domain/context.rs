@@ -349,7 +349,7 @@ impl CrossDomainContext {
         }
 
         if let (Some(state), Some(ref resample_evt)) = (&self.state, &self.resample_evt) {
-            state.send_msg(opaque_data, &descriptors)?;
+            state.send_msg(opaque_data, descriptors)?;
 
             if let Some(read_pipe_id) = read_pipe_id_opt {
                 state.add_job(CrossDomainJob::AddReadPipe(read_pipe_id));
