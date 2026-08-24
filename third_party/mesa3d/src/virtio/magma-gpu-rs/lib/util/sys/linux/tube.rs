@@ -113,7 +113,7 @@ impl Tube {
             &self.socket,
             &[IoSlice::new(opaque_data)],
             &mut cmsg_buffer,
-            SendFlags::empty(),
+            SendFlags::NOSIGNAL,
         )?;
 
         Ok(bytes_sent)
