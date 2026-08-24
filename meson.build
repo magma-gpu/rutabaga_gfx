@@ -45,7 +45,10 @@ endif
 if with_gfxstream
   dep_gfxstream = dependency('gfxstream_backend', version: '>= 0.1.2')
   rutabaga_args += ['--cfg', 'feature="gfxstream"']
-  dep_link_args += ['-L', dep_gfxstream.get_variable('libdir')]
+  libdir_gfxstream = dep_gfxstream.get_variable('libdir')
+  if libdir_gfxstream != ''
+    dep_link_args += ['-L', libdir_gfxstream]
+  endif
   dep_rutabaga_gfx += dep_gfxstream
   dep_rutabaga_gfx += dependency('libc++', required: false)
 endif
