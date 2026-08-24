@@ -10,7 +10,7 @@ android-base = [
 
 [static_libraries]
 gfxstream_backend = [
-    { target_name = "libgfxstream_backend" }
+    { target_name = "libgfxstream_backend", pkgconfig = {'libdir' = ''}}
 ]
 
 [rust_libraries]
