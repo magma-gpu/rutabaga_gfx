@@ -9,10 +9,10 @@ use std::thread;
 
 use log::error;
 
+use magma_gpu::util::create_event_pair;
 use magma_gpu::util::create_pipe;
 use magma_gpu::util::AsBorrowedDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
-use magma_gpu::util::create_event_pair;
 use magma_gpu::util::EventSignaler;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::OwnedDescriptor;

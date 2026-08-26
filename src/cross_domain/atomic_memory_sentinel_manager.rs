@@ -15,9 +15,9 @@ use std::sync::Arc;
 use std::thread;
 
 use log::info;
+use magma_gpu::util::create_event_pair;
 use magma_gpu::util::AtomicMemorySentinel;
 use magma_gpu::util::Error as MagmaGpuError;
-use magma_gpu::util::create_event_pair;
 use magma_gpu::util::EventSignaler;
 use magma_gpu::util::EventWaiter;
 use magma_gpu::util::MemoryMapping;
@@ -138,7 +138,12 @@ impl AtomicMemorySentinelManager {
     }
 
     /// Creates a new memory watcher and returns its ID and event descriptor
-    pub fn create_watcher(&mut self, id: u32, fs_id: u64, handle: u64) -> RutabagaResult<EventWaiter> {
+    pub fn create_watcher(
+        &mut self,
+        id: u32,
+        fs_id: u64,
+        handle: u64,
+    ) -> RutabagaResult<EventWaiter> {
         if self.watchers.contains_key(&id) {
             return Err(RutabagaError::AlreadyInUse);
         }
