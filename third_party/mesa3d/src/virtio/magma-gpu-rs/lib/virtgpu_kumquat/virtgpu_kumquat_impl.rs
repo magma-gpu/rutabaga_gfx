@@ -8,8 +8,8 @@ use std::slice::from_raw_parts_mut;
 
 use crate::protocols::ipc::KumquatStream;
 use crate::protocols::kumquat_gpu_protocol::*;
-use crate::util::Error;
 use crate::util::create_event_pair;
+use crate::util::Error;
 use crate::util::EventWaiter;
 use crate::util::Handle;
 use crate::util::IntoRawDescriptor;
