@@ -9,7 +9,6 @@ use rustix::pipe::pipe;
 
 use crate::util::AsBorrowedDescriptor;
 use crate::util::AsRawDescriptor;
-use crate::util::FromRawDescriptor;
 use crate::util::OwnedDescriptor;
 use crate::util::RawDescriptor;
 use crate::util::Result;
@@ -48,11 +47,8 @@ impl AsBorrowedDescriptor for ReadPipe {
 }
 
 impl WritePipe {
-    pub fn new(descriptor: RawDescriptor) -> WritePipe {
-        // SAFETY: Safe because we know the underlying OS descriptor is valid and
-        // owned by us.
-        let owned = unsafe { OwnedDescriptor::from_raw_descriptor(descriptor) };
-        WritePipe { descriptor: owned }
+    pub fn new(descriptor: OwnedDescriptor) -> WritePipe {
+        WritePipe { descriptor }
     }
 
     pub fn write(&self, data: &[u8]) -> Result<usize> {

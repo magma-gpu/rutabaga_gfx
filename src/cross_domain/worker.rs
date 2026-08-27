@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use log::error;
 use magma_gpu::util::AsBorrowedDescriptor;
-use magma_gpu::util::AsRawDescriptor;
 use magma_gpu::util::DescriptorType;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::EventWaiter;
@@ -261,8 +260,7 @@ impl CrossDomainWorker {
                     DescriptorType::WritePipe => {
                         *identifier_type = CROSS_DOMAIN_ID_TYPE_WRITE_PIPE;
                         *identifier_size = 0;
-                        let write_pipe = WritePipe::new(file.as_raw_descriptor());
-                        std::mem::forget(file); // WritePipe now owns the descriptor
+                        let write_pipe = WritePipe::new(file);
                         *identifier = add_item(
                             &self.item_state,
                             CrossDomainItem::WaylandWritePipe(write_pipe),
