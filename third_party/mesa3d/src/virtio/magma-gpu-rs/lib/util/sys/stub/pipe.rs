@@ -28,7 +28,7 @@ impl AsBorrowedDescriptor for ReadPipe {
 }
 
 impl WritePipe {
-    pub fn new(_descriptor: RawDescriptor) -> WritePipe {
+    pub fn new(_descriptor: OwnedDescriptor) -> WritePipe {
         unimplemented!()
     }
 

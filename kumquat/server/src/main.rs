@@ -7,7 +7,9 @@ mod kumquat_gpu;
 
 use clap::Parser;
 use kumquat::KumquatBuilder;
+use magma_gpu::util::FromRawDescriptor;
 use magma_gpu::util::IntoRawDescriptor;
+use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::WritePipe;
 
 use crate::kumquat_gpu::KumquatGpuResult;
@@ -43,7 +45,11 @@ fn main() -> KumquatGpuResult<()> {
         .build()?;
 
     if args.pipe_descriptor != 0 {
-        let write_pipe = WritePipe::new(args.pipe_descriptor.into_raw_descriptor());
+        // SAFETY: the caller passed a descriptor it opened and handed over.
+        let descriptor = unsafe {
+            OwnedDescriptor::from_raw_descriptor(args.pipe_descriptor.into_raw_descriptor())
+        };
+        let write_pipe = WritePipe::new(descriptor);
         write_pipe.write(&1u64.to_le_bytes())?;
     }
 
