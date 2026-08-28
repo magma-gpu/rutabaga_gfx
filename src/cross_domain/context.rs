@@ -86,6 +86,7 @@ use crate::DrmFormat;
 use crate::ImageAllocationInfo;
 use crate::RutabagaGralloc;
 use crate::RutabagaGrallocFlags;
+use crate::RutabagaIovec;
 
 pub struct CrossDomainContext {
     pub paths: Option<Vec<RutabagaPath>>,
@@ -546,6 +547,7 @@ impl RutabagaContext for CrossDomainContext {
         &mut self,
         resource_id: u32,
         resource_create_blob: ResourceCreateBlob,
+        _iovec_opt: Option<Vec<RutabagaIovec>>,
         handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         let item_id = resource_create_blob.blob_id as u32;
