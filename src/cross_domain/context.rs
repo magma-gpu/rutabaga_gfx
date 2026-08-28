@@ -1,6 +1,7 @@
 // Copyright 2026 Magma-GPU project
 // SPDX-License-Identifier: MIT
 
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap as Map;
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -84,6 +85,7 @@ use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 use crate::rutabaga_utils::RUTABAGA_MAP_CACHE_CACHED;
 use crate::DrmFormat;
 use crate::ImageAllocationInfo;
+use crate::ImageMemoryRequirements;
 use crate::RutabagaGralloc;
 use crate::RutabagaGrallocFlags;
 use crate::RutabagaIovec;
@@ -540,6 +542,103 @@ impl CrossDomainContext {
         self.send(&mut cmd_send, opaque_data)?;
         Ok(())
     }
+
+    fn create_blob_from_iovecs(
+        resource_id: u32,
+        resource_create_blob: ResourceCreateBlob,
+        iovecs: Vec<RutabagaIovec>,
+    ) -> RutabagaResource {
+        RutabagaResource {
+            resource_id,
+            handle: None,
+            blob: true,
+            blob_mem: resource_create_blob.blob_mem,
+            blob_flags: resource_create_blob.blob_flags,
+            map_info: None,
+            info_2d: None,
+            info_3d: None,
+            vulkan_info: None,
+            backing_iovecs: Some(iovecs),
+            component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+            size: resource_create_blob.size,
+            mapping: None,
+        }
+    }
+
+    fn create_blob_from_handle(
+        &self,
+        resource_id: u32,
+        resource_create_blob: ResourceCreateBlob,
+        handle: MagmaGpuHandle,
+    ) -> RutabagaResult<RutabagaResource> {
+        let map_access = handle
+            .os_handle
+            .determine_map_access_mode()
+            .map_err(|e| RutabagaError::MagmaGpuError(e.into()))?;
+        let map_info = Some(RUTABAGA_MAP_CACHE_CACHED | map_access);
+
+        Ok(RutabagaResource {
+            resource_id,
+            handle: Some(Arc::new(handle.into())),
+            blob: true,
+            blob_mem: resource_create_blob.blob_mem,
+            blob_flags: resource_create_blob.blob_flags,
+            map_info,
+            info_2d: None,
+            info_3d: None,
+            vulkan_info: None,
+            backing_iovecs: None,
+            component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+            size: resource_create_blob.size,
+            mapping: None,
+        })
+    }
+
+    fn create_blob_with_requirements(
+        &self,
+        resource_id: u32,
+        resource_create_blob: ResourceCreateBlob,
+        handle_opt: Option<RutabagaHandle>,
+        reqs: &ImageMemoryRequirements,
+    ) -> RutabagaResult<RutabagaResource> {
+        if reqs.size != resource_create_blob.size {
+            return Err(MagmaGpuError::WithContext("blob size mismatch").into());
+        }
+
+        // Strictly speaking, it's against the virtio-gpu spec to allocate memory in the context
+        // create blob function, which says "the actual allocation is done via
+        // VIRTIO_GPU_CMD_SUBMIT_3D."  However, atomic resource creation is easiest for the
+        // cross-domain use case, so whatever.
+        let hnd = match handle_opt {
+            Some(handle) => handle,
+            None => self.gralloc.lock().unwrap().allocate_memory(*reqs)?.into(),
+        };
+
+        let info_3d = Resource3DInfo {
+            width: reqs.info.width,
+            height: reqs.info.height,
+            drm_fourcc: reqs.info.drm_format.into(),
+            strides: reqs.strides,
+            offsets: reqs.offsets,
+            modifier: reqs.modifier,
+        };
+
+        Ok(RutabagaResource {
+            resource_id,
+            handle: Some(Arc::new(hnd)),
+            blob: true,
+            blob_mem: resource_create_blob.blob_mem,
+            blob_flags: resource_create_blob.blob_flags,
+            map_info: Some(reqs.map_info | RUTABAGA_MAP_ACCESS_RW),
+            info_2d: None,
+            info_3d: Some(info_3d),
+            vulkan_info: reqs.vulkan_info,
+            backing_iovecs: None,
+            component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+            size: resource_create_blob.size,
+            mapping: None,
+        })
+    }
 }
 
 impl RutabagaContext for CrossDomainContext {
@@ -547,90 +646,58 @@ impl RutabagaContext for CrossDomainContext {
         &mut self,
         resource_id: u32,
         resource_create_blob: ResourceCreateBlob,
-        _iovec_opt: Option<Vec<RutabagaIovec>>,
+        iovec_opt: Option<Vec<RutabagaIovec>>,
         handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
-        let item_id = resource_create_blob.blob_id as u32;
-
-        let mut items = self.item_state.lock().unwrap();
-        let item = items
-            .table
-            .get_mut(&item_id)
-            .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
-
-        // Items that are kept in the table after usage.
-        if let CrossDomainItem::ImageRequirements(reqs) = item {
-            if reqs.size != resource_create_blob.size {
-                return Err(MagmaGpuError::WithContext("blob size mismatch").into());
-            }
-
-            // Strictly speaking, it's against the virtio-gpu spec to allocate memory in the context
-            // create blob function, which says "the actual allocation is done via
-            // VIRTIO_GPU_CMD_SUBMIT_3D."  However, atomic resource creation is easiest for the
-            // cross-domain use case, so whatever.
-            let hnd = match handle_opt {
-                Some(handle) => handle,
-                None => self.gralloc.lock().unwrap().allocate_memory(*reqs)?.into(),
-            };
-
-            let info_3d = Resource3DInfo {
-                width: reqs.info.width,
-                height: reqs.info.height,
-                drm_fourcc: reqs.info.drm_format.into(),
-                strides: reqs.strides,
-                offsets: reqs.offsets,
-                modifier: reqs.modifier,
-            };
-
-            // Keep ImageRequirements items and return immediately, since they can be used for subsequent allocations.
-            return Ok(RutabagaResource {
+        // This single interface is responsible for some rather different operations,
+        // all of which result in the creation of a blob resource.
+        match (
+            resource_create_blob.blob_id,
+            resource_create_blob.blob_mem,
+            handle_opt,
+        ) {
+            // Case 1: Guest memory with iovecs (only available to this process)
+            //  This is used for the socket ring buffers.
+            (0, RUTABAGA_BLOB_MEM_GUEST, None) => Ok(Self::create_blob_from_iovecs(
                 resource_id,
-                handle: Some(Arc::new(hnd)),
-                blob: true,
-                blob_mem: resource_create_blob.blob_mem,
-                blob_flags: resource_create_blob.blob_flags,
-                map_info: Some(reqs.map_info | RUTABAGA_MAP_ACCESS_RW),
-                info_2d: None,
-                info_3d: Some(info_3d),
-                vulkan_info: reqs.vulkan_info,
-                backing_iovecs: None,
-                component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
-                size: resource_create_blob.size,
-                mapping: None,
-            });
-        }
-
-        let item = items
-            .table
-            .remove(&item_id)
-            .ok_or(RutabagaError::InvalidCrossDomainItemId)?;
-
-        // Items that are removed from the table after one usage.
-        match item {
-            CrossDomainItem::Blob(hnd) => {
-                let map_access = hnd
-                    .os_handle
-                    .determine_map_access_mode()
-                    .map_err(|e| RutabagaError::MagmaGpuError(e.into()))?;
-                let map_info = Some(RUTABAGA_MAP_CACHE_CACHED | map_access);
-
-                Ok(RutabagaResource {
-                    resource_id,
-                    handle: Some(Arc::new(hnd.into())),
-                    blob: true,
-                    blob_mem: resource_create_blob.blob_mem,
-                    blob_flags: resource_create_blob.blob_flags,
-                    map_info,
-                    info_2d: None,
-                    info_3d: None,
-                    vulkan_info: None,
-                    backing_iovecs: None,
-                    component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
-                    size: resource_create_blob.size,
-                    mapping: None,
-                })
+                resource_create_blob,
+                iovec_opt.ok_or({
+                    MagmaGpuError::WithContext("tried to create guest memory w/o iovecs")
+                })?,
+            )),
+            // Case 2: Guest memory with imported handle (CREATE_GUEST_HANDLE / PRIME import)
+            //  It is the caller's responsibility to create such handles in response to
+            //  the CREATE_GUEST_HANDLE flag being set by the guest, because the handle
+            //  creation is a hypervisor-specific operation (e.g. udmabuf vs gntdev-dmabuf).
+            (0, RUTABAGA_BLOB_MEM_GUEST, Some(handle)) => {
+                self.create_blob_from_handle(resource_id, resource_create_blob, handle.try_into()?)
             }
-            _ => Err(RutabagaError::InvalidCrossDomainItemType),
+            // Cases 3 & 4: Item-backed blobs
+            (item_id, _, handle_opt) => {
+                let mut items = self.item_state.lock().unwrap();
+                let Entry::Occupied(entry) = items.table.entry(item_id as u32) else {
+                    return Err(RutabagaError::InvalidCrossDomainItemId);
+                };
+                match entry.get() {
+                    // Case 3: Memory allocated with requirements (by rutabaga or by the caller)
+                    //  The requirements blob's lifetime is managed by the guest,
+                    //  and one requirements blob can be reused multiple times.
+                    CrossDomainItem::ImageRequirements(reqs) => self.create_blob_with_requirements(
+                        resource_id,
+                        resource_create_blob,
+                        handle_opt,
+                        reqs,
+                    ),
+                    // Case 4: Handles received over the socket (e.g. Wayland keymaps)
+                    CrossDomainItem::Blob(_) => {
+                        let CrossDomainItem::Blob(handle) = entry.remove() else {
+                            unreachable!()
+                        };
+                        self.create_blob_from_handle(resource_id, resource_create_blob, handle)
+                    }
+                    _ => Err(RutabagaError::InvalidCrossDomainItemType),
+                }
+            }
         }
     }
 
