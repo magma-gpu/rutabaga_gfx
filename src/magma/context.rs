@@ -18,6 +18,7 @@ use crate::rutabaga_utils::RutabagaComponentType;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaFenceHandler;
 use crate::rutabaga_utils::RutabagaResult;
+use crate::RutabagaIovec;
 
 pub struct MagmaVirtioGpuContext {
     context_resources: ContextResources,
@@ -38,6 +39,7 @@ impl RutabagaContext for MagmaVirtioGpuContext {
         &mut self,
         _resource_id: u32,
         _resource_create_blob: ResourceCreateBlob,
+        _iovec_opt: Option<Vec<RutabagaIovec>>,
         _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         Err(MagmaGpuError::Unsupported.into())

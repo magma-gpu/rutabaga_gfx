@@ -388,6 +388,7 @@ pub trait RutabagaContext {
         &mut self,
         _resource_id: u32,
         _resource_create_blob: ResourceCreateBlob,
+        _iovec_opt: Option<Vec<RutabagaIovec>>,
         _handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
         Err(MagmaGpuError::Unsupported.into())
@@ -980,7 +981,9 @@ impl Rutabaga {
         }
 
         let resource = match context {
-            Some(ctx) => ctx.context_create_blob(resource_id, resource_create_blob, handle)?,
+            Some(ctx) => {
+                ctx.context_create_blob(resource_id, resource_create_blob, iovecs, handle)?
+            }
             None => {
                 component.create_blob(ctx_id, resource_id, resource_create_blob, iovecs, handle)?
             }
