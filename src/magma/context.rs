@@ -18,7 +18,6 @@ use crate::rutabaga_utils::RutabagaComponentType;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaFenceHandler;
 use crate::rutabaga_utils::RutabagaResult;
-use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
 
 pub struct MagmaVirtioGpuContext {
     context_resources: ContextResources,
@@ -54,23 +53,13 @@ impl RutabagaContext for MagmaVirtioGpuContext {
     }
 
     fn attach(&mut self, resource: &mut RutabagaResource) {
-        if resource.blob_mem == RUTABAGA_BLOB_MEM_GUEST {
-            self.context_resources.lock().unwrap().insert(
-                resource.resource_id,
-                ContextResource {
-                    handle: None,
-                    backing_iovecs: resource.backing_iovecs.take(),
-                },
-            );
-        } else if let Some(ref handle) = resource.handle {
-            self.context_resources.lock().unwrap().insert(
-                resource.resource_id,
-                ContextResource {
-                    handle: Some(handle.clone()),
-                    backing_iovecs: None,
-                },
-            );
-        }
+        self.context_resources.lock().unwrap().insert(
+            resource.resource_id,
+            ContextResource {
+                handle: resource.handle.clone(),
+                backing_iovecs: resource.backing_iovecs.take(),
+            },
+        );
     }
 
     fn detach(&mut self, resource: &RutabagaResource) {
