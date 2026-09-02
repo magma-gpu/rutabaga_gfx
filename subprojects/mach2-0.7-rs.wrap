@@ -1,0 +1,6 @@
+[wrap-file]
+directory = mach2-0.7.0
+source_url = https://static.crates.io/crates/mach2/0.7.0/download
+source_filename = mach2-0.7.0.tar.gz
+source_hash = b0d28e293f2b8c9d2b2d1c0193bd3c1cbdc0d2cf396888dc01162f7cf9d6c3f3
+patch_directory = mach2-0.7-rs
