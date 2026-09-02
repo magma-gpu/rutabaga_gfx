@@ -21,3 +21,7 @@ rustix = "1.0.7"
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 rustix = { version = "1.0.7", features = ["event", "fs", "mm", "net", "param", "pipe", "thread"] }
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+mach2 = "0.7.0"
+rustix = { version = "1.0.7", features = ["event", "fs", "mm", "net", "param", "pipe", "shm"] }
