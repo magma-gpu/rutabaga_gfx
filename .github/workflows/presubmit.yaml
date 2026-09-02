@@ -142,6 +142,23 @@ jobs:
           cargo build --package rutabaga_gfx --features=virgl_renderer,gbm
           --target=x86_64-unknown-linux-gnu
 
+  build-macos-aarch64:
+    name: build rutabaga (macOS aarch64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin
+          components: rust-src
+      - name: Build Project
+        run: >
+          cargo build --package magma-gpu --package rutabaga_gfx
+          --package kumquat_virtio --package rutabaga_gfx_ffi
+          --target=aarch64-apple-darwin
+
   build-macos:
     name: Build on macOS
     runs-on: macos-latest
