@@ -40,9 +40,13 @@ elif host_machine.system() == 'darwin' or host_machine.system() == 'macos'
   '--cfg', 'feature="use-libc"',
   '--cfg', 'feature="std"',
   '--cfg', 'feature="alloc"',
+  '--cfg', 'feature="event"',
   '--cfg', 'feature="fs"',
+  '--cfg', 'feature="mm"',
   '--cfg', 'feature="net"',
+  '--cfg', 'feature="param"',
   '--cfg', 'feature="pipe"',
+  '--cfg', 'feature="shm"',
   ]
 elif host_machine.system() == 'windows'
   rustix_args += [
