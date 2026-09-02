@@ -44,7 +44,7 @@ pub enum Error {
     WithContext(&'static str),
 }
 
-#[cfg(any(target_os = "android", target_os = "linux"))]
+#[cfg(any(target_os = "android", target_os = "linux", target_vendor = "apple"))]
 impl From<RustixError> for Error {
     fn from(e: RustixError) -> Error {
         Error::RustixError(e)

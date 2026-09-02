@@ -47,6 +47,16 @@ if supported_host_machine
   dep_magma_gpu_rs += [dep_rustix]
 endif
 
+if host_machine.system() == 'darwin' or host_machine.system() == 'macos'
+  dep_mach2 = dependency('mach2',
+    version: '>= 0.7.0',
+    fallback: ['mach2-0.7-rs', 'dep_mach2'],
+    required: true,
+  )
+
+  dep_magma_gpu_rs += [dep_mach2]
+endif
+
 libmagma_gpu_rs = static_library(
   'magma_gpu',
   'lib.rs',

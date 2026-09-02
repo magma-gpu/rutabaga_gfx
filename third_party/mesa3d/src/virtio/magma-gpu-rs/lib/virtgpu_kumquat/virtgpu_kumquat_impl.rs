@@ -423,8 +423,15 @@ impl VirtGpuKumquat {
             host_flags = RUTABAGA_FLAG_INFO_RING_IDX;
         }
 
-        let need_fence =
-            !bo_handles.is_empty() || (flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT) != 0;
+        let need_implicit_sync = !bo_handles.is_empty();
+        let need_explicit_sync = (flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT) != 0;
+        let need_fence = need_implicit_sync || need_explicit_sync;
+
+        // One fence, one holder: a Mach port's receive right cannot be
+        // duplicated, so there is no second fence to give out.
+        if need_implicit_sync && (need_explicit_sync || bo_handles.len() > 1) {
+            return Err(Error::Unsupported);
+        }
 
         let actual_fence = (flags & VIRTGPU_KUMQUAT_EXECBUF_SHAREABLE_OUT) != 0
             && (flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT) != 0;
@@ -465,29 +472,13 @@ impl VirtGpuKumquat {
                 }
             };
 
-            // wait() blocks on what is attached here, and waiting is a unique
-            // capability on platforms where an event is a Mach port, so the
-            // fence itself is attached rather than a copy of it. The descriptor
-            // handed out below never waits, so a copy will do for that.
-            let out_fence = fence.try_clone()?;
-            let mut fence = Some(fence);
-
-            for handle in bo_handles {
-                // We could support implicit sync with real fences, but the need does not exist.
-                if actual_fence {
-                    return Err(Error::Unsupported);
+            match bo_handles.first() {
+                Some(handle) => {
+                    let resource = self.resources.get_mut(handle).ok_or(Error::Unsupported)?;
+                    resource.attached_fences.push(fence);
                 }
-
-                let resource = self.resources.get_mut(handle).ok_or(Error::Unsupported)?;
-
-                let attached = match fence.take() {
-                    Some(fence) => fence,
-                    None => out_fence.try_clone()?,
-                };
-                resource.attached_fences.push(attached);
+                None => fence_opt = Some(fence),
             }
-
-            fence_opt = Some(out_fence);
         } else {
             self.stream
                 .write(KumquatGpuProtocolWrite::CmdWithData(submit_command, data))?;
