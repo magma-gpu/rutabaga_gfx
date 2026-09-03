@@ -58,6 +58,7 @@ use crate::rutabaga_utils::RutabagaIovec;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::VulkanInfo;
+use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 use crate::rutabaga_utils::RUTABAGA_HANDLE_TYPE_PLATFORM_AHB;
 use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
@@ -900,6 +901,24 @@ impl RutabagaComponent for Gfxstream {
         mut iovec_opt: Option<Vec<RutabagaIovec>>,
         handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
+        if ctx_id == 0 && resource_create_blob.blob_mem == RUTABAGA_BLOB_MEM_GUEST {
+            return Ok(RutabagaResource {
+                resource_id,
+                handle: None,
+                blob: true,
+                blob_mem: resource_create_blob.blob_mem,
+                blob_flags: resource_create_blob.blob_flags,
+                map_info: None,
+                info_2d: None,
+                info_3d: None,
+                vulkan_info: None,
+                backing_iovecs: iovec_opt,
+                component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
+                size: resource_create_blob.size,
+                mapping: None,
+            });
+        }
+
         let mut iovec_ptr = null_mut();
         let mut num_iovecs = 0;
         if let Some(ref mut iovecs) = iovec_opt {
