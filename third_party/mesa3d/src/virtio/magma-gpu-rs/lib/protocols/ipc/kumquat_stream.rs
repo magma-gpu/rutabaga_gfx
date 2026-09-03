@@ -19,7 +19,7 @@ use zerocopy::IntoBytes;
 
 use crate::protocols::kumquat_gpu_protocol::*;
 
-const MAX_COMMAND_SIZE: usize = 4096;
+const MAX_COMMAND_SIZE: usize = 65536;
 
 pub struct KumquatStream {
     stream: Tube,
