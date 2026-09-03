@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 use std::collections::BTreeMap as Map;
+use std::io::IoSlice;
+use std::io::IoSliceMut;
 use std::mem::size_of;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -18,6 +20,7 @@ use crate::resource::RutabagaResource;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
 use crate::rutabaga_core::VirtioFsLookup;
+use crate::rutabaga_utils::ResourceCreate3D;
 use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;
 use crate::rutabaga_utils::RutabagaFence;
@@ -25,6 +28,7 @@ use crate::rutabaga_utils::RutabagaFenceHandler;
 use crate::rutabaga_utils::RutabagaIovec;
 use crate::rutabaga_utils::RutabagaPath;
 use crate::rutabaga_utils::RutabagaResult;
+use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::RUTABAGA_BLOB_FLAG_USE_MAPPABLE;
 use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
 use crate::RutabagaGralloc;
@@ -147,5 +151,37 @@ impl RutabagaComponent for CrossDomain {
     fn create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<()> {
         self.fence_handler.call(fence);
         Ok(())
+    }
+
+    fn create_3d(
+        &self,
+        resource_id: u32,
+        resource_create_3d: ResourceCreate3D,
+    ) -> RutabagaResult<RutabagaResource> {
+        RutabagaResource::new_2d(
+            resource_id,
+            resource_create_3d,
+            RutabagaComponentType::CrossDomain,
+        )
+    }
+
+    fn transfer_write(
+        &self,
+        _ctx_id: u32,
+        resource: &mut RutabagaResource,
+        transfer: Transfer3D,
+        buf: Option<IoSlice>,
+    ) -> RutabagaResult<()> {
+        resource.transfer_write_2d(transfer, buf)
+    }
+
+    fn transfer_read(
+        &self,
+        _ctx_id: u32,
+        resource: &mut RutabagaResource,
+        transfer: Transfer3D,
+        buf: Option<IoSliceMut>,
+    ) -> RutabagaResult<()> {
+        resource.transfer_read_2d(transfer, buf)
     }
 }
