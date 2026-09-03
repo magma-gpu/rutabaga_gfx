@@ -14,9 +14,9 @@ use crate::cross_domain::atomic_memory_sentinel_manager::AtomicMemorySentinelMan
 use crate::cross_domain::context::CrossDomainContext;
 use crate::cross_domain::cross_domain_protocol::CrossDomainCapabilities;
 use crate::handle::RutabagaHandle;
+use crate::resource::RutabagaResource;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
-use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_core::VirtioFsLookup;
 use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;

@@ -15,6 +15,7 @@ mod magma;
 mod macros;
 #[cfg(any(feature = "gfxstream", feature = "virgl_renderer"))]
 mod renderer_utils;
+mod resource;
 mod rutabaga_2d;
 mod rutabaga_core;
 mod rutabaga_gralloc;

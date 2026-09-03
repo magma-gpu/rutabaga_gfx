@@ -13,9 +13,9 @@ use std::io::IoSliceMut;
 use magma_gpu::util::Error as MagmaGpuError;
 
 use crate::handle::RutabagaHandle;
-use crate::rutabaga_core::Rutabaga2DInfo;
+use crate::resource::Rutabaga2DInfo;
+use crate::resource::RutabagaResource;
 use crate::rutabaga_core::RutabagaComponent;
-use crate::rutabaga_core::RutabagaResource;
 use crate::rutabaga_utils::ResourceCreate3D;
 use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;
