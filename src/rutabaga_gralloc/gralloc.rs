@@ -16,7 +16,7 @@ use magma_gpu::util::MappedRegion;
 
 use crate::rutabaga_gralloc::formats::*;
 #[cfg(feature = "gbm")]
-use crate::rutabaga_gralloc::minigbm::MinigbmDevice;
+use crate::rutabaga_gralloc::gbm::GbmDevice;
 use crate::rutabaga_gralloc::system_gralloc::SystemGralloc;
 #[cfg(feature = "vulkano")]
 use crate::rutabaga_gralloc::vulkano_gralloc::VulkanoGralloc;
@@ -65,23 +65,23 @@ impl RutabagaGrallocBackendFlags {
  * Rutabaga gralloc flags are copied from minigbm, but redundant legacy flags are left out.
  * For example, USE_WRITE / USE_CURSOR_64X64 / USE_CURSOR don't add much value.
  */
-const RUTABAGA_GRALLOC_USE_SCANOUT: u32 = 1 << 0;
-const RUTABAGA_GRALLOC_USE_RENDERING: u32 = 1 << 2;
-const RUTABAGA_GRALLOC_USE_LINEAR: u32 = 1 << 4;
-const RUTABAGA_GRALLOC_USE_TEXTURING: u32 = 1 << 5;
-const RUTABAGA_GRALLOC_USE_CAMERA_WRITE: u32 = 1 << 6;
-const RUTABAGA_GRALLOC_USE_CAMERA_READ: u32 = 1 << 7;
+pub const RUTABAGA_GRALLOC_USE_SCANOUT: u32 = 1 << 0;
+pub const RUTABAGA_GRALLOC_USE_RENDERING: u32 = 1 << 2;
+pub const RUTABAGA_GRALLOC_USE_LINEAR: u32 = 1 << 4;
+pub const RUTABAGA_GRALLOC_USE_TEXTURING: u32 = 1 << 5;
+pub const RUTABAGA_GRALLOC_USE_CAMERA_WRITE: u32 = 1 << 6;
+pub const RUTABAGA_GRALLOC_USE_CAMERA_READ: u32 = 1 << 7;
 #[allow(dead_code)]
-const RUTABAGA_GRALLOC_USE_PROTECTED: u32 = 1 << 8;
+pub const RUTABAGA_GRALLOC_USE_PROTECTED: u32 = 1 << 8;
 
 /* SW_{WRITE,READ}_RARELY omitted since not even Android uses this much. */
-const RUTABAGA_GRALLOC_USE_SW_READ_OFTEN: u32 = 1 << 9;
-const RUTABAGA_GRALLOC_USE_SW_WRITE_OFTEN: u32 = 1 << 11;
+pub const RUTABAGA_GRALLOC_USE_SW_READ_OFTEN: u32 = 1 << 9;
+pub const RUTABAGA_GRALLOC_USE_SW_WRITE_OFTEN: u32 = 1 << 11;
 
 #[allow(dead_code)]
-const RUTABAGA_GRALLOC_VIDEO_DECODER: u32 = 1 << 13;
+pub const RUTABAGA_GRALLOC_VIDEO_DECODER: u32 = 1 << 13;
 #[allow(dead_code)]
-const RUTABAGA_GRALLOC_VIDEO_ENCODER: u32 = 1 << 14;
+pub const RUTABAGA_GRALLOC_VIDEO_ENCODER: u32 = 1 << 14;
 
 /// Usage flags for constructing a buffer object.
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
@@ -149,6 +149,18 @@ impl RutabagaGrallocFlags {
         } else {
             RutabagaGrallocFlags(self.0 & !RUTABAGA_GRALLOC_USE_SW_READ_OFTEN)
         }
+    }
+
+    /// Returns true if the scanout flag is set.
+    #[inline(always)]
+    pub fn uses_scanout(self) -> bool {
+        self.0 & RUTABAGA_GRALLOC_USE_SCANOUT != 0
+    }
+
+    /// Returns true if the linear flag is set.
+    #[inline(always)]
+    pub fn uses_linear(self) -> bool {
+        self.0 & RUTABAGA_GRALLOC_USE_LINEAR != 0
     }
 
     /// Returns true if the texturing flag is set.
@@ -248,7 +260,7 @@ pub enum GrallocBackend {
     #[allow(dead_code)]
     Vulkano,
     #[allow(dead_code)]
-    Minigbm,
+    Gbm,
     System,
 }
 
@@ -271,12 +283,12 @@ impl RutabagaGralloc {
         #[cfg(feature = "gbm")]
         if flags.uses_gbm() {
             // crosvm integration tests build with the "wl-dmabuf" feature, which translates in
-            // rutabaga to the "minigbm" feature.  These tests run on hosts where a rendernode is
-            // not present, and minigbm can not be initialized.
+            // rutabaga to the "gbm" feature.  These tests run on hosts where a rendernode is
+            // not present, and gbm can not be initialized.
             //
-            // Thus, to keep kokoro happy, allow minigbm initialization to fail silently for now.
-            if let Ok(gbm_device) = MinigbmDevice::init() {
-                grallocs.insert(GrallocBackend::Minigbm, gbm_device);
+            // Thus, to keep kokoro happy, allow gbm initialization to fail silently for now.
+            if let Ok(gbm_device) = GbmDevice::init() {
+                grallocs.insert(GrallocBackend::Gbm, gbm_device);
             }
         }
 
@@ -331,8 +343,8 @@ impl RutabagaGralloc {
         #[cfg(feature = "gbm")]
         {
             // See note on "wl-dmabuf" and Kokoro in Gralloc::new().
-            if self.grallocs.contains_key(&GrallocBackend::Minigbm) {
-                _backend = GrallocBackend::Minigbm;
+            if self.grallocs.contains_key(&GrallocBackend::Gbm) {
+                _backend = GrallocBackend::Gbm;
             }
         }
 

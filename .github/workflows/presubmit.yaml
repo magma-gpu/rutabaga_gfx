@@ -125,12 +125,6 @@ jobs:
       - uses: ./.github/actions/install-deps
       - name: Checkout virgl
         run: git clone --depth 1 https://gitlab.freedesktop.org/virgl/virglrenderer.git
-      - name: Checkout minigbm
-        run: git clone --depth 1 https://chromium.googlesource.com/chromiumos/platform/minigbm
-      - name: build and install minigbm
-        run: |
-          cd minigbm
-          sudo make install DESTDIR=/usr/local LIBDIR=/lib INCLUDEDIR=/include OUT=out
       - name: build and install virglrenderer
         run: |
           cd virglrenderer
