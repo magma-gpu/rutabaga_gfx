@@ -15,7 +15,6 @@ use std::io::IoSlice;
 use std::io::IoSliceMut;
 use std::mem::size_of;
 use std::mem::ManuallyDrop;
-use std::os::fd::IntoRawFd;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
 use std::os::raw::c_void;
@@ -312,7 +311,7 @@ extern "C" fn get_drm_fd(cookie: *mut c_void) -> c_int {
                     .ok()
                     // Convert file to raw fd, the ownership of the fd is
                     // transferred to virglrenderer.
-                    .map(|file| file.into_raw_fd())
+                    .map(|file| file.into_raw_descriptor() as c_int)
                     .unwrap_or(DEFAULT_DRM_FD)
             }
             None => {
@@ -378,11 +377,13 @@ extern "C" fn get_server_fd(cookie: *mut c_void, version: u32) -> c_int {
             return -1;
         }
 
-        // Transfer the fd ownership to virglrenderer.
+        // Transfer the fd ownership to virglrenderer. RawDescriptor is RawFd on
+        // Linux but i64 on Darwin, where it can also hold Mach ports; callers
+        // must set the render server descriptor to an fd.
         cookie
             .render_server_fd
             .take()
-            .map(OwnedDescriptor::into_raw_descriptor)
+            .map(|descriptor| descriptor.into_raw_descriptor() as c_int)
             .unwrap_or(-1)
     })
     .unwrap_or_else(|_| abort())
@@ -521,7 +522,7 @@ impl VirglRenderer {
         // SAFETY:
         // Safe because the FD was just returned by a successful virglrenderer
         // call so it must be valid and owned by us.
-        let handle = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
+        let handle = unsafe { OwnedDescriptor::from_raw_descriptor(fd as RawDescriptor) };
 
         let handle_type = match fd_type {
             VIRGL_RENDERER_BLOB_FD_TYPE_DMABUF => MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF,
@@ -668,7 +669,8 @@ impl RutabagaComponent for VirglRenderer {
                     let fourcc: u32 = info_ext.base.drm_fourcc as u32;
 
                     // SAFETY: `fd` is validated to be >= 0 and uniquely owned.
-                    let owned_fd = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
+                    let owned_fd =
+                        unsafe { OwnedDescriptor::from_raw_descriptor(fd as RawDescriptor) };
 
                     resource_handle = Some(Arc::new(
                         MagmaGpuHandle {
