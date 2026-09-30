@@ -119,8 +119,8 @@ fn import_resource(resource: &mut RutabagaResource) -> RutabagaResult<()> {
         return Ok(());
     }
 
+    #[cfg(target_os = "linux")]
     if let Some(mesa_handle) = resource.handle.as_ref().and_then(|h| h.as_mesa_handle()) {
-        #[cfg(target_os = "linux")]
         if mesa_handle.handle_type == MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF {
             let dmabuf_fd = mesa_handle
                 .os_handle
@@ -205,7 +205,7 @@ impl RutabagaContext for VirglRendererContext {
     fn attach(&mut self, resource: &mut RutabagaResource) {
         match import_resource(resource) {
             Ok(()) => (),
-            Err(e) => error!("importing resource failing with {}", e),
+            Err(e) => error!("importing resource failing with {e}"),
         }
 
         // SAFETY:
