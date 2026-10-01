@@ -108,7 +108,12 @@ fn dup(rd: RawDescriptor) -> RutabagaResult<OwnedDescriptor> {
 }
 
 /// The virtio-gpu backend state tracker which supports accelerated rendering.
-pub struct VirglRenderer {}
+pub struct VirglRenderer {
+    // Without virgl (Venus or DRM native contexts only), virglrenderer supports neither 2D
+    // resources nor global fences, so they're handled here, as Rutabaga2D does.
+    no_virgl: bool,
+    fence_handler: RutabagaFenceHandler,
+}
 
 struct VirglRendererContext {
     ctx_id: u32,
@@ -462,7 +467,7 @@ impl VirglRenderer {
         // library.
         let cookie = Box::into_raw(Box::new(RutabagaCookie {
             render_server_fd,
-            fence_handler: Some(fence_handler),
+            fence_handler: Some(fence_handler.clone()),
             debug_handler: None,
             rutabaga_paths,
         }));
@@ -480,7 +485,10 @@ impl VirglRenderer {
         };
 
         ret_to_res(ret)?;
-        Ok(Box::new(VirglRenderer {}))
+        Ok(Box::new(VirglRenderer {
+            no_virgl: !virglrenderer_flags.uses_virgl(),
+            fence_handler,
+        }))
     }
 
     fn map_info(&self, resource_id: u32) -> RutabagaResult<u32> {
@@ -591,6 +599,11 @@ impl RutabagaComponent for VirglRenderer {
     }
 
     fn create_fence(&mut self, fence: RutabagaFence) -> RutabagaResult<()> {
+        if self.no_virgl {
+            self.fence_handler.call(fence);
+            return Ok(());
+        }
+
         // TODO(b/315870313): Add safety comment
         #[allow(clippy::undocumented_unsafe_blocks)]
         let ret = unsafe { virgl_renderer_create_fence(fence.fence_id as i32, fence.ctx_id) };
@@ -623,6 +636,14 @@ impl RutabagaComponent for VirglRenderer {
         resource_id: u32,
         resource_create_3d: ResourceCreate3D,
     ) -> RutabagaResult<RutabagaResource> {
+        if self.no_virgl {
+            return RutabagaResource::new_2d(
+                resource_id,
+                resource_create_3d,
+                RutabagaComponentType::VirglRenderer,
+            );
+        }
+
         let mut args = virgl_renderer_resource_create_args {
             handle: resource_id,
             target: resource_create_3d.target,
@@ -713,6 +734,11 @@ impl RutabagaComponent for VirglRenderer {
         resource_id: u32,
         vecs: &mut Vec<RutabagaIovec>,
     ) -> RutabagaResult<()> {
+        // Without virgl, the only resources with backing are 2D: Rutabaga keeps their iovecs.
+        if self.no_virgl {
+            return Ok(());
+        }
+
         // SAFETY:
         // Safe because the backing is into guest memory that we store a reference count for.
         let ret = unsafe {
@@ -750,6 +776,10 @@ impl RutabagaComponent for VirglRenderer {
         transfer: Transfer3D,
         buf: Option<IoSlice>,
     ) -> RutabagaResult<()> {
+        if resource.info_2d.is_some() {
+            return resource.transfer_write_2d(transfer, buf);
+        }
+
         if transfer.is_empty() {
             return Ok(());
         }
@@ -792,6 +822,10 @@ impl RutabagaComponent for VirglRenderer {
         transfer: Transfer3D,
         buf: Option<IoSliceMut>,
     ) -> RutabagaResult<()> {
+        if resource.info_2d.is_some() {
+            return resource.transfer_read_2d(transfer, buf);
+        }
+
         if transfer.is_empty() {
             return Ok(());
         }
