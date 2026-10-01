@@ -1,0 +1,362 @@
+# Copyright 2026 The Magma GPU Project
+# SPDX-License-Identifier: MIT
+
+[[commands]]
+name = "magma_enumerate_physical_devices"
+target = "enumerate_devices"
+inputs = [
+    { name = "physical_devices", type = "PhysicalDevice", array = { size = "MAGMA_MAX_PHYSICAL_DEVICES" }, direction = "inout" },
+    { name = "num_devices", type = "uint32_t", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi", "rust_api" ]
+manual = true
+response = true
+
+[[commands]]
+name = "MagmaCreateDevice"
+inputs = [
+    { name = "physical_device", type = "PhysicalDevice", direction = "in" },
+    { name = "device", type = "Device", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaGetMemoryBudget"
+inputs = [
+    { name = "device", type = "Device", direction = "in" },
+    { name = "heap_idx", type = "uint32_t", direction = "in" },
+    { name = "budget", type = "MagmaHeapBudget", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaCreateBuffer"
+inputs = [
+    { name = "device", type = "Device", direction = "in" },
+    { name = "info", type = "MagmaCreateBufferInfo", direction = "in" },
+    { name = "buffer_out", type = "Buffer", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaCreateAddressSpace"
+inputs = [
+    { name = "device", type = "Device", direction = "in" },
+    { name = "address_space", type = "AddressSpace", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaCreateQueue"
+inputs = [
+    { name = "device", type = "Device", direction = "in" },
+    { name = "address_space", type = "AddressSpace", direction = "in" },
+    { name = "info", type = "MagmaCreateQueueInfo", direction = "in" },
+    { name = "queue", type = "Queue", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "magma_device_close"
+inputs = [
+    { name = "device", type = "Device", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+destructor = true
+
+[[commands]]
+name = "magma_physical_device_close"
+inputs = [
+    { name = "physical_device", type = "PhysicalDevice", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+destructor = true
+
+[[commands]]
+name = "magma_buffer_close"
+inputs = [
+    { name = "buffer", type = "Buffer", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+destructor = true
+
+[[commands]]
+name = "magma_queue_close"
+inputs = [
+    { name = "queue", type = "Queue", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+destructor = true
+
+[[commands]]
+name = "magma_address_space_close"
+inputs = [
+    { name = "address_space", type = "AddressSpace", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+destructor = true
+
+
+[[commands]]
+name = "MagmaVirtioCreateRing"
+inputs = [
+    { name = "channel_id", type = "u32", direction = "in" },
+    { name = "ring_blob_id", type = "u32", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "virtio" ]
+
+[[commands]]
+name = "MagmaMapBufferGpu"
+inputs = [
+    { name = "address_space", type = "AddressSpace", direction = "in" },
+    { name = "buffer", type = "Buffer", direction = "in" },
+    { name = "buffer_offset", type = "uint64_t", direction = "in" },
+    { name = "gpu_va", type = "uint64_t", direction = "in" },
+    { name = "size", type = "uint64_t", direction = "in" },
+    { name = "flags", type = "MagmaGpuMapFlags", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaUnmapBufferGpu"
+inputs = [
+    { name = "address_space", type = "AddressSpace", direction = "in" },
+    { name = "gpu_va", type = "uint64_t", direction = "in" },
+    { name = "size", type = "uint64_t", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaSubmitCommand"
+inputs = [
+    { name = "queue", type = "Queue", direction = "in" },
+    { name = "submit_info", type = "MagmaSubmitInfo", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaCreateSyncObj"
+inputs = [
+    { name = "device", type = "Device", direction = "in" },
+    { name = "info", type = "MagmaCreateSyncObjInfo", direction = "in" },
+    { name = "sync_obj", type = "SyncObj", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "magma_sync_obj_close"
+inputs = [
+    { name = "sync_obj", type = "SyncObj", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+destructor = true
+
+[[commands]]
+name = "MagmaSyncObjWait"
+target = "wait"
+inputs = [
+    { name = "sync_obj", type = "SyncObj", direction = "in" },
+    { name = "timeout_ns", type = "u64", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+
+[[commands]]
+name = "MagmaSyncObjSignal"
+target = "signal"
+inputs = [
+    { name = "sync_obj", type = "SyncObj", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaSyncObjTimelineWait"
+target = "timeline_wait"
+inputs = [
+    { name = "sync_obj", type = "SyncObj", direction = "in" },
+    { name = "point", type = "u64", direction = "in" },
+    { name = "timeout_ns", type = "u64", direction = "in" },
+    { name = "flags", type = "u32", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaSyncObjTimelineSignal"
+target = "timeline_signal"
+inputs = [
+    { name = "sync_obj", type = "SyncObj", direction = "in" },
+    { name = "point", type = "u64", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaSyncObjTimelineQuery"
+target = "timeline_query"
+inputs = [
+    { name = "sync_obj", type = "SyncObj", direction = "in" },
+    { name = "point_out", type = "u64", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaGetSyncProperties"
+inputs = [
+    { name = "device", type = "Device", direction = "in" },
+    { name = "properties", type = "MagmaSyncProperties", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+manual = true
+
+[[commands]]
+name = "MagmaGetPhysicalDeviceInfo"
+target = "info"
+inputs = [
+    { name = "physical_device", type = "PhysicalDevice", direction = "in" },
+    { name = "info", type = "MagmaPhysicalDeviceInfo", direction = "inout" },
+]
+aspects = [ "ffi" ]
+
+[[commands]]
+name = "MagmaGetMemoryProperties"
+target = "get_memory_properties"
+inputs = [
+    { name = "physical_device", type = "PhysicalDevice", direction = "in" },
+    { name = "memory_properties", type = "MagmaMemoryProperties", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+manual = true
+
+[[commands]]
+name = "MagmaQueueCheckStatus"
+target = "check_status"
+inputs = [
+    { name = "queue", type = "Queue", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "common" ]
+response = true
+
+[[commands]]
+name = "MagmaMapBufferCpu"
+target = "map_cpu"
+inputs = [
+    { name = "buffer", type = "Buffer", direction = "in" },
+    { name = "mapping_out", type = "MagmaMapping", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+
+[[commands]]
+name = "MagmaUnmapBufferCpu"
+target = "unmap_cpu"
+inputs = [
+    { name = "buffer", type = "Buffer", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+
+[[commands]]
+name = "MagmaSyncObjExport"
+inputs = [
+    { name = "sync_obj", type = "SyncObj", direction = "in" },
+    { name = "handle_out", type = "MagmaHandle", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+manual = true
+
+[[commands]]
+name = "MagmaSyncObjImport"
+inputs = [
+    { name = "sync_obj", type = "SyncObj", direction = "in" },
+    { name = "handle", type = "MagmaHandle", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+manual = true
+
+[[commands]]
+name = "MagmaBufferExport"
+inputs = [
+    { name = "buffer", type = "Buffer", direction = "in" },
+    { name = "handle_out", type = "MagmaHandle", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+manual = true
+
+[[commands]]
+name = "MagmaBufferImport"
+inputs = [
+    { name = "device", type = "Device", direction = "in" },
+    { name = "handle", type = "MagmaHandle", direction = "in" },
+    { name = "buffer_out", type = "Buffer", direction = "inout" },
+]
+output = "MagmaStatus"
+aspects = [ "ffi" ]
+manual = true
+
+[[commands]]
+name = "MagmaVirtioPing"
+inputs = [
+    { name = "channel_id", type = "u32", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "virtio" ]
+
+[[commands]]
+name = "MagmaVirtioCreateFence"
+inputs = [
+    { name = "ring_idx", type = "u32", direction = "in" },
+    { name = "guest_sync_id", type = "u32", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "virtio" ]
+
+[[commands]]
+name = "MagmaVirtioSyncObjClose"
+inputs = [
+    { name = "sync_obj", type = "u32", direction = "in" },
+    { name = "ring_idx", type = "u32", direction = "in" },
+    { name = "wait_seqno", type = "u32", direction = "in" },
+]
+output = "MagmaStatus"
+aspects = [ "virtio" ]
+
+

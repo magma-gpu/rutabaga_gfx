@@ -15,7 +15,6 @@ use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::MemoryMapping;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::RawMapping;
-use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -23,6 +22,7 @@ use crate::cross_domain::CrossDomain;
 #[cfg(feature = "gfxstream")]
 use crate::gfxstream::Gfxstream;
 use crate::handle::RutabagaHandle;
+#[cfg(feature = "magma")]
 use crate::magma::MagmaVirtioGpu;
 use crate::rutabaga_2d::Rutabaga2D;
 use crate::rutabaga_utils::GfxstreamFlags;
@@ -374,6 +374,11 @@ const RUTABAGA_CAPSETS: [RutabagaCapsetInfo; 9] = [
     },
 ];
 
+const CONTEXT_BLOB_COMPONENTS: [RutabagaComponentType; 2] = [
+    RutabagaComponentType::CrossDomain,
+    RutabagaComponentType::Magma,
+];
+
 pub fn calculate_capset_mask<'a, I: Iterator<Item = &'a str>>(context_names: I) -> u64 {
     let mut capset_mask = 0;
     for name in context_names {
@@ -404,6 +409,7 @@ fn calculate_component(component_mask: u8) -> RutabagaResult<RutabagaComponentTy
         2 => Ok(RutabagaComponentType::VirglRenderer),
         3 => Ok(RutabagaComponentType::Gfxstream),
         4 => Ok(RutabagaComponentType::CrossDomain),
+        5 => Ok(RutabagaComponentType::Magma),
         _ => Err(RutabagaError::InvalidComponent),
     }
 }
@@ -865,7 +871,7 @@ impl Rutabaga {
                 .get_mut(&ctx_id)
                 .ok_or(RutabagaError::InvalidContextId)?;
 
-            if ctx.component_type() == RutabagaComponentType::CrossDomain {
+            if CONTEXT_BLOB_COMPONENTS.contains(&ctx.component_type()) {
                 context = Some(ctx);
             }
         }
@@ -907,18 +913,11 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidResourceId)?;
 
         let component_type = calculate_component(resource.component_mask)?;
-        if component_type == RutabagaComponentType::CrossDomain {
+        if component_type.is_internal() {
             let handle_opt = resource.handle.take();
             match handle_opt {
                 Some(handle) => {
                     if let Some(mesa_handle) = handle.as_mesa_handle() {
-                        if mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_SHM {
-                            return Err(MagmaGpuError::WithContext(
-                                "expected a shared memory handle",
-                            )
-                            .into());
-                        }
-
                         let clone = mesa_handle.try_clone()?;
                         let resource_size: usize = resource
                             .size
@@ -963,7 +962,7 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidResourceId)?;
 
         let component_type = calculate_component(resource.component_mask)?;
-        if component_type == RutabagaComponentType::CrossDomain {
+        if component_type.is_internal() {
             resource.mapping = None;
             return Ok(());
         }
@@ -1429,6 +1428,7 @@ impl RutabagaBuilder {
                 push_capset(RUTABAGA_CAPSET_GFXSTREAM_COMPOSER);
             }
 
+            #[cfg(feature = "magma")]
             if capset_enabled(RUTABAGA_CAPSET_MAGMA) {
                 let magma = MagmaVirtioGpu::init(self.fence_handler.clone())?;
                 rutabaga_components.insert(RutabagaComponentType::Magma, magma);

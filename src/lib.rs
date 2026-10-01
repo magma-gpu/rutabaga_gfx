@@ -10,6 +10,7 @@ mod cross_domain;
 mod generated;
 mod gfxstream;
 mod handle;
+#[cfg(feature = "magma")]
 mod magma;
 #[macro_use]
 mod macros;

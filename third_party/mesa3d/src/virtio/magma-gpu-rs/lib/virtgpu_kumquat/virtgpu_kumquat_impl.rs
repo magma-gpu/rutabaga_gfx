@@ -5,6 +5,7 @@ use std::cmp::min;
 use std::collections::BTreeMap as Map;
 use std::path::PathBuf;
 use std::slice::from_raw_parts_mut;
+use std::time::Duration;
 
 use crate::protocols::ipc::KumquatStream;
 use crate::protocols::kumquat_gpu_protocol::*;
@@ -22,8 +23,12 @@ use crate::util::Result;
 use crate::util::SharedMemory;
 use crate::util::Tube;
 use crate::util::TubeType;
+use crate::util::WaitContext;
+use crate::util::WaitTimeout;
 use crate::util::Writer;
 use crate::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD;
+use crate::util::MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD;
+use crate::util::MAGMA_GPU_HANDLE_TYPE_SIGNAL_SYNC_FD;
 use crate::util::MAGMA_MAP_ACCESS_RW;
 use crate::util::MAGMA_MAP_CACHE_CACHED;
 
@@ -61,6 +66,12 @@ impl VirtGpuResource {
     }
 }
 
+pub struct VirtGpuKumquatSyncObj {
+    pub _sync_handle: u32,
+    pub fence: Option<Handle>,
+    pub signaled: bool,
+}
+
 pub struct VirtGpuKumquat {
     context_id: u32,
     id_allocator: u32,
@@ -68,6 +79,7 @@ pub struct VirtGpuKumquat {
     stream: KumquatStream,
     capsets: Map<u32, Vec<u8>>,
     resources: Map<u32, VirtGpuResource>,
+    syncobjs: Map<u32, VirtGpuKumquatSyncObj>,
 }
 
 impl VirtGpuKumquat {
@@ -130,6 +142,7 @@ impl VirtGpuKumquat {
             stream,
             capsets,
             resources: Default::default(),
+            syncobjs: Default::default(),
         })
     }
 
@@ -144,6 +157,7 @@ impl VirtGpuKumquat {
             VIRTGPU_KUMQUAT_PARAM_CAPSET_QUERY_FIX..=VIRTGPU_KUMQUAT_PARAM_CONTEXT_INIT => 1,
             VIRTGPU_KUMQUAT_PARAM_SUPPORTED_CAPSET_IDS => self.capset_mask,
             VIRTGPU_KUMQUAT_PARAM_EXPLICIT_DEBUG_NAME => 0,
+            VIRTGPU_KUMQUAT_PARAM_CREATE_GUEST_HANDLE => 0,
             VIRTGPU_KUMQUAT_PARAM_FENCE_PASSING => 1,
             _ => return Err(Error::Unsupported),
         };
@@ -406,6 +420,7 @@ impl VirtGpuKumquat {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn submit_command(
         &mut self,
         flags: u32,
@@ -414,8 +429,8 @@ impl VirtGpuKumquat {
         ring_idx: u32,
         in_fences: &[u64],
         raw_descriptor: &mut RawDescriptor,
+        syncobjs: &[u32],
     ) -> Result<()> {
-        let mut fence_opt: Option<Handle> = None;
         let mut data: Vec<u8> = vec![0; cmd.len()];
         let mut host_flags = 0;
 
@@ -424,17 +439,19 @@ impl VirtGpuKumquat {
         }
 
         let need_implicit_sync = !bo_handles.is_empty();
-        let need_explicit_sync = (flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT) != 0;
-        let need_fence = need_implicit_sync || need_explicit_sync;
+        let need_syncobj = !syncobjs.is_empty();
+        let need_out_fence = (flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT) != 0;
 
-        // One fence, one holder: a Mach port's receive right cannot be
-        // duplicated, so there is no second fence to give out.
-        if need_implicit_sync && (need_explicit_sync || bo_handles.len() > 1) {
+        // We can only one synchronization modality at time in kumquat.
+        let modality_count =
+            (need_implicit_sync as u32) + (need_syncobj as u32) + (need_out_fence as u32);
+        if modality_count > 1 || bo_handles.len() > 1 {
             return Err(Error::Unsupported);
         }
 
+        let need_fence = need_implicit_sync || need_syncobj || need_out_fence;
         let actual_fence = (flags & VIRTGPU_KUMQUAT_EXECBUF_SHAREABLE_OUT) != 0
-            && (flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT) != 0;
+            || (flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT) != 0;
 
         // Should copy from in-fences when gfxstream supports it.
         data.copy_from_slice(cmd);
@@ -467,28 +484,24 @@ impl VirtGpuKumquat {
             let mut protocols = self.stream.read()?;
             let fence = match protocols.remove(0) {
                 KumquatGpuProtocol::RespCmdSubmit3d(_fence_id, handle) => handle,
-                _ => {
-                    return Err(Error::Unsupported);
-                }
+                _ => return Err(Error::Unsupported),
             };
 
-            match bo_handles.first() {
-                Some(handle) => {
-                    let resource = self.resources.get_mut(handle).ok_or(Error::Unsupported)?;
-                    resource.attached_fences.push(fence);
+            if let Some(&handle) = bo_handles.first() {
+                let resource = self.resources.get_mut(&handle).ok_or(Error::Unsupported)?;
+                resource.attached_fences.push(fence);
+            } else if !syncobjs.is_empty() {
+                for &handle in syncobjs.iter() {
+                    let syncobj = self.syncobjs.get_mut(&handle).ok_or(Error::Unsupported)?;
+                    syncobj.fence = Some(fence.try_clone()?);
+                    syncobj.signaled = false;
                 }
-                None => fence_opt = Some(fence),
+            } else if need_out_fence {
+                *raw_descriptor = fence.os_handle.into_raw_descriptor();
             }
         } else {
             self.stream
                 .write(KumquatGpuProtocolWrite::CmdWithData(submit_command, data))?;
-        }
-
-        if flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT != 0 {
-            *raw_descriptor = fence_opt
-                .ok_or(Error::WithContext("no fence found"))?
-                .os_handle
-                .into_raw_descriptor();
         }
 
         Ok(())
@@ -630,6 +643,85 @@ impl VirtGpuKumquat {
             KumquatGpuProtocol::RespOkSnapshot => Ok(()),
             _ => Err(Error::Unsupported),
         }
+    }
+
+    pub fn syncobj_create(&mut self) -> Result<u32> {
+        let sync_handle = self.allocate_id();
+        self.syncobjs.insert(
+            sync_handle,
+            VirtGpuKumquatSyncObj {
+                _sync_handle: sync_handle,
+                fence: None,
+                signaled: false,
+            },
+        );
+        Ok(sync_handle)
+    }
+
+    pub fn syncobj_destroy(&mut self, sync_handle: u32) -> Result<()> {
+        self.syncobjs.remove(&sync_handle);
+        Ok(())
+    }
+
+    pub fn syncobj_export(&mut self, sync_handle: u32) -> Result<Handle> {
+        let syncobj = self
+            .syncobjs
+            .get_mut(&sync_handle)
+            .ok_or(Error::Unsupported)?;
+        let handle = syncobj.fence.as_ref().ok_or(Error::Unsupported)?;
+        let clone = handle.try_clone()?;
+        Ok(clone)
+    }
+
+    pub fn syncobj_import(&mut self, sync_handle: u32, handle: Handle) -> Result<()> {
+        let syncobj = self
+            .syncobjs
+            .get_mut(&sync_handle)
+            .ok_or(Error::Unsupported)?;
+        syncobj.fence = Some(handle);
+        syncobj.signaled = false;
+        Ok(())
+    }
+
+    pub fn syncobj_wait(&mut self, sync_handle: u32, timeout_ns: u64) -> Result<()> {
+        let syncobj = self
+            .syncobjs
+            .get_mut(&sync_handle)
+            .ok_or(Error::Unsupported)?;
+
+        if syncobj.signaled {
+            return Ok(());
+        }
+
+        if let Some(ref handle) = syncobj.fence {
+            if handle.handle_type == MAGMA_GPU_HANDLE_TYPE_SIGNAL_EVENT_FD {
+                let waiter: EventWaiter = handle.try_clone()?.try_into()?;
+                waiter.wait()?;
+                syncobj.signaled = true;
+                return Ok(());
+            }
+            if handle.handle_type == MAGMA_GPU_HANDLE_TYPE_SIGNAL_SYNC_FD {
+                let timeout = if timeout_ns == 0 {
+                    WaitTimeout::Finite(Duration::ZERO)
+                } else {
+                    WaitTimeout::NoTimeout
+                };
+                let mut wait_ctx = WaitContext::new()?;
+                wait_ctx.add(sync_handle as u64, &handle.os_handle)?;
+                let events = wait_ctx.wait(timeout)?;
+                if events.is_empty() || events.iter().all(|e| !e.readable) {
+                    return Err(Error::WithContext("timed out"));
+                }
+                syncobj.signaled = true;
+                return Ok(());
+            }
+        }
+
+        if timeout_ns != 0 {
+            return Err(Error::Unsupported);
+        }
+
+        Err(Error::WithContext("timed out"))
     }
 }
 

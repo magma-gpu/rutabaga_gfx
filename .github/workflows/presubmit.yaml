@@ -60,7 +60,7 @@ jobs:
           ninja -C build
           sudo ninja -C build install
       - name: Setup Meson build directory
-        run: meson setup amd64-build -Dfeatures="gfxstream" -Dffi=true -Dkumquat=true -Dbuild-tests=true
+        run: meson setup amd64-build -Dfeatures="gfxstream,magma" -Dffi=true -Dkumquat=true -Dbuild-tests=true
       - name: Build
         run: ninja -C amd64-build
       - name: Run tests
@@ -108,7 +108,7 @@ jobs:
           PKG_CONFIG_ALLOW_CROSS: 1
         run: >
           cargo build --package rutabaga_gfx --package kumquat_virtio
-          --package rutabaga_gfx_ffi --features=gfxstream
+          --package rutabaga_gfx_ffi --features=gfxstream,magma
           --target=x86_64-pc-windows-gnu
 
   build-linux-x86_64-with-virgl:
@@ -278,7 +278,7 @@ jobs:
           EOF
 
       - name: Setup Meson build directory
-        run: meson setup build-mingw --cross-file cross_file_x86_64_linux_mingw.txt
+        run: meson setup build-mingw -Dfeatures="magma" --cross-file cross_file_x86_64_linux_mingw.txt
 
       - name: Compile
         run: ninja -C build-mingw

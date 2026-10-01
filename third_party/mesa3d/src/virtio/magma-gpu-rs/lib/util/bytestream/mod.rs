@@ -11,6 +11,7 @@ use std::mem::size_of;
 use zerocopy::FromBytes;
 use zerocopy::Immutable;
 use zerocopy::IntoBytes;
+use zerocopy::TryFromBytes;
 
 pub struct Reader<'slice> {
     data: &'slice [u8],
@@ -43,6 +44,21 @@ impl<'slice> Reader<'slice> {
     pub fn peek_obj<T: FromBytes>(&self) -> Result<T> {
         let obj = <T>::read_from_prefix(self.data.as_bytes())
             .map_err(|_e| Error::from(ErrorKind::UnexpectedEof))?;
+        Ok(obj.0)
+    }
+
+    /// Reads and consumes an object implementing TryFromBytes from the buffer.
+    pub fn read_try_obj<T: TryFromBytes>(&mut self) -> Result<T> {
+        let obj = <T>::try_read_from_prefix(self.data.as_bytes())
+            .map_err(|_e| Error::from(ErrorKind::InvalidData))?;
+        self.consume(size_of::<T>());
+        Ok(obj.0)
+    }
+
+    /// Reads an object implementing TryFromBytes from the buffer without consuming it.
+    pub fn peek_try_obj<T: TryFromBytes>(&self) -> Result<T> {
+        let obj = <T>::try_read_from_prefix(self.data.as_bytes())
+            .map_err(|_e| Error::from(ErrorKind::InvalidData))?;
         Ok(obj.0)
     }
 

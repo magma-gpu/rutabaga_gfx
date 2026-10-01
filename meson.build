@@ -22,6 +22,7 @@ with_kumquat = get_option('kumquat')
 with_tests = get_option('build-tests')
 
 with_gbm = features.contains('gbm')
+with_magma = features.contains('magma')
 with_gfxstream = features.contains('gfxstream')
 with_virgl_renderer = features.contains('virgl_renderer')
 
@@ -33,7 +34,13 @@ rust_global_args = [
   '-Aclippy::collapsible_else_if',
   '-Aclippy::needless_lifetimes',
   '-Aclippy::question_mark',
+  '-C',
+  'panic=unwind',
 ]
+
+if with_magma
+  rutabaga_args += ['--cfg', 'feature="magma"']
+endif
 
 if with_gbm
   error('rutabaga_gfx does not work with upstream gbm yet')

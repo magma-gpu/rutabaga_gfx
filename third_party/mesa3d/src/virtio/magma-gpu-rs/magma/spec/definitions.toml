@@ -1,0 +1,147 @@
+# Copyright 2026 The Magma GPU Project
+# SPDX-License-Identifier: MIT
+api_objects = [
+    'Queue',
+    'AddressSpace',
+    'Buffer',
+    'SyncObj',
+    'PhysicalDevice',
+    'Device'
+]
+
+[[constants]]
+name = "MAGMA_MAX_SYNCOBJS"
+type = "usize"
+value = 16
+
+[[constants]]
+name = "MAGMA_MAX_PHYSICAL_DEVICES"
+type = "usize"
+value = 8
+
+[[constants]]
+name = "MAGMA_MAX_MEMORY_HEAPS"
+type = "usize"
+value = 32
+
+[[constants]]
+name = "MAGMA_MAX_MEMORY_TYPES"
+type = "usize"
+value = 16
+
+[[constants]]
+name = "MAGMA_MAX_QUEUES"
+type = "usize"
+value = 16
+
+[[enums]]
+name = 'MagmaVendorId'
+type = "u16"
+[enums.entries]
+Undefined = 0
+Amd = 0x1002
+Arm = 0x13B5
+VirtGpu = 0x1AF4
+Qualcomm = 0x5413
+Intel = 0x8086
+
+[[enums]]
+name = 'MagmaStatus'
+type = "i32"
+[enums.entries]
+Success = 0
+InternalError = -1
+InvalidArgs = -2
+AccessDenied = -3
+MemoryError = -4
+ContextKilled = -5
+TimedOut = -6
+Unimplemented = -7
+
+[[flags]]
+name = 'MagmaMemoryProperty'
+type = "u32"
+[flags.entries]
+DeviceLocalBit = 0x00000001
+HostVisibleBit = 0x00000002
+HostCoherentBit = 0x00000004
+HostCachedBit = 0x00000008
+LazilyAllocatedBit = 0x00000010
+ProtectedBit = 0x00000020
+
+[[enums]]
+name = 'VirtioGpuBlobPreference'
+type = "i32"
+aspects = ["virtio"]
+[enums.entries]
+Undefined = 0
+Guest = 1
+Host = 2
+
+[[flags]]
+name = 'MagmaQueueFlags'
+type = "u32"
+[flags.entries]
+Graphics = 0x00000001
+Compute = 0x00000002
+Transfer = 0x00000004
+SparseBinding = 0x00000008
+Protected = 0x00000010
+
+[[flags]]
+name = 'MagmaGpuMapFlags'
+type = "u64"
+[flags.entries]
+Read = 0x00000001
+Write = 0x00000002
+Execute = 0x00000004
+GrowUp = 0x00000008
+GrowDown = 0x00000010
+
+[[flags]]
+name = 'MagmaBufferFlag'
+type = "u32"
+[flags.entries]
+External = 0x00000001
+Scanout = 0x00000002
+
+[[flags]]
+name = 'MagmaSyncCapability'
+type = "u32"
+[flags.entries]
+Binary = 0x00000001
+Timeline = 0x00000002
+CpuWait = 0x00000004
+CpuSignal = 0x00000008
+ExportSyncFile = 0x00000010
+ImportSyncFile = 0x00000020
+
+[[enums]]
+name = 'MagmaSyncObjType'
+type = "u32"
+[enums.entries]
+Binary = 0
+Timeline = 1
+
+[[flags]]
+name = 'MagmaSyncObjUseFlags'
+type = "u32"
+[flags.entries]
+Exportable = 0x00000001
+Fence = 0x00000002
+
+[[flags]]
+name = 'MagmaHandleType'
+type = "u32"
+aspects = ["wire"]
+[flags.entries]
+MemOpaqueFd = 0x00000001
+MemDmabuf = 0x00000002
+MemOpaqueWin32 = 0x00000003
+MemShm = 0x00000004
+MemZircon = 0x00000005
+SignalOpaqueFd = 0x00000010
+SignalSyncFd = 0x00000020
+SignalOpaqueWin32 = 0x00000030
+SignalZircon = 0x00000040
+SignalEventFd = 0x00000050

@@ -35,5 +35,5 @@ build_platforms = [
 ]
 
 [config.static_options]
-features = "gfxstream"
+features = "gfxstream,magma"
 kumquat = true

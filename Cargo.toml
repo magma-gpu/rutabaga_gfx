@@ -4,7 +4,7 @@ members = [
     "ffi",
     "kumquat/server",
     "third_party/mesa3d/src/virtio/magma-gpu-rs/lib",
-    "third_party/mesa3d/src/magma",
+    "third_party/mesa3d/src/virtio/magma-gpu-rs/magma",
 ]
 
 [package]
@@ -23,6 +23,7 @@ virgl_renderer = []
 gbm = []
 # Vulkano features are just a prototype and not integrated yet into the ChromeOS build system.
 vulkano = ["dep:vulkano"]
+magma = ["dep:magma-gpu-magma"]
 
 [dependencies]
 cfg-if = "1.0.0"
@@ -34,6 +35,7 @@ thiserror = "1.0.23"
 serde = { version = "1.0", features = ["derive"] }
 zerocopy = { version = "0.8.13", features = ["derive"] }
 magma-gpu = { path = "third_party/mesa3d/src/virtio/magma-gpu-rs/lib", version = "0.1.85" }
+magma-gpu-magma = { path = "third_party/mesa3d/src/virtio/magma-gpu-rs/magma", version = "0.1.85", optional = true }
 
 # To build latest Vulkano, change version to git = "https://github.com/vulkano-rs/vulkano.git"
 vulkano = { version = "0.33.0", optional = true }

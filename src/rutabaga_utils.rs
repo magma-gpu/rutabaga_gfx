@@ -652,6 +652,13 @@ impl RutabagaComponentType {
             RutabagaComponentType::VirglRenderer => "virgl_renderer",
         }
     }
+
+    pub fn is_internal(&self) -> bool {
+        matches!(
+            self,
+            RutabagaComponentType::CrossDomain | RutabagaComponentType::Magma
+        )
+    }
 }
 
 // Handle types to support special-case consumers.

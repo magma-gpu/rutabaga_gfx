@@ -5,7 +5,7 @@ option(
   'features',
   type : 'array',
   value : [''],
-  choices : ['', 'gbm', 'gfxstream', 'virgl_renderer'],
+  choices : ['', 'magma', 'gbm', 'gfxstream', 'virgl_renderer'],
   description : 'List of rutabaga features to enable'
 )
 
