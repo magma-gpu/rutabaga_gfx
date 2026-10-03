@@ -132,8 +132,11 @@ impl RutabagaResource {
     ) -> RutabagaResult<RutabagaResource> {
         // All virtio formats are 4 bytes per pixel.
         let resource_bpp = 4;
-        let resource_stride = resource_bpp * resource_create_3d.width;
-        let resource_size = (resource_stride as usize) * (resource_create_3d.height as usize);
+        let resource_size = resource_create_3d
+            .width
+            .checked_mul(resource_bpp)
+            .and_then(|stride| stride.checked_mul(resource_create_3d.height))
+            .ok_or(RutabagaError::Invalid2DInfo)? as usize;
         let info_2d = Rutabaga2DInfo {
             width: resource_create_3d.width,
             height: resource_create_3d.height,
