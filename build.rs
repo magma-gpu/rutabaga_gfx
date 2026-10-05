@@ -89,11 +89,13 @@ fn main() -> PkgConfigResult<()> {
     }
 
     if env::var("CARGO_FEATURE_VIRGL_RENDERER").is_ok() {
-        virglrenderer()?;
+        if env::var("CARGO_FEATURE_VIRGL_RENDERER_STUB").is_err() {
+            virglrenderer()?;
+        }
         use_fence_passing_option1 = false;
     }
 
-    if env::var("CARGO_FEATURE_GBM").is_ok() {
+    if env::var("CARGO_FEATURE_GBM").is_ok() && env::var("CARGO_FEATURE_GBM_STUB").is_err() {
         gbm()?;
     }
 
