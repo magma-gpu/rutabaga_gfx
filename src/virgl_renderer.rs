@@ -285,7 +285,18 @@ extern "C" fn log_callback(
     // The caller ensures that `message` is always a valid pointer to a NULL-terminated string
     // (even if zero-length).
     let message_str = unsafe { CStr::from_ptr(message) };
-    log!(level, "{}", message_str.to_string_lossy());
+    let message = message_str.to_string_lossy();
+
+    // We expect this error to occur a lot in some cases,
+    // because we unconditionally and eagerly call virgl_renderer_resource_export_blob
+    // on any created blob resource.
+    // Some of these resources are not DMA-BUF compatible, resulting in an error
+    // which we gracefully handle, but causing the virglrenderer error logs to be spammed.
+    if message.contains("failed to get dmabuf fd") {
+        return;
+    }
+
+    log!(level, "{message}");
 }
 
 extern "C" fn get_drm_fd(cookie: *mut c_void) -> c_int {
