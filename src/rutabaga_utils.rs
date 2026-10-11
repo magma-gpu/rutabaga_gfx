@@ -219,6 +219,7 @@ pub const RUTABAGA_CAPSET_DRM: u32 = 6;
 pub const RUTABAGA_CAPSET_MAGMA: u32 = 7;
 pub const RUTABAGA_CAPSET_GFXSTREAM_GLES: u32 = 8;
 pub const RUTABAGA_CAPSET_GFXSTREAM_COMPOSER: u32 = 9;
+pub const RUTABAGA_CAPSET_ROCM: u32 = 10;
 
 /// A list specifying general categories of rutabaga_gfx error.
 ///
@@ -383,6 +384,7 @@ const VIRGLRENDERER_NO_VIRGL: u32 = 1 << 7;
 const VIRGLRENDERER_USE_ASYNC_FENCE_CB: u32 = 1 << 8;
 const VIRGLRENDERER_RENDER_SERVER: u32 = 1 << 9;
 const VIRGLRENDERER_DRM: u32 = 1 << 10;
+const VIRGLRENDERER_ROCM: u32 = 1 << 14;
 
 /// virglrenderer flag struct.
 #[derive(Copy, Clone)]
@@ -444,6 +446,11 @@ impl VirglRendererFlags {
     /// Enable drm native context support
     pub fn use_drm(self, v: bool) -> VirglRendererFlags {
         self.set_flag(VIRGLRENDERER_DRM, v)
+    }
+
+    /// Enable ROCm support
+    pub fn use_rocm(self, v: bool) -> VirglRendererFlags {
+        self.set_flag(VIRGLRENDERER_ROCM, v)
     }
 
     /// Use EGL for context creation.
