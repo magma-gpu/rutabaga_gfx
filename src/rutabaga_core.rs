@@ -50,6 +50,7 @@ use crate::rutabaga_utils::RUTABAGA_CAPSET_GFXSTREAM_COMPOSER;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_GFXSTREAM_GLES;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_GFXSTREAM_VULKAN;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_MAGMA;
+use crate::rutabaga_utils::RUTABAGA_CAPSET_ROCM;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VENUS;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VIRGL;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VIRGL2;
@@ -326,7 +327,7 @@ struct RutabagaCapsetInfo {
     pub name: &'static str,
 }
 
-const RUTABAGA_CAPSETS: [RutabagaCapsetInfo; 9] = [
+const RUTABAGA_CAPSETS: [RutabagaCapsetInfo; 10] = [
     RutabagaCapsetInfo {
         capset_id: RUTABAGA_CAPSET_VIRGL,
         component: RutabagaComponentType::VirglRenderer,
@@ -371,6 +372,11 @@ const RUTABAGA_CAPSETS: [RutabagaCapsetInfo; 9] = [
         capset_id: RUTABAGA_CAPSET_GFXSTREAM_COMPOSER,
         component: RutabagaComponentType::Gfxstream,
         name: "gfxstream-composer",
+    },
+    RutabagaCapsetInfo {
+        capset_id: RUTABAGA_CAPSET_ROCM,
+        component: RutabagaComponentType::VirglRenderer,
+        name: "rocm",
     },
 ];
 
@@ -1358,7 +1364,8 @@ impl RutabagaBuilder {
                 | capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_COMPOSER);
             let supports_virglrenderer = capset_enabled(RUTABAGA_CAPSET_VIRGL2)
                 | capset_enabled(RUTABAGA_CAPSET_VENUS)
-                | capset_enabled(RUTABAGA_CAPSET_DRM);
+                | capset_enabled(RUTABAGA_CAPSET_DRM)
+                | capset_enabled(RUTABAGA_CAPSET_ROCM);
 
             if supports_gfxstream {
                 self.default_component = RutabagaComponentType::Gfxstream;
@@ -1372,7 +1379,8 @@ impl RutabagaBuilder {
                 .virglrenderer_flags
                 .use_virgl(capset_enabled(RUTABAGA_CAPSET_VIRGL2))
                 .use_venus(capset_enabled(RUTABAGA_CAPSET_VENUS))
-                .use_drm(capset_enabled(RUTABAGA_CAPSET_DRM));
+                .use_drm(capset_enabled(RUTABAGA_CAPSET_DRM))
+                .use_rocm(capset_enabled(RUTABAGA_CAPSET_ROCM));
 
             self.gfxstream_flags = self
                 .gfxstream_flags
@@ -1405,6 +1413,7 @@ impl RutabagaBuilder {
                     push_capset(RUTABAGA_CAPSET_VIRGL2);
                     push_capset(RUTABAGA_CAPSET_VENUS);
                     push_capset(RUTABAGA_CAPSET_DRM);
+                    push_capset(RUTABAGA_CAPSET_ROCM);
                 } else {
                     log::warn!("error initializing gpu backend=virglrenderer, falling back to 2d.");
                     self.default_component = RutabagaComponentType::Rutabaga2D;
