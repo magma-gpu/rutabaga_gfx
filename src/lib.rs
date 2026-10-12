@@ -33,6 +33,8 @@ pub use magma_gpu::util::RawDescriptor as RutabagaRawDescriptor;
 pub use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF as RUTABAGA_HANDLE_TYPE_MEM_DMABUF;
 pub use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD as RUTABAGA_HANDLE_TYPE_MEM_OPAQUE_FD;
 
+pub use crate::cross_domain::CrossDomainSendAhb;
+pub use crate::cross_domain::CROSS_DOMAIN_WAYLAND_SEND_AHB;
 pub use crate::handle::AhbInfo;
 pub use crate::handle::RutabagaHandle;
 pub use crate::rutabaga_core::calculate_capset_mask;

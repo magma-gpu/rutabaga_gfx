@@ -67,6 +67,8 @@ use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_ID_TYPE_VIRTGPU_BLO
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_ID_TYPE_VIRTIO_FS_BLOB;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_MAX_IDENTIFIERS;
 use crate::cross_domain::cross_domain_protocol::CROSS_DOMAIN_QUERY_RING;
+use crate::cross_domain::cross_domain_wayland_bridge::CrossDomainSendAhb;
+use crate::cross_domain::cross_domain_wayland_bridge::CROSS_DOMAIN_WAYLAND_SEND_AHB;
 use crate::cross_domain::worker::CrossDomainWorker;
 use crate::handle::RutabagaHandle;
 use crate::resource::RutabagaResource;
@@ -290,19 +292,63 @@ impl CrossDomainContext {
                     .get(identifier)
                     .ok_or(RutabagaError::InvalidResourceId)?;
 
-                if let Some(mesa_handle) = context_resource
-                    .handle
-                    .as_ref()
-                    .and_then(|h| h.as_mesa_handle())
-                {
-                    descriptors.push(
-                        mesa_handle
-                            .os_handle
-                            .try_clone()
-                            .map_err(MagmaGpuError::IoError)?,
-                    );
-                } else {
-                    return Err(MagmaGpuError::InvalidMagmaHandle.into());
+                match context_resource.handle.as_deref() {
+                    Some(RutabagaHandle::MagmaGpuHandle(mesa_handle)) => {
+                        descriptors.push(
+                            mesa_handle
+                                .os_handle
+                                .try_clone()
+                                .map_err(MagmaGpuError::IoError)?,
+                        );
+                    }
+                    Some(RutabagaHandle::AhbInfo(ahb_info)) => {
+                        if ahb_info.fds.is_empty()
+                            || ahb_info.metadata.is_empty()
+                            || ahb_info.fds.len() > CROSS_DOMAIN_MAX_IDENTIFIERS
+                        {
+                            return Err(MagmaGpuError::InvalidMagmaHandle.into());
+                        }
+
+                        let metadata_size: u32 = ahb_info
+                            .metadata
+                            .len()
+                            .try_into()
+                            .map_err(MagmaGpuError::TryFromIntError)?;
+                        let num_fds: u32 = ahb_info
+                            .fds
+                            .len()
+                            .try_into()
+                            .map_err(MagmaGpuError::TryFromIntError)?;
+
+                        let cloned_fds = ahb_info
+                            .fds
+                            .iter()
+                            .map(|fd| fd.try_clone())
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(MagmaGpuError::IoError)?;
+
+                        let hdr = CrossDomainSendAhb {
+                            cmd: CROSS_DOMAIN_WAYLAND_SEND_AHB,
+                            metadata_size,
+                            num_fds,
+                            pad: 0,
+                        };
+                        let mut payload = Vec::with_capacity(
+                            size_of::<CrossDomainSendAhb>() + ahb_info.metadata.len(),
+                        );
+                        payload.extend_from_slice(hdr.as_bytes());
+                        payload.extend_from_slice(&ahb_info.metadata);
+
+                        // TODO: Wayland only allows one fd per buffer plane, so the AHB metadata
+                        // and fds are sent through a one-shot socketpair for now. Longer term,
+                        // it may be better to teach smithay about Android buffers upstream.
+                        let (tx_tube, rx) = Tube::pair()?;
+                        tx_tube.send(&payload, cloned_fds)?;
+                        descriptors.push(rx);
+                    }
+                    None => {
+                        return Err(MagmaGpuError::InvalidMagmaHandle.into());
+                    }
                 }
             } else if *identifier_type == CROSS_DOMAIN_ID_TYPE_READ_PIPE {
                 // In practice, just 1 pipe pair per send is observed.  If we encounter

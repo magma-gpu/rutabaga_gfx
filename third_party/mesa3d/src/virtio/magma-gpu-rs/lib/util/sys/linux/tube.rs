@@ -19,6 +19,7 @@ use rustix::net::listen;
 use rustix::net::recvmsg;
 use rustix::net::sendmsg;
 use rustix::net::socket_with;
+use rustix::net::socketpair;
 use rustix::net::sockopt::socket_type;
 use rustix::net::AddressFamily;
 use rustix::net::RecvAncillaryBuffer;
@@ -94,6 +95,17 @@ impl Tube {
         Ok(Tube {
             socket: socket.into(),
         })
+    }
+
+    pub fn pair() -> MagmaGpuResult<(Tube, OwnedDescriptor)> {
+        let (tx, rx) = socketpair(
+            AddressFamily::UNIX,
+            SocketType::SEQPACKET,
+            SocketFlags::CLOEXEC,
+            None,
+        )?;
+
+        Ok((Tube { socket: tx.into() }, rx.into()))
     }
 
     pub fn send(

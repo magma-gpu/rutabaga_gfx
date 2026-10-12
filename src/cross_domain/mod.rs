@@ -10,6 +10,9 @@ mod common;
 mod component;
 mod context;
 mod cross_domain_protocol;
+mod cross_domain_wayland_bridge;
 mod worker;
 
 pub use component::CrossDomain;
+pub use cross_domain_wayland_bridge::CrossDomainSendAhb;
+pub use cross_domain_wayland_bridge::CROSS_DOMAIN_WAYLAND_SEND_AHB;
