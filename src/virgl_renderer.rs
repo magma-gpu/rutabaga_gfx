@@ -66,9 +66,9 @@ use crate::rutabaga_utils::VirglRendererFlags;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE;
 use crate::rutabaga_utils::RUTABAGA_FLAG_INFO_RING_IDX;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
-use crate::RutabagaPath;
 use crate::RutabagaPaths;
 use crate::RUTABAGA_PATH_TYPE_GPU;
+use crate::{RutabagaPath, RUTABAGA_MAP_CACHE_NONE};
 
 type Query = virgl_renderer_export_query;
 
@@ -491,14 +491,24 @@ impl VirglRenderer {
         }))
     }
 
-    fn map_info(&self, resource_id: u32) -> RutabagaResult<u32> {
+    fn map_info(&self, resource_id: u32) -> u32 {
         let mut map_info = 0;
         // TODO(b/315870313): Add safety comment
         #[allow(clippy::undocumented_unsafe_blocks)]
         let ret = unsafe { virgl_renderer_resource_get_map_info(resource_id, &mut map_info) };
-        ret_to_res(ret)?;
 
-        Ok(map_info | RUTABAGA_MAP_ACCESS_RW)
+        // virglrenderer returns -EINVAL both for an unknown resource and for CACHE_NONE.
+        // This function is called immediately after successful resource creation,
+        // so we know the resource exists.
+        // By forwarding the unavailable cache information as CACHE_NONE,
+        // we also match QEMU's usage of virglrenderer.
+        // Whether the resource can actually be mapped is determined by later mapping operations.
+        let cache_info = match ret_to_res(ret) {
+            Ok(_) => map_info,
+            Err(_) => RUTABAGA_MAP_CACHE_NONE,
+        };
+
+        cache_info | RUTABAGA_MAP_ACCESS_RW
     }
 
     fn query(&self, resource_id: u32) -> RutabagaResult<Resource3DInfo> {
@@ -911,7 +921,7 @@ impl RutabagaComponent for VirglRenderer {
             blob: true,
             blob_mem: resource_create_blob.blob_mem,
             blob_flags: resource_create_blob.blob_flags,
-            map_info: self.map_info(resource_id).ok(),
+            map_info: Some(self.map_info(resource_id)),
             info_2d: None,
             info_3d: self.query(resource_id).ok(),
             vulkan_info: None,
