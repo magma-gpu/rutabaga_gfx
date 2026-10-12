@@ -25,6 +25,10 @@ impl Tube {
         Err(Error::Unsupported)
     }
 
+    pub fn pair() -> MagmaGpuResult<(Tube, OwnedDescriptor)> {
+        Err(Error::Unsupported)
+    }
+
     pub fn send(
         &self,
         _opaque_data: &[u8],
