@@ -10,6 +10,9 @@ use std::os::fd::AsFd;
 use std::path::Path;
 
 use rustix::cmsg_space;
+use rustix::event::poll;
+use rustix::event::PollFd;
+use rustix::event::PollFlags;
 use rustix::fs::fcntl_setfl;
 use rustix::fs::OFlags;
 use rustix::net::accept;
@@ -101,50 +104,87 @@ impl Tube {
         opaque_data: &[u8],
         descriptors: Vec<OwnedDescriptor>,
     ) -> MagmaGpuResult<usize> {
-        let mut space = [MaybeUninit::<u8>::uninit(); cmsg_space!(ScmRights(MAX_IDENTIFIERS))];
-        let mut cmsg_buffer = SendAncillaryBuffer::new(&mut space);
+        let mut total_sent = 0;
+        let mut first = true;
+        while total_sent < opaque_data.len() {
+            let mut space = [MaybeUninit::<u8>::uninit(); cmsg_space!(ScmRights(MAX_IDENTIFIERS))];
+            let mut cmsg_buffer = SendAncillaryBuffer::new(&mut space);
 
-        let borrowed_fds: Vec<_> = descriptors.iter().map(AsFd::as_fd).collect();
+            let borrowed_fds: Vec<_> = if first {
+                descriptors.iter().map(AsFd::as_fd).collect()
+            } else {
+                Vec::new()
+            };
+            if !borrowed_fds.is_empty() {
+                let cmsg = SendAncillaryMessage::ScmRights(&borrowed_fds);
+                cmsg_buffer.push(cmsg);
+            }
 
-        let cmsg = SendAncillaryMessage::ScmRights(&borrowed_fds);
-        cmsg_buffer.push(cmsg);
-
-        let bytes_sent = sendmsg(
-            &self.socket,
-            &[IoSlice::new(opaque_data)],
-            &mut cmsg_buffer,
-            SendFlags::NOSIGNAL,
-        )?;
-
-        Ok(bytes_sent)
-    }
-
-    pub fn receive(&self, opaque_data: &mut [u8]) -> MagmaGpuResult<(usize, Vec<OwnedDescriptor>)> {
-        let mut iovecs = [IoSliceMut::new(opaque_data)];
-
-        let mut space = [MaybeUninit::<u8>::uninit(); cmsg_space!(ScmRights(MAX_IDENTIFIERS))];
-        let mut cmsg_buffer = RecvAncillaryBuffer::new(&mut space);
-        let r = recvmsg(
-            &self.socket,
-            &mut iovecs,
-            &mut cmsg_buffer,
-            RecvFlags::empty(),
-        )?;
-
-        let len = r.bytes;
-        let mut received_descriptors: Vec<OwnedDescriptor> = Vec::new();
-
-        // Iterate over received control messages
-        for cmsg in cmsg_buffer.drain() {
-            match cmsg {
-                RecvAncillaryMessage::ScmRights(fds) => {
-                    received_descriptors.extend(fds.into_iter().map(Into::into));
+            match sendmsg(
+                &self.socket,
+                &[IoSlice::new(&opaque_data[total_sent..])],
+                &mut cmsg_buffer,
+                SendFlags::NOSIGNAL,
+            ) {
+                Ok(n) => {
+                    if n == 0 {
+                        return Err(Error::IoError(IoError::from(ErrorKind::WriteZero)));
+                    }
+                    total_sent += n;
+                    first = false;
                 }
-                _ => return Err(Error::Unsupported), // Handle unexpected control messages
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(rustix::io::Errno::AGAIN) => {
+                    match poll(&mut [PollFd::new(&self.socket, PollFlags::OUT)], None) {
+                        Ok(_) | Err(rustix::io::Errno::INTR) => continue,
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+                Err(e) => return Err(e.into()),
             }
         }
 
-        Ok((len, received_descriptors))
+        Ok(total_sent)
+    }
+
+    pub fn receive(&self, opaque_data: &mut [u8]) -> MagmaGpuResult<(usize, Vec<OwnedDescriptor>)> {
+        loop {
+            let mut iovecs = [IoSliceMut::new(opaque_data)];
+
+            let mut space = [MaybeUninit::<u8>::uninit(); cmsg_space!(ScmRights(MAX_IDENTIFIERS))];
+            let mut cmsg_buffer = RecvAncillaryBuffer::new(&mut space);
+            match recvmsg(
+                &self.socket,
+                &mut iovecs,
+                &mut cmsg_buffer,
+                RecvFlags::empty(),
+            ) {
+                Ok(r) => {
+                    let len = r.bytes;
+                    let mut received_descriptors: Vec<OwnedDescriptor> = Vec::new();
+
+                    // Iterate over received control messages
+                    for cmsg in cmsg_buffer.drain() {
+                        match cmsg {
+                            RecvAncillaryMessage::ScmRights(fds) => {
+                                received_descriptors.extend(fds.into_iter().map(Into::into));
+                            }
+                            _ => return Err(Error::Unsupported), // Handle unexpected control messages
+                        }
+                    }
+
+                    return Ok((len, received_descriptors));
+                }
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(rustix::io::Errno::AGAIN) => {
+                    match poll(&mut [PollFd::new(&self.socket, PollFlags::IN)], None) {
+                        Ok(_) | Err(rustix::io::Errno::INTR) => continue,
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     }
 }
 
