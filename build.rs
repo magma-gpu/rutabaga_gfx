@@ -24,6 +24,15 @@ fn virglrenderer() -> PkgConfigResult<()> {
 }
 
 fn gfxstream() -> PkgConfigResult<()> {
+    for var in [
+        "GFXSTREAM_PATH",
+        "GFXSTREAM_PATH_DEBUG",
+        "GFXSTREAM_PATH_RELEASE",
+        "GFXSTREAM_UNSTABLE",
+    ] {
+        println!("cargo:rerun-if-env-changed={var}");
+    }
+
     let mut gfxstream_path_env_override =
         // We use the unrecommended PROFILE environment variable here, because the Windows
         // downstream can set debug = true for the release profile to keep the symbol files.
