@@ -6,6 +6,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap as Map;
 use std::path::PathBuf;
 
+use log::warn;
 use magma_gpu::util::AsBorrowedDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Listener;
@@ -56,12 +57,24 @@ impl Kumquat {
                         KumquatConnection::GpuConnection(ref mut gpu_conn) => {
                             if event.readable {
                                 if let Some(ref mut kumquat_gpu) = self.kumquat_gpu_opt {
-                                    hung_up =
-                                        !gpu_conn.process_command(kumquat_gpu)? && event.hung_up;
+                                    match gpu_conn.process_command(kumquat_gpu) {
+                                        Ok(cmd_hung_up) => {
+                                            hung_up = cmd_hung_up;
+                                        }
+                                        Err(e) => {
+                                            warn!("kumquat gpu connection closed with error: {e:?}");
+                                            hung_up = true;
+                                        }
+                                    }
                                 }
+                            } else if event.hung_up {
+                                hung_up = true;
                             }
 
                             if hung_up {
+                                if let Some(ref mut kumquat_gpu) = self.kumquat_gpu_opt {
+                                    gpu_conn.cleanup(kumquat_gpu);
+                                }
                                 self.wait_ctx.delete(gpu_conn.as_borrowed_descriptor())?;
                                 o.remove_entry();
                             }
