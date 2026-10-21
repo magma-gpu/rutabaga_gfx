@@ -119,6 +119,8 @@ impl KumquatGpu {
 
         let fence_handler = create_fence_handler(fence_state.clone());
 
+        let set_use_system_blob =
+            renderer_features.contains("SystemBlob:enabled") || cfg!(target_vendor = "apple");
         let renderer_features_opt = if renderer_features.is_empty() {
             None
         } else {
@@ -129,7 +131,7 @@ impl KumquatGpu {
             .set_use_external_blob(true)
             // Metal cannot export device memory, so host visible memory is
             // shared memory the host imports as a host pointer instead.
-            .set_use_system_blob(cfg!(target_vendor = "apple"))
+            .set_use_system_blob(set_use_system_blob)
             .set_use_egl(true)
             .set_wsi(RutabagaWsi::Surfaceless)
             .set_renderer_features(renderer_features_opt)
