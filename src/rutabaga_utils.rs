@@ -200,6 +200,7 @@ unsafe impl Sync for RutabagaDebug {}
 
 /// Mapped memory caching flags (see virtio_gpu spec)
 pub const RUTABAGA_MAP_CACHE_MASK: u32 = 0x0f;
+pub const RUTABAGA_MAP_CACHE_NONE: u32 = 0x00;
 pub const RUTABAGA_MAP_CACHE_CACHED: u32 = 0x01;
 pub const RUTABAGA_MAP_CACHE_UNCACHED: u32 = 0x02;
 pub const RUTABAGA_MAP_CACHE_WC: u32 = 0x03;
