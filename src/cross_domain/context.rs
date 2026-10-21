@@ -290,19 +290,32 @@ impl CrossDomainContext {
                     .get(identifier)
                     .ok_or(RutabagaError::InvalidResourceId)?;
 
-                if let Some(mesa_handle) = context_resource
-                    .handle
-                    .as_ref()
-                    .and_then(|h| h.as_mesa_handle())
-                {
-                    descriptors.push(
-                        mesa_handle
-                            .os_handle
-                            .try_clone()
-                            .map_err(MagmaGpuError::IoError)?,
-                    );
-                } else {
-                    return Err(MagmaGpuError::InvalidMagmaHandle.into());
+                match context_resource.handle.as_deref() {
+                    Some(RutabagaHandle::MagmaGpuHandle(mesa_handle)) => {
+                        descriptors.push(
+                            mesa_handle
+                                .os_handle
+                                .try_clone()
+                                .map_err(MagmaGpuError::IoError)?,
+                        );
+                    }
+                    Some(RutabagaHandle::AhbInfo(ahb_info)) => {
+                        if ahb_info.fds.is_empty() || ahb_info.metadata.is_empty() {
+                            return Err(MagmaGpuError::InvalidMagmaHandle.into());
+                        }
+                        let cloned_fds = ahb_info
+                            .fds
+                            .iter()
+                            .map(|fd| fd.try_clone())
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(MagmaGpuError::IoError)?;
+                        let (tx_tube, rx) = Tube::pair()?;
+                        tx_tube.send(&ahb_info.metadata, cloned_fds)?;
+                        descriptors.push(rx);
+                    }
+                    None => {
+                        return Err(MagmaGpuError::InvalidMagmaHandle.into());
+                    }
                 }
             } else if *identifier_type == CROSS_DOMAIN_ID_TYPE_READ_PIPE {
                 // In practice, just 1 pipe pair per send is observed.  If we encounter
