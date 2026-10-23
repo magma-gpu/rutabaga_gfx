@@ -106,9 +106,7 @@ fn main() -> PkgConfigResult<()> {
         gbm()?;
     }
 
-    if env::var("CARGO_FEATURE_GFXSTREAM").is_ok()
-        && env::var("CARGO_FEATURE_GFXSTREAM_STUB").is_err()
-    {
+    if env::var("CARGO_FEATURE_GFXSTREAM").is_ok() {
         gfxstream()?;
     }
 
