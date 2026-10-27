@@ -56,8 +56,9 @@ impl Kumquat {
                         KumquatConnection::GpuConnection(ref mut gpu_conn) => {
                             if event.readable {
                                 if let Some(ref mut kumquat_gpu) = self.kumquat_gpu_opt {
+                                    // process_command() returns a boolean representing hang_up
                                     hung_up =
-                                        !gpu_conn.process_command(kumquat_gpu)? && event.hung_up;
+                                        gpu_conn.process_command(kumquat_gpu)? && event.hung_up;
                                 }
                             }
 

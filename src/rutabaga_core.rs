@@ -86,7 +86,7 @@ use crate::resource::RutabagaResourceSnapshot;
 ///
 /// Most methods return a `RutabagaResult` that indicate the success, failure, or requested data for
 /// the given command.
-pub trait RutabagaComponent {
+pub trait RutabagaComponent: Send {
     /// Implementations should return the version and size of the given capset_id.  (0, 0) is
     /// returned by default.
     fn get_capset_info(&self, _capset_id: u32) -> (u32, u32) {
@@ -273,7 +273,7 @@ pub trait RutabagaComponent {
     }
 }
 
-pub trait RutabagaContext {
+pub trait RutabagaContext: Send {
     /// Implementations must return a RutabagaResource given the `resource_create_blob` parameters.
     fn context_create_blob(
         &mut self,
