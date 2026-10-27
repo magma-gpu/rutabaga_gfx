@@ -4,7 +4,6 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap as Map;
-use std::collections::BTreeSet as Set;
 use std::os::raw::c_void;
 use std::path::Path;
 use std::sync::Arc;
@@ -68,13 +67,43 @@ impl From<RutabagaError> for KumquatGpuError {
 
 pub type KumquatGpuResult<T> = std::result::Result<T, KumquatGpuError>;
 
-pub struct KumquatGpuConnection {
-    stream: KumquatStream,
+pub struct KumquatGpuResource {
+    resource_id: u32,
+    rutabaga: Arc<Mutex<Rutabaga>>,
+    mapping: Option<MemoryMapping>,
 }
 
-pub struct KumquatGpuResource {
-    attached_contexts: Set<u32>,
-    mapping: Option<MemoryMapping>,
+impl Drop for KumquatGpuResource {
+    fn drop(&mut self) {
+        if let Ok(mut rutabaga) = self.rutabaga.lock() {
+            if self.mapping.is_some() {
+                let _ = rutabaga.detach_backing(self.resource_id);
+            }
+            let _ = rutabaga.unref_resource(self.resource_id);
+        }
+    }
+}
+
+pub struct KumquatGpuContext {
+    ctx_id: u32,
+    rutabaga: Arc<Mutex<Rutabaga>>,
+    resources: Map<u32, Arc<KumquatGpuResource>>,
+}
+
+impl Drop for KumquatGpuContext {
+    fn drop(&mut self) {
+        if let Ok(mut rutabaga) = self.rutabaga.lock() {
+            for &resource_id in self.resources.keys() {
+                let _ = rutabaga.context_detach_resource(self.ctx_id, resource_id);
+            }
+            let _ = rutabaga.destroy_context(self.ctx_id);
+        }
+    }
+}
+
+pub struct KumquatGpuConnection {
+    stream: KumquatStream,
+    contexts: Map<u32, KumquatGpuContext>,
 }
 
 pub struct FenceData {
@@ -100,10 +129,9 @@ pub fn create_fence_handler(fence_state: FenceState) -> RutabagaFenceHandler {
 }
 
 pub struct KumquatGpu {
-    rutabaga: Rutabaga,
+    rutabaga: Arc<Mutex<Rutabaga>>,
     fence_state: FenceState,
     id_allocator: u32,
-    resources: Map<u32, KumquatGpuResource>,
 }
 
 impl KumquatGpu {
@@ -138,10 +166,9 @@ impl KumquatGpu {
             .build()?;
 
         Ok(KumquatGpu {
-            rutabaga,
+            rutabaga: Arc::new(Mutex::new(rutabaga)),
             fence_state,
             id_allocator: 0,
-            resources: Default::default(),
         })
     }
 
@@ -155,6 +182,7 @@ impl KumquatGpuConnection {
     pub fn new(connection: Tube) -> KumquatGpuConnection {
         KumquatGpuConnection {
             stream: KumquatStream::new(connection),
+            contexts: Default::default(),
         }
     }
 
@@ -167,14 +195,17 @@ impl KumquatGpuConnection {
                 KumquatGpuProtocol::GetNumCapsets => {
                     let resp = kumquat_gpu_protocol_ctrl_hdr {
                         type_: KUMQUAT_GPU_PROTOCOL_RESP_NUM_CAPSETS,
-                        payload: kumquat_gpu.rutabaga.get_num_capsets(),
+                        payload: kumquat_gpu.rutabaga.lock().unwrap().get_num_capsets(),
                     };
 
                     self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::GetCapsetInfo(capset_index) => {
-                    let (capset_id, version, size) =
-                        kumquat_gpu.rutabaga.get_capset_info(capset_index)?;
+                    let (capset_id, version, size) = kumquat_gpu
+                        .rutabaga
+                        .lock()
+                        .unwrap()
+                        .get_capset_info(capset_index)?;
 
                     let resp = kumquat_gpu_protocol_resp_capset_info {
                         hdr: kumquat_gpu_protocol_ctrl_hdr {
@@ -192,6 +223,8 @@ impl KumquatGpuConnection {
                 KumquatGpuProtocol::GetCapset(cmd) => {
                     let capset = kumquat_gpu
                         .rutabaga
+                        .lock()
+                        .unwrap()
                         .get_capset(cmd.capset_id, cmd.capset_version)?;
 
                     let resp = kumquat_gpu_protocol_ctrl_hdr {
@@ -210,11 +243,20 @@ impl KumquatGpuConnection {
                     let context_name: Option<String> =
                         String::from_utf8(cmd.debug_name.to_vec()).ok();
 
-                    kumquat_gpu.rutabaga.create_context(
+                    kumquat_gpu.rutabaga.lock().unwrap().create_context(
                         context_id,
                         cmd.context_init,
                         context_name.as_deref(),
                     )?;
+
+                    self.contexts.insert(
+                        context_id,
+                        KumquatGpuContext {
+                            ctx_id: context_id,
+                            rutabaga: kumquat_gpu.rutabaga.clone(),
+                            resources: Default::default(),
+                        },
+                    );
 
                     let resp = kumquat_gpu_protocol_ctrl_hdr {
                         type_: KUMQUAT_GPU_PROTOCOL_RESP_CONTEXT_CREATE,
@@ -224,35 +266,51 @@ impl KumquatGpuConnection {
                     self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::CtxDestroy(ctx_id) => {
-                    kumquat_gpu.rutabaga.destroy_context(ctx_id)?;
+                    let _ = self
+                        .contexts
+                        .remove(&ctx_id)
+                        .ok_or(RutabagaError::InvalidContextId)?;
                 }
                 KumquatGpuProtocol::CtxAttachResource(cmd) => {
                     kumquat_gpu
                         .rutabaga
+                        .lock()
+                        .unwrap()
                         .context_attach_resource(cmd.ctx_id, cmd.resource_id)?;
+
+                    let resource = self
+                        .contexts
+                        .values()
+                        .find_map(|ctx| ctx.resources.get(&cmd.resource_id).cloned());
+                    if let Some(res) = resource {
+                        if let Some(target_ctx) = self.contexts.get_mut(&cmd.ctx_id) {
+                            target_ctx.resources.insert(cmd.resource_id, res);
+                        }
+                    }
                 }
                 KumquatGpuProtocol::CtxDetachResource(cmd) => {
-                    kumquat_gpu
-                        .rutabaga
-                        .context_detach_resource(cmd.ctx_id, cmd.resource_id)?;
+                    let ctx = self
+                        .contexts
+                        .get_mut(&cmd.ctx_id)
+                        .ok_or(RutabagaError::InvalidContextId)?;
 
-                    let mut resource = kumquat_gpu
+                    let _ = ctx
                         .resources
                         .remove(&cmd.resource_id)
                         .ok_or(RutabagaError::InvalidResourceId)?;
 
-                    resource.attached_contexts.remove(&cmd.ctx_id);
-                    if resource.attached_contexts.is_empty() {
-                        if resource.mapping.is_some() {
-                            kumquat_gpu.rutabaga.detach_backing(cmd.resource_id)?;
-                        }
-
-                        kumquat_gpu.rutabaga.unref_resource(cmd.resource_id)?;
-                    } else {
-                        kumquat_gpu.resources.insert(cmd.resource_id, resource);
-                    }
+                    let _ = kumquat_gpu
+                        .rutabaga
+                        .lock()
+                        .unwrap()
+                        .context_detach_resource(cmd.ctx_id, cmd.resource_id);
                 }
                 KumquatGpuProtocol::ResourceCreate3d(cmd) => {
+                    let ctx = self
+                        .contexts
+                        .get_mut(&cmd.ctx_id)
+                        .ok_or(RutabagaError::InvalidContextId)?;
+
                     let resource_create_3d = ResourceCreate3D {
                         target: cmd.target,
                         format: cmd.format,
@@ -289,19 +347,27 @@ impl KumquatGpuConnection {
 
                     kumquat_gpu
                         .rutabaga
+                        .lock()
+                        .unwrap()
                         .resource_create_3d(resource_id, resource_create_3d)?;
-
-                    kumquat_gpu.rutabaga.attach_backing(resource_id, vecs)?;
-                    kumquat_gpu.resources.insert(
-                        resource_id,
-                        KumquatGpuResource {
-                            attached_contexts: Default::default(),
-                            mapping: Some(mapping),
-                        },
-                    );
 
                     kumquat_gpu
                         .rutabaga
+                        .lock()
+                        .unwrap()
+                        .attach_backing(resource_id, vecs)?;
+
+                    let resource = Arc::new(KumquatGpuResource {
+                        resource_id,
+                        rutabaga: kumquat_gpu.rutabaga.clone(),
+                        mapping: Some(mapping),
+                    });
+                    ctx.resources.insert(resource_id, resource);
+
+                    kumquat_gpu
+                        .rutabaga
+                        .lock()
+                        .unwrap()
                         .context_attach_resource(cmd.ctx_id, resource_id)?;
 
                     let resp = kumquat_gpu_protocol_resp_resource_create {
@@ -337,9 +403,12 @@ impl KumquatGpuConnection {
                         offset: cmd.offset,
                     };
 
-                    kumquat_gpu
-                        .rutabaga
-                        .transfer_write(cmd.ctx_id, resource_id, transfer, None)?;
+                    kumquat_gpu.rutabaga.lock().unwrap().transfer_write(
+                        cmd.ctx_id,
+                        resource_id,
+                        transfer,
+                        None,
+                    )?;
 
                     let signaler: EventSignaler = emulated_fence.try_into()?;
                     signaler.signal()?;
@@ -360,15 +429,18 @@ impl KumquatGpuConnection {
                         offset: cmd.offset,
                     };
 
-                    kumquat_gpu
-                        .rutabaga
-                        .transfer_read(cmd.ctx_id, resource_id, transfer, None)?;
+                    kumquat_gpu.rutabaga.lock().unwrap().transfer_read(
+                        cmd.ctx_id,
+                        resource_id,
+                        transfer,
+                        None,
+                    )?;
 
                     let signaler: EventSignaler = emulated_fence.try_into()?;
                     signaler.signal()?;
                 }
                 KumquatGpuProtocol::CmdSubmit3d(cmd, mut cmd_buf, fence_ids) => {
-                    kumquat_gpu.rutabaga.submit_command(
+                    kumquat_gpu.rutabaga.lock().unwrap().submit_command(
                         cmd.ctx_id,
                         &mut cmd_buf[..],
                         &fence_ids[..],
@@ -396,12 +468,21 @@ impl KumquatGpuConnection {
                             fence_state.pending_fences.insert(fence_id, signaler);
                         }
 
-                        kumquat_gpu.rutabaga.create_fence(fence)?;
+                        kumquat_gpu.rutabaga.lock().unwrap().create_fence(fence)?;
 
                         if actual_fence {
-                            fence_descriptor_opt =
-                                Some(kumquat_gpu.rutabaga.export_fence(fence_id)?);
-                            kumquat_gpu.rutabaga.destroy_fences(&[fence_id])?;
+                            fence_descriptor_opt = Some(
+                                kumquat_gpu
+                                    .rutabaga
+                                    .lock()
+                                    .unwrap()
+                                    .export_fence(fence_id)?,
+                            );
+                            kumquat_gpu
+                                .rutabaga
+                                .lock()
+                                .unwrap()
+                                .destroy_fences(&[fence_id])?;
                         }
 
                         let fence_descriptor = fence_descriptor_opt
@@ -424,6 +505,11 @@ impl KumquatGpuConnection {
                     }
                 }
                 KumquatGpuProtocol::ResourceCreateBlob(cmd) => {
+                    let ctx = self
+                        .contexts
+                        .get_mut(&cmd.ctx_id)
+                        .ok_or(RutabagaError::InvalidContextId)?;
+
                     let resource_id = kumquat_gpu.allocate_id();
 
                     let resource_create_blob = ResourceCreateBlob {
@@ -433,7 +519,7 @@ impl KumquatGpuConnection {
                         size: cmd.size,
                     };
 
-                    kumquat_gpu.rutabaga.resource_create_blob(
+                    kumquat_gpu.rutabaga.lock().unwrap().resource_create_blob(
                         cmd.ctx_id,
                         resource_id,
                         resource_create_blob,
@@ -441,20 +527,28 @@ impl KumquatGpuConnection {
                         None,
                     )?;
 
-                    let handle = kumquat_gpu.rutabaga.export_blob(resource_id)?;
+                    let handle = kumquat_gpu
+                        .rutabaga
+                        .lock()
+                        .unwrap()
+                        .export_blob(resource_id)?;
                     let handle = MagmaGpuHandle::try_from(handle)?;
                     let mut vk_info: RutabagaVulkanInfo = Default::default();
-                    if let Ok(vulkan_info) = kumquat_gpu.rutabaga.vulkan_info(resource_id) {
+                    if let Ok(vulkan_info) = kumquat_gpu
+                        .rutabaga
+                        .lock()
+                        .unwrap()
+                        .vulkan_info(resource_id)
+                    {
                         vk_info = vulkan_info;
                     }
 
-                    kumquat_gpu.resources.insert(
+                    let resource = Arc::new(KumquatGpuResource {
                         resource_id,
-                        KumquatGpuResource {
-                            attached_contexts: Set::from([cmd.ctx_id]),
-                            mapping: None,
-                        },
-                    );
+                        rutabaga: kumquat_gpu.rutabaga.clone(),
+                        mapping: None,
+                    });
+                    ctx.resources.insert(resource_id, resource);
 
                     let resp = kumquat_gpu_protocol_resp_resource_create {
                         hdr: kumquat_gpu_protocol_ctrl_hdr {
@@ -477,10 +571,16 @@ impl KumquatGpuConnection {
 
                     kumquat_gpu
                         .rutabaga
+                        .lock()
+                        .unwrap()
                         .context_attach_resource(cmd.ctx_id, resource_id)?;
                 }
                 KumquatGpuProtocol::SnapshotSave => {
-                    kumquat_gpu.rutabaga.snapshot(Path::new(SNAPSHOT_DIR))?;
+                    kumquat_gpu
+                        .rutabaga
+                        .lock()
+                        .unwrap()
+                        .snapshot(Path::new(SNAPSHOT_DIR))?;
 
                     let resp = kumquat_gpu_protocol_ctrl_hdr {
                         type_: KUMQUAT_GPU_PROTOCOL_RESP_OK_SNAPSHOT,
@@ -490,7 +590,11 @@ impl KumquatGpuConnection {
                     self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::SnapshotRestore => {
-                    kumquat_gpu.rutabaga.restore(Path::new(SNAPSHOT_DIR))?;
+                    kumquat_gpu
+                        .rutabaga
+                        .lock()
+                        .unwrap()
+                        .restore(Path::new(SNAPSHOT_DIR))?;
 
                     let resp = kumquat_gpu_protocol_ctrl_hdr {
                         type_: KUMQUAT_GPU_PROTOCOL_RESP_OK_SNAPSHOT,
