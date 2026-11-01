@@ -162,6 +162,14 @@ struct rutabaga_import_data {
         uint32_t offsets[4];
         uint64_t modifier;
     } info_3d;
+    struct {
+        uint32_t memory_idx;
+        struct {
+            uint8_t device_uuid[16];
+            uint8_t driver_uuid[16];
+        } device_id;
+    } info_vulkan;
+    uint64_t size;
 };
 
 #endif
