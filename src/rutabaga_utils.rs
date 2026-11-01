@@ -181,10 +181,12 @@ pub const RUTABAGA_IMPORT_FLAG_PRESERVE_CONTENT: u32 = 1 << 31;
 
 /// Import Data for resource_import
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct RutabagaImportData {
     pub flags: u32,
     pub info_3d: Resource3DInfo,
+    pub info_vulkan: VulkanInfo,
+    pub size: u64,
 }
 
 // SAFETY:
