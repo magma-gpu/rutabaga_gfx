@@ -305,6 +305,22 @@ impl GfxstreamContext {
 }
 
 impl RutabagaContext for GfxstreamContext {
+    fn context_create_blob(
+        &mut self,
+        resource_id: u32,
+        resource_create_blob: ResourceCreateBlob,
+        iovec_opt: Option<Vec<RutabagaIovec>>,
+        handle_opt: Option<RutabagaHandle>,
+    ) -> RutabagaResult<RutabagaResource> {
+        Gfxstream::create_blob_internal(
+            self.ctx_id,
+            resource_id,
+            resource_create_blob,
+            iovec_opt,
+            handle_opt,
+        )
+    }
+
     fn submit_cmd(
         &mut self,
         commands: &mut [u8],
@@ -500,7 +516,7 @@ impl Gfxstream {
         Ok(Box::new(Gfxstream { _cookie: cookie }))
     }
 
-    fn map_info(&self, resource_id: u32) -> RutabagaResult<u32> {
+    fn map_info(resource_id: u32) -> RutabagaResult<u32> {
         let mut map_info = 0;
         // SAFETY:
         // Safe because `map_info` is a local stack variable owned by us.
@@ -510,7 +526,7 @@ impl Gfxstream {
         Ok(map_info | RUTABAGA_MAP_ACCESS_RW)
     }
 
-    fn vulkan_info(&self, resource_id: u32) -> RutabagaResult<VulkanInfo> {
+    fn vulkan_info(resource_id: u32) -> RutabagaResult<VulkanInfo> {
         let mut vulkan_info: stream_renderer_vulkan_info = Default::default();
         // SAFETY:
         // Safe because `vulkan_info` is a local stack variable owned by us.
@@ -526,7 +542,7 @@ impl Gfxstream {
         })
     }
 
-    fn export_blob(&self, resource_id: u32) -> RutabagaResult<Arc<RutabagaHandle>> {
+    fn export_blob(resource_id: u32) -> RutabagaResult<Arc<RutabagaHandle>> {
         let mut stream_handle: stream_renderer_handle = Default::default();
         // TODO(b/315870313): Add safety comment
         #[allow(clippy::undocumented_unsafe_blocks)]
@@ -588,6 +604,90 @@ impl Gfxstream {
                 .into(),
             ))
         }
+    }
+
+    fn create_blob_internal(
+        ctx_id: u32,
+        resource_id: u32,
+        resource_create_blob: ResourceCreateBlob,
+        mut iovec_opt: Option<Vec<RutabagaIovec>>,
+        handle_opt: Option<RutabagaHandle>,
+    ) -> RutabagaResult<RutabagaResource> {
+        if ctx_id == 0 && resource_create_blob.blob_mem == RUTABAGA_BLOB_MEM_GUEST {
+            return Ok(RutabagaResource {
+                resource_id,
+                handle: handle_opt.map(Arc::new),
+                blob: true,
+                blob_mem: resource_create_blob.blob_mem,
+                blob_flags: resource_create_blob.blob_flags,
+                map_info: None,
+                info_2d: None,
+                info_3d: None,
+                vulkan_info: None,
+                backing_iovecs: iovec_opt,
+                component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
+                size: resource_create_blob.size,
+                mapping: None,
+            });
+        }
+
+        let mut iovec_ptr = null_mut();
+        let mut num_iovecs = 0;
+        if let Some(ref mut iovecs) = iovec_opt {
+            iovec_ptr = iovecs.as_mut_ptr();
+            num_iovecs = iovecs.len() as u32;
+        }
+
+        let mut handle_ptr = null();
+        let mut stream_handle: stream_renderer_handle = Default::default();
+        let mut raw_os_handle = None;
+        let mut fallback_handle = None;
+        if let Some(handle) = handle_opt {
+            let handle = MagmaGpuHandle::try_from(handle)?;
+            fallback_handle = handle.try_clone().ok().map(|h| Arc::new(h.into()));
+            stream_handle.handle_type = handle.handle_type;
+            let raw_fd = handle.os_handle.into_raw_descriptor();
+            stream_handle.os_handle = raw_fd as i64;
+            raw_os_handle = Some(raw_fd);
+            handle_ptr = &stream_handle;
+        }
+
+        // TODO(b/315870313): Add safety comment
+        #[allow(clippy::undocumented_unsafe_blocks)]
+        let ret = unsafe {
+            stream_renderer_create_blob(
+                ctx_id,
+                resource_id,
+                &resource_create_blob as *const stream_renderer_create_blob,
+                iovec_ptr as *const iovec,
+                num_iovecs,
+                handle_ptr,
+            )
+        };
+
+        if ret != 0 {
+            if let Some(raw_fd) = raw_os_handle {
+                // SAFETY: `stream_renderer_create_blob` failed before taking ownership of `raw_fd`.
+                let _ = unsafe { OwnedDescriptor::from_raw_descriptor(raw_fd) };
+            }
+            ret_to_res(ret)?;
+        }
+
+        Ok(RutabagaResource {
+            resource_id,
+            handle: Self::export_blob(resource_id).ok().or(fallback_handle),
+            blob: true,
+            blob_mem: resource_create_blob.blob_mem,
+            blob_flags: resource_create_blob.blob_flags,
+            map_info: Self::map_info(resource_id).ok(),
+            info_2d: None,
+            info_3d: None,
+            vulkan_info: Self::vulkan_info(resource_id).ok(),
+            backing_iovecs: iovec_opt,
+            component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
+            size: resource_create_blob.size,
+            mapping: None,
+        })
     }
 }
 
@@ -660,7 +760,7 @@ impl RutabagaComponent for Gfxstream {
 
         // Always attempt to export when possible to potentially enable flows which share
         // memory directly.
-        let exported_handle = self.export_blob(resource_id).ok();
+        let exported_handle = Self::export_blob(resource_id).ok();
 
         Ok(RutabagaResource {
             resource_id,
@@ -902,73 +1002,16 @@ impl RutabagaComponent for Gfxstream {
         ctx_id: u32,
         resource_id: u32,
         resource_create_blob: ResourceCreateBlob,
-        mut iovec_opt: Option<Vec<RutabagaIovec>>,
+        iovec_opt: Option<Vec<RutabagaIovec>>,
         handle_opt: Option<RutabagaHandle>,
     ) -> RutabagaResult<RutabagaResource> {
-        if ctx_id == 0 && resource_create_blob.blob_mem == RUTABAGA_BLOB_MEM_GUEST {
-            return Ok(RutabagaResource {
-                resource_id,
-                handle: None,
-                blob: true,
-                blob_mem: resource_create_blob.blob_mem,
-                blob_flags: resource_create_blob.blob_flags,
-                map_info: None,
-                info_2d: None,
-                info_3d: None,
-                vulkan_info: None,
-                backing_iovecs: iovec_opt,
-                component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
-                size: resource_create_blob.size,
-                mapping: None,
-            });
-        }
-
-        let mut iovec_ptr = null_mut();
-        let mut num_iovecs = 0;
-        if let Some(ref mut iovecs) = iovec_opt {
-            iovec_ptr = iovecs.as_mut_ptr();
-            num_iovecs = iovecs.len() as u32;
-        }
-
-        let mut handle_ptr = null();
-        let mut stream_handle: stream_renderer_handle = Default::default();
-        if let Some(handle) = handle_opt {
-            let handle = MagmaGpuHandle::try_from(handle)?;
-            stream_handle.handle_type = handle.handle_type;
-            stream_handle.os_handle = handle.os_handle.into_raw_descriptor() as i64;
-            handle_ptr = &stream_handle;
-        }
-
-        // TODO(b/315870313): Add safety comment
-        #[allow(clippy::undocumented_unsafe_blocks)]
-        let ret = unsafe {
-            stream_renderer_create_blob(
-                ctx_id,
-                resource_id,
-                &resource_create_blob as *const stream_renderer_create_blob,
-                iovec_ptr as *const iovec,
-                num_iovecs,
-                handle_ptr,
-            )
-        };
-
-        ret_to_res(ret)?;
-
-        Ok(RutabagaResource {
+        Self::create_blob_internal(
+            ctx_id,
             resource_id,
-            handle: self.export_blob(resource_id).ok(),
-            blob: true,
-            blob_mem: resource_create_blob.blob_mem,
-            blob_flags: resource_create_blob.blob_flags,
-            map_info: self.map_info(resource_id).ok(),
-            info_2d: None,
-            info_3d: None,
-            vulkan_info: self.vulkan_info(resource_id).ok(),
-            backing_iovecs: iovec_opt,
-            component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
-            size: resource_create_blob.size,
-            mapping: None,
-        })
+            resource_create_blob,
+            iovec_opt,
+            handle_opt,
+        )
     }
 
     fn map(&self, resource_id: u32) -> RutabagaResult<RawMapping> {
