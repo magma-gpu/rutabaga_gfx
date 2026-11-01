@@ -45,6 +45,7 @@ endif
 if with_gfxstream
   dep_gfxstream = dependency('gfxstream_backend', version: '>= 0.1.2')
   rutabaga_args += ['--cfg', 'feature="gfxstream"']
+  rutabaga_args += ['--cfg', 'gfxstream_unstable']
   libdir_gfxstream = dep_gfxstream.get_variable('libdir')
   if libdir_gfxstream != ''
     dep_link_args += ['-L', libdir_gfxstream]
