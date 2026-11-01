@@ -61,8 +61,8 @@ use crate::rutabaga_utils::VulkanInfo;
 use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 use crate::rutabaga_utils::RUTABAGA_HANDLE_TYPE_PLATFORM_AHB;
+#[cfg(gfxstream_unstable)]
 use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
-use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 #[cfg(gfxstream_unstable)]
 use crate::snapshot::RutabagaSnapshotReader;
@@ -78,8 +78,6 @@ const STREAM_RENDERER_PARAM_WIN0_HEIGHT: u64 = 5;
 const STREAM_RENDERER_PARAM_DEBUG_CALLBACK: u64 = 6;
 const STREAM_RENDERER_PARAM_RENDERER_FEATURES: u64 = 11;
 
-#[cfg(gfxstream_unstable)]
-const STREAM_RENDERER_IMPORT_FLAG_VULKAN_INFO: u32 = RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
 #[cfg(gfxstream_unstable)]
 const STREAM_RENDERER_IMPORT_FLAG_RESOURCE_EXISTS: u32 = RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
 
@@ -146,6 +144,7 @@ pub struct stream_renderer_import_data {
     pub flags: u32,
     pub info_3d: stream_renderer_3d_info,
     pub info_vulkan: stream_renderer_vulkan_info,
+    pub size: u64,
 }
 
 extern "C" {
@@ -688,17 +687,12 @@ impl RutabagaComponent for Gfxstream {
         import_data: RutabagaImportData,
     ) -> RutabagaResult<Option<RutabagaResource>> {
         let import_handle = MagmaGpuHandle::try_from(import_handle)?;
+        let raw_descriptor = import_handle.os_handle.into_raw_descriptor();
         let stream_handle = stream_renderer_handle {
-            os_handle: import_handle.os_handle.into_raw_descriptor() as i64,
+            os_handle: raw_descriptor as i64,
             handle_type: import_handle.handle_type,
         };
 
-        // VULKAN_INFO not currently supported in Rutabaga -> gfxstream translation
-        // for import_data
-        assert!(import_data.flags & STREAM_RENDERER_IMPORT_FLAG_VULKAN_INFO == 0);
-
-        // When importing and creating a new resource, 3D_INFO flag must be set. This flag should
-        // be the only flag set in the gfxstream call
         let stream_import_data = stream_renderer_import_data {
             flags: import_data.flags,
             info_3d: stream_renderer_3d_info {
@@ -709,7 +703,12 @@ impl RutabagaComponent for Gfxstream {
                 offsets: import_data.info_3d.offsets,
                 modifier: import_data.info_3d.modifier,
             },
-            info_vulkan: Default::default(),
+            info_vulkan: stream_renderer_vulkan_info {
+                memory_index: import_data.info_vulkan.memory_idx,
+                device_uuid: import_data.info_vulkan.device_id.device_uuid,
+                driver_uuid: import_data.info_vulkan.device_id.driver_uuid,
+            },
+            size: import_data.size,
         };
 
         // SAFETY:
@@ -718,7 +717,12 @@ impl RutabagaComponent for Gfxstream {
         let ret = unsafe {
             stream_renderer_import_resource(resource_id, &stream_handle, &stream_import_data)
         };
-        ret_to_res(ret)?;
+        if ret != 0 {
+            // SAFETY: `stream_renderer_import_resource` failed before taking ownership of
+            // `raw_descriptor`.
+            let _ = unsafe { OwnedDescriptor::from_raw_descriptor(raw_descriptor) };
+            ret_to_res(ret)?;
+        }
 
         if (import_data.flags & STREAM_RENDERER_IMPORT_FLAG_RESOURCE_EXISTS) != 0 {
             Ok(None)
@@ -735,7 +739,7 @@ impl RutabagaComponent for Gfxstream {
                 vulkan_info: None,
                 backing_iovecs: None,
                 component_mask: 1 << (RutabagaComponentType::Gfxstream as u8),
-                size: 0,
+                size: import_data.size,
                 mapping: None,
             }))
         }
