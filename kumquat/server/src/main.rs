@@ -22,6 +22,15 @@ struct Args {
     #[arg(long, default_value = "gfxstream-vulkan")]
     capset_names: String,
 
+    /// Colon-separated list of virtio-gpu capsets routed to the broccolini render server.
+    /// For example, "--remote-capset-names=gfxstream-vulkan:cross-domain"
+    #[arg(long, alias = "remote_capset_names", default_value = "")]
+    remote_capset_names: String,
+
+    /// Path to the built broccolini render server binary.
+    #[arg(long, alias = "broccolini_path", default_value = "")]
+    broccolini_path: String,
+
     /// Path to the emulated virtio-gpu socket.
     #[arg(long, default_value = "/tmp/kumquat-gpu-0")]
     gpu_socket_path: String,
@@ -40,6 +49,8 @@ fn main() -> KumquatGpuResult<()> {
 
     let mut kumquat = KumquatBuilder::new()
         .set_capset_names(args.capset_names)
+        .set_remote_capset_names(args.remote_capset_names)
+        .set_broccolini_path((!args.broccolini_path.is_empty()).then_some(args.broccolini_path))
         .set_gpu_socket((!args.gpu_socket_path.is_empty()).then_some(args.gpu_socket_path))
         .set_renderer_features(args.renderer_features)
         .build()?;

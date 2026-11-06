@@ -82,7 +82,16 @@ Only headless apps are likely to work on Nvidia, and requires
 
 ## Build GPU-enabled server
 
-First install the [gfxstream-host](#install-gfxstream-host), then:
+First, install the [gfxstream-host](#install-gfxstream-host).
+
+Then:
+
+```sh
+cd $(rutabaga_gfx_dir)/broccolini/
+cargo build --features=gfxstream
+```
+
+Then:
 
 ```sh
 cd $(rutabaga_gfx_dir)/kumquat/server/
@@ -106,7 +115,8 @@ In one terminal:
 
 ```sh
 cd $(rutabaga_gfx_dir)/kumquat/server/
-./target/debug/kumquat
+./target/debug/kumquat \
+  --broccolini_path=$(rutabaga_gfx_dir)/broccolini/target/debug/broccolini
 ```
 
 In another terminal, run:
