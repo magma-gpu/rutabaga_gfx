@@ -6,6 +6,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap as Map;
 use std::os::raw::c_void;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -15,6 +16,7 @@ use magma_gpu::protocols::ipc::Stream;
 use magma_gpu::protocols::kumquat_gpu_protocol::*;
 use magma_gpu::util::create_event_pair;
 use magma_gpu::util::AsBorrowedDescriptor;
+use magma_gpu::util::AsRawDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::EventSignaler;
 use magma_gpu::util::Handle as MagmaGpuHandle;
@@ -48,6 +50,8 @@ const SNAPSHOT_DIR: &str = "/tmp/";
 #[non_exhaustive]
 #[derive(Error, Debug)]
 pub enum KumquatGpuError {
+    #[error("failed to launch broccolini: {0}")]
+    FailedToLaunchBroccolini(std::io::Error),
     #[error("Mesa Error {0}")]
     MagmaGpuError(MagmaGpuError),
     #[error("Rutabaga Error {0}")]
@@ -67,6 +71,45 @@ impl From<RutabagaError> for KumquatGpuError {
 }
 
 pub type KumquatGpuResult<T> = std::result::Result<T, KumquatGpuError>;
+
+#[allow(clippy::unnecessary_cast)]
+fn launch_broccolini(
+    broccolini_path: &str,
+    remote_capset_names: &str,
+    renderer_features: &str,
+) -> KumquatGpuResult<OwnedDescriptor> {
+    let (child_tube, parent_fd) = Tube::pair()?;
+    let child_raw_fd = child_tube.as_borrowed_descriptor().as_raw_descriptor();
+
+    #[cfg(unix)]
+    // SAFETY: `child_raw_fd` is a valid open file descriptor owned by `child_tube`.
+    // Clear FD_CLOEXEC so the descriptor is inherited across `Command::spawn`.
+    unsafe {
+        let fd = child_raw_fd as libc::c_int;
+        let flags = libc::fcntl(fd, libc::F_GETFD);
+        if flags < 0 || libc::fcntl(fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) < 0 {
+            return Err(KumquatGpuError::FailedToLaunchBroccolini(
+                std::io::Error::last_os_error(),
+            ));
+        }
+    }
+
+    let mut cmd = Command::new(broccolini_path);
+    cmd.arg("--socket-fd")
+        .arg((child_raw_fd as i64).to_string());
+    if !remote_capset_names.is_empty() {
+        cmd.arg("--context-types").arg(remote_capset_names);
+    }
+    if !renderer_features.is_empty() {
+        cmd.arg("--renderer-features").arg(renderer_features);
+    }
+
+    cmd.spawn()
+        .map_err(KumquatGpuError::FailedToLaunchBroccolini)?;
+
+    drop(child_tube);
+    Ok(parent_fd)
+}
 
 pub struct KumquatGpuResource {
     resource_id: u32,
@@ -136,11 +179,32 @@ pub struct KumquatGpu {
 }
 
 impl KumquatGpu {
-    pub fn new(capset_names: String, renderer_features: String) -> KumquatGpuResult<KumquatGpu> {
-        let capset_mask = calculate_capset_mask(capset_names.as_str().split(":"));
-        if capset_mask == 0 {
+    pub fn new(
+        capset_names: String,
+        remote_capset_names: String,
+        broccolini_path_opt: Option<String>,
+        renderer_features: String,
+    ) -> KumquatGpuResult<KumquatGpu> {
+        let remote_capset_mask = if remote_capset_names.is_empty() {
+            0
+        } else {
+            calculate_capset_mask(remote_capset_names.as_str().split(':'))
+        };
+        let capset_mask =
+            calculate_capset_mask(capset_names.as_str().split(':')) & !remote_capset_mask;
+        if (capset_mask | remote_capset_mask) == 0 {
             return Err(MagmaGpuError::Unsupported.into());
         }
+
+        let server_descriptor = if let Some(ref broccolini_path) = broccolini_path_opt {
+            Some(launch_broccolini(
+                broccolini_path,
+                &remote_capset_names,
+                &renderer_features,
+            )?)
+        } else {
+            None
+        };
 
         let fence_state = Arc::new(Mutex::new(FenceData {
             pending_fences: Default::default(),
@@ -157,6 +221,8 @@ impl KumquatGpu {
         };
 
         let rutabaga = RutabagaBuilder::new(capset_mask, fence_handler)
+            .set_remote_capset_mask(remote_capset_mask)
+            .set_server_descriptor(server_descriptor)
             .set_use_external_blob(true)
             // Metal cannot export device memory, so host visible memory is
             // shared memory the host imports as a host pointer instead.
