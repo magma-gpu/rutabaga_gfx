@@ -1,5 +1,7 @@
 // Copyright 2026 Google
 // SPDX-License-Identifier: MIT
 
-pub mod kumquat_stream;
-pub use kumquat_stream::KumquatStream;
+pub mod stream;
+pub use stream::Message;
+pub use stream::Protocol;
+pub use stream::Stream;

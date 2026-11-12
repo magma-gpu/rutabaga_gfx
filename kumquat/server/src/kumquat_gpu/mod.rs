@@ -10,7 +10,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use log::error;
-use magma_gpu::protocols::ipc::KumquatStream;
+use magma_gpu::protocols::ipc::Message;
+use magma_gpu::protocols::ipc::Stream;
 use magma_gpu::protocols::kumquat_gpu_protocol::*;
 use magma_gpu::util::create_event_pair;
 use magma_gpu::util::AsBorrowedDescriptor;
@@ -102,7 +103,7 @@ impl Drop for KumquatGpuContext {
 }
 
 pub struct KumquatGpuConnection {
-    stream: KumquatStream,
+    stream: Stream<KumquatGpuProtocol>,
     contexts: Map<u32, KumquatGpuContext>,
 }
 
@@ -181,7 +182,7 @@ impl KumquatGpu {
 impl KumquatGpuConnection {
     pub fn new(connection: Tube) -> KumquatGpuConnection {
         KumquatGpuConnection {
-            stream: KumquatStream::new(connection),
+            stream: Stream::new(connection),
             contexts: Default::default(),
         }
     }
@@ -198,7 +199,7 @@ impl KumquatGpuConnection {
                         payload: kumquat_gpu.rutabaga.lock().unwrap().get_num_capsets(),
                     };
 
-                    self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
+                    self.stream.write(Message::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::GetCapsetInfo(capset_index) => {
                     let (capset_id, version, size) = kumquat_gpu
@@ -218,7 +219,7 @@ impl KumquatGpuConnection {
                         ..Default::default()
                     };
 
-                    self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
+                    self.stream.write(Message::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::GetCapset(cmd) => {
                     let capset = kumquat_gpu
@@ -235,8 +236,7 @@ impl KumquatGpuConnection {
                             .map_err(MagmaGpuError::TryFromIntError)?,
                     };
 
-                    self.stream
-                        .write(KumquatGpuProtocolWrite::CmdWithData(resp, capset))?;
+                    self.stream.write(Message::CmdWithData(resp, &capset))?;
                 }
                 KumquatGpuProtocol::CtxCreate(cmd) => {
                     let context_id = kumquat_gpu.allocate_id();
@@ -263,7 +263,7 @@ impl KumquatGpuConnection {
                         payload: context_id,
                     };
 
-                    self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
+                    self.stream.write(Message::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::CtxDestroy(ctx_id) => {
                     let _ = self
@@ -379,7 +379,7 @@ impl KumquatGpuConnection {
                         ..Default::default()
                     };
 
-                    self.stream.write(KumquatGpuProtocolWrite::CmdWithHandle(
+                    self.stream.write(Message::CmdWithHandle(
                         resp,
                         MagmaGpuHandle {
                             os_handle: descriptor,
@@ -498,10 +498,8 @@ impl KumquatGpuConnection {
                             ..Default::default()
                         };
 
-                        self.stream.write(KumquatGpuProtocolWrite::CmdWithHandle(
-                            resp,
-                            fence_descriptor,
-                        ))?;
+                        self.stream
+                            .write(Message::CmdWithHandle(resp, fence_descriptor))?;
                     }
                 }
                 KumquatGpuProtocol::ResourceCreateBlob(cmd) => {
@@ -566,8 +564,7 @@ impl KumquatGpuConnection {
                         },
                     };
 
-                    self.stream
-                        .write(KumquatGpuProtocolWrite::CmdWithHandle(resp, handle))?;
+                    self.stream.write(Message::CmdWithHandle(resp, handle))?;
 
                     kumquat_gpu
                         .rutabaga
@@ -587,7 +584,7 @@ impl KumquatGpuConnection {
                         payload: 0,
                     };
 
-                    self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
+                    self.stream.write(Message::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::SnapshotRestore => {
                     kumquat_gpu
@@ -601,7 +598,7 @@ impl KumquatGpuConnection {
                         payload: 0,
                     };
 
-                    self.stream.write(KumquatGpuProtocolWrite::Cmd(resp))?;
+                    self.stream.write(Message::Cmd(resp))?;
                 }
                 KumquatGpuProtocol::OkNoData => {
                     hung_up = true;
