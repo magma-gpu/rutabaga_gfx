@@ -112,11 +112,11 @@ impl WaitContext {
         Ok(())
     }
 
-    pub fn add(&mut self, connection_id: u64, descriptor: &OwnedDescriptor) -> MagmaGpuResult<()> {
+    pub fn add(&self, connection_id: u64, descriptor: &OwnedDescriptor) -> MagmaGpuResult<()> {
         self.modify(descriptor, ChangeOp::Add { connection_id })
     }
 
-    pub fn wait(&mut self, timeout: WaitTimeout) -> MagmaGpuResult<Vec<WaitEvent>> {
+    pub fn wait(&self, timeout: WaitTimeout) -> MagmaGpuResult<Vec<WaitEvent>> {
         let timespec = match timeout {
             WaitTimeout::Finite(duration) => Some(libc::timespec {
                 tv_sec: duration.as_secs() as libc::time_t,
@@ -170,7 +170,7 @@ impl WaitContext {
             .collect()
     }
 
-    pub fn delete(&mut self, descriptor: &OwnedDescriptor) -> MagmaGpuResult<()> {
+    pub fn delete(&self, descriptor: &OwnedDescriptor) -> MagmaGpuResult<()> {
         self.modify(descriptor, ChangeOp::Delete)
     }
 }

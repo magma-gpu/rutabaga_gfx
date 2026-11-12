@@ -27,7 +27,7 @@ impl WaitContext {
         Ok(WaitContext { epoll_ctx: epoll })
     }
 
-    pub fn add(&mut self, connection_id: u64, descriptor: &OwnedDescriptor) -> Result<()> {
+    pub fn add(&self, connection_id: u64, descriptor: &OwnedDescriptor) -> Result<()> {
         epoll::add(
             &self.epoll_ctx,
             descriptor,
@@ -37,7 +37,7 @@ impl WaitContext {
         Ok(())
     }
 
-    pub fn wait(&mut self, timeout: WaitTimeout) -> Result<Vec<WaitEvent>> {
+    pub fn wait(&self, timeout: WaitTimeout) -> Result<Vec<WaitEvent>> {
         let mut events_buffer: [epoll::Event; WAIT_CONTEXT_MAX] = [Event {
             flags: EventFlags::IN,
             data: EventData::new_u64(0),
@@ -70,7 +70,7 @@ impl WaitContext {
         Ok(events)
     }
 
-    pub fn delete(&mut self, descriptor: &OwnedDescriptor) -> Result<()> {
+    pub fn delete(&self, descriptor: &OwnedDescriptor) -> Result<()> {
         epoll::delete(&self.epoll_ctx, descriptor)?;
         Ok(())
     }
