@@ -14,15 +14,15 @@ impl WaitContext {
         Err(Error::Unsupported)
     }
 
-    pub fn add(&mut self, _connection_id: u64, _descriptor: &OwnedDescriptor) -> Result<()> {
+    pub fn add(&self, _connection_id: u64, _descriptor: &OwnedDescriptor) -> Result<()> {
         Err(Error::Unsupported)
     }
 
-    pub fn wait(&mut self, _timeout: WaitTimeout) -> Result<Vec<WaitEvent>> {
+    pub fn wait(&self, _timeout: WaitTimeout) -> Result<Vec<WaitEvent>> {
         Err(Error::Unsupported)
     }
 
-    pub fn delete(&mut self, _descriptor: &OwnedDescriptor) -> Result<()> {
+    pub fn delete(&self, _descriptor: &OwnedDescriptor) -> Result<()> {
         Err(Error::Unsupported)
     }
 }
