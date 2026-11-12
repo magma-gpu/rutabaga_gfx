@@ -170,7 +170,7 @@ impl CrossDomainContext {
             let (kill_evt, thread_kill_evt) = create_event_pair()?;
             let (resample_evt, thread_resample_evt) = create_event_pair()?;
 
-            let mut wait_ctx = WaitContext::new()?;
+            let wait_ctx = WaitContext::new()?;
             wait_ctx.add(
                 CROSS_DOMAIN_CONTEXT_CHANNEL_ID,
                 connection.as_borrowed_descriptor(),

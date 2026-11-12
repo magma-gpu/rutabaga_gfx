@@ -111,7 +111,7 @@ impl KumquatBuilder {
 
     pub fn build(self) -> KumquatGpuResult<Kumquat> {
         let connection_id: u64 = 0;
-        let mut wait_ctx = WaitContext::new()?;
+        let wait_ctx = WaitContext::new()?;
         let mut kumquat_gpu_opt: Option<KumquatGpu> = None;
         let mut gpu_listener_opt: Option<Listener> = None;
         let mut connections: Map<u64, KumquatConnection> = Default::default();
