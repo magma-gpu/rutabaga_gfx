@@ -7,20 +7,25 @@ use magma_gpu::protocols::ipc::Stream;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::OwnedDescriptor;
 
+use crate::context_worker::run_context_worker_loop;
 use crate::sys::WorkerProcess;
 use crate::utils::send_ok_nodata;
 use crate::utils::BroccoliniResult;
 
 pub fn spawn_context_worker(
-    _req: broccolini_ctx_create,
+    req: broccolini_ctx_create,
     fence_write_pipe: OwnedDescriptor,
-    _capset_mask: u64,
-    _renderer_features: &str,
+    capset_mask: u64,
+    renderer_features: &str,
 ) -> BroccoliniResult<OwnedDescriptor> {
     let worker = WorkerProcess::new(move |stream| {
-        drop(fence_write_pipe);
-        drop(stream);
-        Ok(())
+        run_context_worker_loop(
+            stream,
+            req,
+            fence_write_pipe,
+            capset_mask,
+            renderer_features,
+        )
     })?;
     Ok(worker.into_client_descriptor())
 }
