@@ -24,6 +24,9 @@ use crate::cross_domain::CrossDomain;
 use crate::gfxstream::Gfxstream;
 use crate::handle::RutabagaHandle;
 use crate::magma::MagmaVirtioGpu;
+#[allow(unused_imports)]
+use crate::remote::RemoteComponent;
+use crate::remote::ZygoteChannel;
 use crate::rutabaga_2d::Rutabaga2D;
 use crate::rutabaga_utils::GfxstreamFlags;
 use crate::rutabaga_utils::Resource3DInfo;
@@ -42,8 +45,6 @@ use crate::rutabaga_utils::RutabagaWsi;
 use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::VirglRendererFlags;
 use crate::rutabaga_utils::VulkanInfo;
-use crate::rutabaga_utils::RUTABAGA_BLOB_FLAG_USE_CROSS_DEVICE;
-use crate::rutabaga_utils::RUTABAGA_BLOB_FLAG_USE_SHAREABLE;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_CROSS_DOMAIN;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_DRM;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_GFXSTREAM_COMPOSER;
@@ -629,8 +630,9 @@ impl Rutabaga {
 
             #[cfg(fence_passing_option1)]
             if fence.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0 {
-                let handle = handle_opt.unwrap();
-                self.shareable_fences.insert(fence.fence_id, handle);
+                if let Some(handle) = handle_opt {
+                    self.shareable_fences.insert(fence.fence_id, handle);
+                }
             }
         } else {
             let component = self
@@ -767,15 +769,16 @@ impl Rutabaga {
         transfer: Transfer3D,
         buf: Option<IoSlice>,
     ) -> RutabagaResult<()> {
-        let component = self
-            .components
-            .get(&self.default_component)
-            .ok_or(RutabagaError::InvalidComponent)?;
-
         let resource = self
             .resources
             .get_mut(&resource_id)
             .ok_or(RutabagaError::InvalidResourceId)?;
+
+        let component_type = calculate_component(resource.component_mask)?;
+        let component = self
+            .components
+            .get(&component_type)
+            .ok_or(RutabagaError::InvalidComponent)?;
 
         component.transfer_write(ctx_id, resource, transfer, buf)
     }
@@ -791,15 +794,16 @@ impl Rutabaga {
         transfer: Transfer3D,
         buf: Option<IoSliceMut>,
     ) -> RutabagaResult<()> {
-        let component = self
-            .components
-            .get(&self.default_component)
-            .ok_or(RutabagaError::InvalidComponent)?;
-
         let resource = self
             .resources
             .get_mut(&resource_id)
             .ok_or(RutabagaError::InvalidResourceId)?;
+
+        let component_type = calculate_component(resource.component_mask)?;
+        let component = self
+            .components
+            .get(&component_type)
+            .ok_or(RutabagaError::InvalidComponent)?;
 
         component.transfer_read(ctx_id, resource, transfer, buf)
     }
@@ -830,12 +834,9 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidResourceId)?;
 
         if let Some(info_val) = info {
-            let info_2d = resource
-                .info_2d
-                .as_mut()
-                .ok_or(RutabagaError::Invalid2DInfo)?;
-
-            info_2d.scanout_stride = Some(info_val.strides[0]);
+            if let Some(info_2d) = resource.info_2d.as_mut() {
+                info_2d.scanout_stride = Some(info_val.strides[0]);
+            }
         }
 
         Ok(())
@@ -862,16 +863,13 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidComponent)?;
 
         let mut context = None;
-        // For the cross-domain context, we'll need to create the blob resource via a home-grown
-        // rutabaga context rather than one from an external C/C++ component.  Use `ctx_id` and
-        // the component type if it happens to be a cross-domain context.
         if ctx_id > 0 {
             let ctx = self
                 .contexts
                 .get_mut(&ctx_id)
                 .ok_or(RutabagaError::InvalidContextId)?;
 
-            if ctx.component_type() == RutabagaComponentType::CrossDomain {
+            if ctx.component_type() != RutabagaComponentType::VirglRenderer {
                 context = Some(ctx);
             }
         }
@@ -969,7 +967,7 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidResourceId)?;
 
         let component_type = calculate_component(resource.component_mask)?;
-        if component_type == RutabagaComponentType::CrossDomain {
+        if component_type == RutabagaComponentType::CrossDomain || resource.mapping.is_some() {
             resource.mapping = None;
             return Ok(());
         }
@@ -1022,28 +1020,15 @@ impl Rutabaga {
     pub fn export_blob(&mut self, resource_id: u32) -> RutabagaResult<RutabagaHandle> {
         let resource = self
             .resources
-            .get_mut(&resource_id)
+            .get(&resource_id)
             .ok_or(RutabagaError::InvalidResourceId)?;
 
         // We can inspect blob flags only once guest minigbm is fully transitioned to blob.
-        let share_mask = RUTABAGA_BLOB_FLAG_USE_SHAREABLE | RUTABAGA_BLOB_FLAG_USE_CROSS_DEVICE;
-        let shareable = (resource.blob_flags & share_mask != 0) || !resource.blob;
-
-        let opt = resource.handle.take();
-
-        match (opt, shareable) {
-            (Some(handle), true) => {
-                let clone = handle.try_clone()?;
-                resource.handle = Some(handle);
-                Ok(clone)
-            }
-            (Some(handle), false) => {
-                // Exactly one strong reference in this case.
-                let hnd = Arc::try_unwrap(handle).map_err(|_| MagmaGpuError::InvalidMagmaHandle)?;
-                Ok(hnd)
-            }
-            _ => Err(MagmaGpuError::InvalidMagmaHandle.into()),
-        }
+        let handle = resource
+            .handle
+            .as_ref()
+            .ok_or(MagmaGpuError::InvalidMagmaHandle)?;
+        handle.try_clone()
     }
 
     /// Exports the given fence for import into other processes.
@@ -1152,13 +1137,10 @@ impl Rutabaga {
 
         #[cfg(fence_passing_option1)]
         for (i, fence_id) in fence_ids.iter().enumerate() {
-            let handle = self
-                .shareable_fences
-                .get_mut(fence_id)
-                .ok_or(MagmaGpuError::InvalidMagmaHandle)?;
-
-            let clone = handle.try_clone()?;
-            shareable_fences.insert(i, clone);
+            if let Some(handle) = self.shareable_fences.get_mut(fence_id) {
+                let clone = handle.try_clone()?;
+                shareable_fences.insert(i, clone);
+            }
         }
 
         ctx.submit_cmd(commands, fence_ids, shareable_fences)
@@ -1186,6 +1168,7 @@ pub struct RutabagaBuilder {
     gfxstream_flags: GfxstreamFlags,
     virglrenderer_flags: VirglRendererFlags,
     capset_mask: u64,
+    remote_capset_mask: u64,
     paths: Option<RutabagaPaths>,
     debug_handler: Option<RutabagaDebugHandler>,
     renderer_features: Option<String>,
@@ -1208,12 +1191,19 @@ impl RutabagaBuilder {
             gfxstream_flags,
             virglrenderer_flags,
             capset_mask,
+            remote_capset_mask: 0,
             paths: None,
             debug_handler: None,
             renderer_features: None,
             server_descriptor: None,
             virtiofs_lookup: None,
         }
+    }
+
+    /// Set the remote capset mask for contexts routed to the render server.
+    pub fn set_remote_capset_mask(mut self, remote_capset_mask: u64) -> RutabagaBuilder {
+        self.remote_capset_mask = remote_capset_mask;
+        self
     }
 
     /// Set display width for the RutabagaBuilder
@@ -1338,15 +1328,18 @@ impl RutabagaBuilder {
         #[allow(unused_mut)]
         let mut rutabaga_capsets: Vec<RutabagaCapsetInfo> = Default::default();
 
-        let capset_enabled =
+        let total_capset_mask = self.capset_mask | self.remote_capset_mask;
+        let local_capset_enabled =
             |capset_id: u32| -> bool { (self.capset_mask & (1 << capset_id)) != 0 };
+        let capset_enabled =
+            |capset_id: u32| -> bool { (total_capset_mask & (1 << capset_id)) != 0 };
 
         let mut push_capset = |capset_id: u32| {
             if let Some(capset) = RUTABAGA_CAPSETS
                 .iter()
                 .find(|capset| capset_id == capset.capset_id)
             {
-                if self.capset_mask != 0 {
+                if total_capset_mask != 0 {
                     if capset_enabled(capset.capset_id) {
                         rutabaga_capsets.push(*capset);
                     }
@@ -1358,7 +1351,7 @@ impl RutabagaBuilder {
             };
         };
 
-        if self.capset_mask != 0 {
+        if total_capset_mask != 0 {
             let supports_gfxstream = capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_VULKAN)
                 | capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_GLES)
                 | capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_COMPOSER);
@@ -1377,15 +1370,15 @@ impl RutabagaBuilder {
 
             self.virglrenderer_flags = self
                 .virglrenderer_flags
-                .use_virgl(capset_enabled(RUTABAGA_CAPSET_VIRGL2))
-                .use_venus(capset_enabled(RUTABAGA_CAPSET_VENUS))
-                .use_drm(capset_enabled(RUTABAGA_CAPSET_DRM))
-                .use_rocm(capset_enabled(RUTABAGA_CAPSET_ROCM));
+                .use_virgl(local_capset_enabled(RUTABAGA_CAPSET_VIRGL2))
+                .use_venus(local_capset_enabled(RUTABAGA_CAPSET_VENUS))
+                .use_drm(local_capset_enabled(RUTABAGA_CAPSET_DRM))
+                .use_rocm(local_capset_enabled(RUTABAGA_CAPSET_ROCM));
 
             self.gfxstream_flags = self
                 .gfxstream_flags
-                .use_gles(capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_GLES))
-                .use_vulkan(capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_VULKAN))
+                .use_gles(local_capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_GLES))
+                .use_vulkan(local_capset_enabled(RUTABAGA_CAPSET_GFXSTREAM_VULKAN))
         }
 
         // Make sure that disabled components are not used as default.
@@ -1399,12 +1392,47 @@ impl RutabagaBuilder {
         }
 
         if self.default_component != RutabagaComponentType::Rutabaga2D {
+            #[allow(unused_variables)]
+            let zygote = if self.remote_capset_mask != 0 {
+                let server_descriptor = self
+                    .server_descriptor
+                    .take()
+                    .ok_or(RutabagaError::InvalidComponent)?;
+                Some(Arc::new(ZygoteChannel::new(
+                    server_descriptor,
+                    self.remote_capset_mask,
+                )?))
+            } else {
+                None
+            };
+
             #[cfg(feature = "virgl_renderer")]
             if self.default_component == RutabagaComponentType::VirglRenderer {
-                if let Ok(virgl) = VirglRenderer::init(
+                let virgl_mask = (1 << RUTABAGA_CAPSET_VIRGL)
+                    | (1 << RUTABAGA_CAPSET_VIRGL2)
+                    | (1 << RUTABAGA_CAPSET_VENUS)
+                    | (1 << RUTABAGA_CAPSET_DRM)
+                    | (1 << RUTABAGA_CAPSET_ROCM);
+                let has_remote = (self.remote_capset_mask & virgl_mask) != 0;
+
+                if has_remote {
+                    let component = RemoteComponent::new(
+                        zygote.clone().unwrap(),
+                        self.remote_capset_mask & virgl_mask,
+                        RutabagaComponentType::VirglRenderer,
+                        self.fence_handler.clone(),
+                    )?;
+                    rutabaga_components.insert(RutabagaComponentType::VirglRenderer, component);
+
+                    push_capset(RUTABAGA_CAPSET_VIRGL);
+                    push_capset(RUTABAGA_CAPSET_VIRGL2);
+                    push_capset(RUTABAGA_CAPSET_VENUS);
+                    push_capset(RUTABAGA_CAPSET_DRM);
+                    push_capset(RUTABAGA_CAPSET_ROCM);
+                } else if let Ok(virgl) = VirglRenderer::init(
                     self.virglrenderer_flags,
                     self.fence_handler.clone(),
-                    self.server_descriptor,
+                    self.server_descriptor.take(),
                     self.paths.clone(),
                 ) {
                     rutabaga_components.insert(RutabagaComponentType::VirglRenderer, virgl);
@@ -1417,40 +1445,60 @@ impl RutabagaBuilder {
                 } else {
                     log::warn!("error initializing gpu backend=virglrenderer, falling back to 2d.");
                     self.default_component = RutabagaComponentType::Rutabaga2D;
-                };
+                }
             }
 
             #[cfg(feature = "gfxstream")]
             if self.default_component == RutabagaComponentType::Gfxstream {
-                let gfxstream = Gfxstream::init(
-                    self.display_width,
-                    self.display_height,
-                    self.gfxstream_flags,
-                    self.renderer_features,
-                    self.fence_handler.clone(),
-                    self.debug_handler.clone(),
-                )?;
+                let gfxstream_mask = (1 << RUTABAGA_CAPSET_GFXSTREAM_VULKAN)
+                    | (1 << RUTABAGA_CAPSET_GFXSTREAM_GLES)
+                    | (1 << RUTABAGA_CAPSET_GFXSTREAM_COMPOSER);
+                let has_remote = (self.remote_capset_mask & gfxstream_mask) != 0;
 
-                rutabaga_components.insert(RutabagaComponentType::Gfxstream, gfxstream);
+                let component = if has_remote {
+                    RemoteComponent::new(
+                        zygote.unwrap(),
+                        self.remote_capset_mask & gfxstream_mask,
+                        RutabagaComponentType::Gfxstream,
+                        self.fence_handler.clone(),
+                    )?
+                } else {
+                    Gfxstream::init(
+                        self.display_width,
+                        self.display_height,
+                        self.gfxstream_flags,
+                        self.renderer_features,
+                        self.fence_handler.clone(),
+                        self.debug_handler.clone(),
+                    )?
+                };
+
+                rutabaga_components.insert(RutabagaComponentType::Gfxstream, component);
 
                 push_capset(RUTABAGA_CAPSET_GFXSTREAM_VULKAN);
                 push_capset(RUTABAGA_CAPSET_GFXSTREAM_GLES);
                 push_capset(RUTABAGA_CAPSET_GFXSTREAM_COMPOSER);
             }
 
-            if capset_enabled(RUTABAGA_CAPSET_MAGMA) {
+            if local_capset_enabled(RUTABAGA_CAPSET_MAGMA) {
                 let magma = MagmaVirtioGpu::init(self.fence_handler.clone())?;
                 rutabaga_components.insert(RutabagaComponentType::Magma, magma);
                 push_capset(RUTABAGA_CAPSET_MAGMA);
             }
 
-            let cross_domain = CrossDomain::init(
-                self.paths.clone(),
-                self.fence_handler.clone(),
-                self.virtiofs_lookup.clone(),
-            )?;
-            rutabaga_components.insert(RutabagaComponentType::CrossDomain, cross_domain);
-            push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
+            if local_capset_enabled(RUTABAGA_CAPSET_CROSS_DOMAIN)
+                || (total_capset_mask == 0
+                    && (self.default_component == RutabagaComponentType::CrossDomain
+                        || self.paths.is_some()))
+            {
+                let cross_domain = CrossDomain::init(
+                    self.paths.clone(),
+                    self.fence_handler.clone(),
+                    self.virtiofs_lookup.clone(),
+                )?;
+                rutabaga_components.insert(RutabagaComponentType::CrossDomain, cross_domain);
+                push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
+            }
         }
 
         if self.default_component == RutabagaComponentType::Rutabaga2D {
