@@ -1,0 +1,29 @@
+# Copyright (C) 2026 The Magma GPU Project
+# SPDX-License-Identifier: MIT
+
+[package]
+name = "broccolini"
+version = "0.1.7"
+authors = ["Magma GPU project"]
+edition = "2021"
+description = "Single-threaded Zygote render server for Rutabaga multi-process context isolation"
+license = "MIT"
+
+[features]
+gfxstream = ["rutabaga_gfx/gfxstream"]
+virgl_renderer = ["rutabaga_gfx/virgl_renderer"]
+vulkano = ["rutabaga_gfx/vulkano"]
+
+[[bin]]
+name = "broccolini"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5.20", features = ["derive"] }
+libc = "0.2.153"
+log = "0.4.21"
+magma-gpu = { path = "../third_party/mesa3d/src/virtio/magma-gpu-rs/lib", version = "0.1.2"}
+remain = "0.2.12"
+rutabaga_gfx = { path = "../", version = "0.1.7"}
+thiserror = "2.0.11"
+zerocopy = { version = "0.8.13", features = ["derive"] }

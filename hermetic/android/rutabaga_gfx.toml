@@ -37,3 +37,4 @@ build_platforms = [
 [config.static_options]
 features = "gfxstream"
 kumquat = true
+broccolini = true

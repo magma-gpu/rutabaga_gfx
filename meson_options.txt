@@ -24,6 +24,13 @@ option(
 )
 
 option(
+  'broccolini',
+  type : 'boolean',
+  value : false,
+  description : 'Build Broccolini',
+)
+
+option(
   'build-tests',
   type : 'boolean',
   value : false,
