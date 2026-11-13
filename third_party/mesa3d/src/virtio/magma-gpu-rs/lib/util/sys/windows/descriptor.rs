@@ -21,6 +21,7 @@ pub type RawDescriptor = RawHandle;
 // Same as winapi::um::handleapi::INVALID_HANDLE_VALUE, but avoids compile issues.
 pub const DEFAULT_RAW_DESCRIPTOR: RawDescriptor = -1isize as HANDLE;
 
+#[derive(Debug)]
 pub struct OwnedDescriptor {
     owned: OwnedHandle,
 }
