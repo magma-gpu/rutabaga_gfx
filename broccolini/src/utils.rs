@@ -15,6 +15,8 @@ use thiserror::Error;
 #[non_exhaustive]
 #[derive(Error, Debug)]
 pub enum BroccoliniError {
+    #[error("probe child returned no capsets")]
+    EmptyCapsetsFromProbeChild,
     #[error("failed to create socketpair for worker: {0}")]
     FailedToCreateSocketpair(#[source] std::io::Error),
     #[error("failed to fork worker: {0}")]

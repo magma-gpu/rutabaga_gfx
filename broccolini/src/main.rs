@@ -19,6 +19,7 @@ use rutabaga_gfx::calculate_capset_mask;
 
 use crate::utils::BroccoliniError;
 use crate::utils::BroccoliniResult;
+use crate::zygote::probe_capsets_in_child;
 use crate::zygote::run_render_server_zygote_loop;
 
 #[derive(Parser, Debug)]
@@ -49,11 +50,14 @@ fn main() -> BroccoliniResult<()> {
         return Err(BroccoliniError::InvalidContextTypes(args.context_types));
     }
 
+    let cached_capsets = probe_capsets_in_child(capset_mask, &args.renderer_features)?;
+
     let desc = unsafe { OwnedDescriptor::from_raw_descriptor(args.socket_fd) };
     let tube = Tube::try_from(desc)?;
     let broccolini_control_stream = Stream::<BroccoliniProtocol>::new(tube);
     run_render_server_zygote_loop(
         broccolini_control_stream,
+        &cached_capsets,
         capset_mask,
         &args.renderer_features,
     )?;
