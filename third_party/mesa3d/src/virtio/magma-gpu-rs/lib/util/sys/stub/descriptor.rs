@@ -21,6 +21,7 @@ use crate::util::DescriptorType;
 pub type RawDescriptor = RawFd;
 pub const DEFAULT_RAW_DESCRIPTOR: RawDescriptor = -1;
 
+#[derive(Debug)]
 pub struct OwnedDescriptor {
     owned: OwnedFd,
 }
