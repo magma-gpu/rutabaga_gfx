@@ -81,6 +81,8 @@ impl Kumquat {
 
 pub struct KumquatBuilder {
     capset_names_opt: Option<String>,
+    remote_capset_names_opt: Option<String>,
+    broccolini_path_opt: Option<String>,
     gpu_socket_opt: Option<String>,
     renderer_features_opt: Option<String>,
 }
@@ -89,6 +91,8 @@ impl KumquatBuilder {
     pub fn new() -> KumquatBuilder {
         KumquatBuilder {
             capset_names_opt: None,
+            remote_capset_names_opt: None,
+            broccolini_path_opt: None,
             gpu_socket_opt: None,
             renderer_features_opt: None,
         }
@@ -96,6 +100,16 @@ impl KumquatBuilder {
 
     pub fn set_capset_names(mut self, capset_names: String) -> KumquatBuilder {
         self.capset_names_opt = Some(capset_names);
+        self
+    }
+
+    pub fn set_remote_capset_names(mut self, remote_capset_names: String) -> KumquatBuilder {
+        self.remote_capset_names_opt = Some(remote_capset_names);
+        self
+    }
+
+    pub fn set_broccolini_path(mut self, broccolini_path_opt: Option<String>) -> KumquatBuilder {
+        self.broccolini_path_opt = broccolini_path_opt;
         self
     }
 
@@ -111,7 +125,7 @@ impl KumquatBuilder {
 
     pub fn build(self) -> KumquatGpuResult<Kumquat> {
         let connection_id: u64 = 0;
-        let mut wait_ctx = WaitContext::new()?;
+        let wait_ctx = WaitContext::new()?;
         let mut kumquat_gpu_opt: Option<KumquatGpu> = None;
         let mut gpu_listener_opt: Option<Listener> = None;
         let mut connections: Map<u64, KumquatConnection> = Default::default();
@@ -124,8 +138,10 @@ impl KumquatBuilder {
             // Should not panic, since main.rs always calls set_capset_names and
             // set_renderer_features, even with the empty string.
             kumquat_gpu_opt = Some(KumquatGpu::new(
-                self.capset_names_opt.unwrap(),
-                self.renderer_features_opt.unwrap(),
+                self.capset_names_opt.unwrap_or_default(),
+                self.remote_capset_names_opt.unwrap_or_default(),
+                self.broccolini_path_opt,
+                self.renderer_features_opt.unwrap_or_default(),
             )?);
 
             let gpu_listener = Listener::bind(path)?;

@@ -19,11 +19,13 @@ null_dep = dependency('', required : false)
 features = get_option('features')
 with_ffi = get_option('ffi')
 with_kumquat = get_option('kumquat')
+with_broccolini = get_option('broccolini')
 with_tests = get_option('build-tests')
 
 with_gbm = features.contains('gbm')
 with_gfxstream = features.contains('gfxstream')
 with_virgl_renderer = features.contains('virgl_renderer')
+with_android = host_machine.system() == 'android'
 
 rutabaga_args = []
 dep_rutabaga_gfx = []
@@ -61,7 +63,7 @@ if with_virgl_renderer
   dep_rutabaga_gfx += dep_virgl
 endif
 
-if with_kumquat
+if (with_kumquat or with_broccolini) and not with_android
   rutabaga_args += ['--cfg', 'fence_passing_option1']
 endif
 
@@ -74,4 +76,8 @@ endif
 
 if with_kumquat
   subdir('kumquat')
+endif
+
+if with_broccolini
+  subdir('broccolini')
 endif

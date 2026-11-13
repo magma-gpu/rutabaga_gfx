@@ -1,6 +1,7 @@
 [workspace]
 members = [
     ".",
+    "broccolini",
     "ffi",
     "kumquat/server",
     "third_party/mesa3d/src/virtio/magma-gpu-rs/lib",

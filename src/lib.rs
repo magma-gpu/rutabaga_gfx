@@ -13,6 +13,7 @@ mod handle;
 mod magma;
 #[macro_use]
 mod macros;
+mod remote;
 #[cfg(any(feature = "gfxstream", feature = "virgl_renderer"))]
 mod renderer_utils;
 mod resource;

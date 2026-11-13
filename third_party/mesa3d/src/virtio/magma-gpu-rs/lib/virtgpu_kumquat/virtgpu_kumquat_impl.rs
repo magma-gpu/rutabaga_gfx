@@ -6,7 +6,8 @@ use std::collections::BTreeMap as Map;
 use std::path::PathBuf;
 use std::slice::from_raw_parts_mut;
 
-use crate::protocols::ipc::KumquatStream;
+use crate::protocols::ipc::Message;
+use crate::protocols::ipc::Stream;
 use crate::protocols::kumquat_gpu_protocol::*;
 use crate::util::create_event_pair;
 use crate::util::Error;
@@ -65,7 +66,7 @@ pub struct VirtGpuKumquat {
     context_id: u32,
     id_allocator: u32,
     capset_mask: u64,
-    stream: KumquatStream,
+    stream: Stream<KumquatGpuProtocol>,
     capsets: Map<u32, Vec<u8>>,
     resources: Map<u32, VirtGpuResource>,
 }
@@ -74,14 +75,14 @@ impl VirtGpuKumquat {
     pub fn new(gpu_socket: &str) -> Result<VirtGpuKumquat> {
         let path = PathBuf::from(gpu_socket);
         let connection = Tube::new(path, TubeType::Packet)?;
-        let mut stream = KumquatStream::new(connection);
+        let mut stream = Stream::new(connection);
 
         let get_num_capsets = kumquat_gpu_protocol_ctrl_hdr {
             type_: KUMQUAT_GPU_PROTOCOL_GET_NUM_CAPSETS,
             ..Default::default()
         };
 
-        stream.write(KumquatGpuProtocolWrite::Cmd(get_num_capsets))?;
+        stream.write(Message::Cmd(get_num_capsets))?;
         let mut protocols = stream.read()?;
         let num_capsets = match protocols.remove(0) {
             KumquatGpuProtocol::RespNumCapsets(num) => num,
@@ -96,7 +97,7 @@ impl VirtGpuKumquat {
                 payload: capset_index,
             };
 
-            stream.write(KumquatGpuProtocolWrite::Cmd(get_capset_info))?;
+            stream.write(Message::Cmd(get_capset_info))?;
             protocols = stream.read()?;
             let resp_capset_info = match protocols.remove(0) {
                 KumquatGpuProtocol::RespCapsetInfo(info) => info,
@@ -112,7 +113,7 @@ impl VirtGpuKumquat {
                 capset_version: resp_capset_info.version,
             };
 
-            stream.write(KumquatGpuProtocolWrite::Cmd(get_capset))?;
+            stream.write(Message::Cmd(get_capset))?;
             protocols = stream.read()?;
             let capset = match protocols.remove(0) {
                 KumquatGpuProtocol::RespCapset(capset) => capset,
@@ -175,8 +176,7 @@ impl VirtGpuKumquat {
             debug_name,
         };
 
-        self.stream
-            .write(KumquatGpuProtocolWrite::Cmd(context_create))?;
+        self.stream.write(Message::Cmd(context_create))?;
         let mut protocols = self.stream.read()?;
         self.context_id = match protocols.remove(0) {
             KumquatGpuProtocol::RespContextCreate(ctx_id) => ctx_id,
@@ -207,8 +207,7 @@ impl VirtGpuKumquat {
             ctx_id: self.context_id,
         };
 
-        self.stream
-            .write(KumquatGpuProtocolWrite::Cmd(resource_create_3d))?;
+        self.stream.write(Message::Cmd(resource_create_3d))?;
         let mut protocols = self.stream.read()?;
         let resource = match protocols.remove(0) {
             KumquatGpuProtocol::RespResourceCreate(resp, handle) => {
@@ -249,7 +248,7 @@ impl VirtGpuKumquat {
             data.copy_from_slice(blob_cmd);
 
             self.stream
-                .write(KumquatGpuProtocolWrite::CmdWithData(submit_command, data))?;
+                .write(Message::CmdWithData(submit_command, &data))?;
         }
 
         let resource_create_blob = kumquat_gpu_protocol_resource_create_blob {
@@ -265,8 +264,7 @@ impl VirtGpuKumquat {
             size: create_blob.size,
         };
 
-        self.stream
-            .write(KumquatGpuProtocolWrite::Cmd(resource_create_blob))?;
+        self.stream.write(Message::Cmd(resource_create_blob))?;
         let mut protocols = self.stream.read()?;
         let resource = match protocols.remove(0) {
             KumquatGpuProtocol::RespResourceCreate(resp, handle) => {
@@ -299,8 +297,7 @@ impl VirtGpuKumquat {
             resource_id: resource.resource_id,
         };
 
-        self.stream
-            .write(KumquatGpuProtocolWrite::Cmd(detach_resource))?;
+        self.stream.write(Message::Cmd(detach_resource))?;
 
         Ok(())
     }
@@ -365,10 +362,8 @@ impl VirtGpuKumquat {
             padding: 0,
         };
 
-        self.stream.write(KumquatGpuProtocolWrite::CmdWithHandle(
-            transfer_to_host,
-            emulated_fence,
-        ))?;
+        self.stream
+            .write(Message::CmdWithHandle(transfer_to_host, emulated_fence))?;
         Ok(())
     }
 
@@ -398,10 +393,8 @@ impl VirtGpuKumquat {
             padding: 0,
         };
 
-        self.stream.write(KumquatGpuProtocolWrite::CmdWithHandle(
-            transfer_from_host,
-            emulated_fence,
-        ))?;
+        self.stream
+            .write(Message::CmdWithHandle(transfer_from_host, emulated_fence))?;
 
         Ok(())
     }
@@ -462,7 +455,7 @@ impl VirtGpuKumquat {
 
         if need_fence {
             self.stream
-                .write(KumquatGpuProtocolWrite::CmdWithData(submit_command, data))?;
+                .write(Message::CmdWithData(submit_command, &data))?;
 
             let mut protocols = self.stream.read()?;
             let fence = match protocols.remove(0) {
@@ -481,7 +474,7 @@ impl VirtGpuKumquat {
             }
         } else {
             self.stream
-                .write(KumquatGpuProtocolWrite::CmdWithData(submit_command, data))?;
+                .write(Message::CmdWithData(submit_command, &data))?;
         }
 
         if flags & VIRTGPU_KUMQUAT_EXECBUF_FENCE_FD_OUT != 0 {
@@ -577,8 +570,7 @@ impl VirtGpuKumquat {
             resource_id: *resource_handle,
         };
 
-        self.stream
-            .write(KumquatGpuProtocolWrite::Cmd(attach_resource))?;
+        self.stream.write(Message::Cmd(attach_resource))?;
         let resource = VirtGpuResource::new(
             *resource_handle,
             VIRTGPU_KUMQUAT_PAGE_SIZE,
@@ -606,8 +598,7 @@ impl VirtGpuKumquat {
             ..Default::default()
         };
 
-        self.stream
-            .write(KumquatGpuProtocolWrite::Cmd(snapshot_save))?;
+        self.stream.write(Message::Cmd(snapshot_save))?;
 
         let mut protocols = self.stream.read()?;
         match protocols.remove(0) {
@@ -622,8 +613,7 @@ impl VirtGpuKumquat {
             ..Default::default()
         };
 
-        self.stream
-            .write(KumquatGpuProtocolWrite::Cmd(snapshot_restore))?;
+        self.stream.write(Message::Cmd(snapshot_restore))?;
 
         let mut protocols = self.stream.read()?;
         match protocols.remove(0) {
@@ -646,9 +636,7 @@ impl Drop for VirtGpuKumquat {
                     resource_id: resource.resource_id,
                 };
 
-                let _ = self
-                    .stream
-                    .write(KumquatGpuProtocolWrite::Cmd(detach_resource));
+                let _ = self.stream.write(Message::Cmd(detach_resource));
             }
 
             self.resources.clear();
@@ -657,9 +645,7 @@ impl Drop for VirtGpuKumquat {
                 payload: self.context_id,
             };
 
-            let _ = self
-                .stream
-                .write(KumquatGpuProtocolWrite::Cmd(context_destroy));
+            let _ = self.stream.write(Message::Cmd(context_destroy));
         }
     }
 }
