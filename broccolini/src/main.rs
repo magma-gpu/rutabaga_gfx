@@ -3,25 +3,25 @@
 
 //! Single-threaded Zygote render server (`broccolini`) for Rutabaga multi-process context isolation.
 
+mod sys;
+mod utils;
+mod zygote;
+
 use clap::Parser;
+use magma_gpu::protocols::broccolini_protocol::BroccoliniProtocol;
+use magma_gpu::protocols::ipc::Stream;
+use magma_gpu::util::FromRawDescriptor;
+use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::RawDescriptor;
-use remain::sorted;
+use magma_gpu::util::Tube;
 use rutabaga_gfx::calculate_capset_mask;
-use thiserror::Error;
 
-#[sorted]
-#[non_exhaustive]
-#[derive(Error, Debug)]
-pub enum BroccoliniError {
-    #[error("no valid rutabaga capsets in --context-types '{0}'")]
-    InvalidContextTypes(String),
-}
-
-pub type BroccoliniResult<T> = std::result::Result<T, BroccoliniError>;
+use crate::utils::BroccoliniError;
+use crate::utils::BroccoliniResult;
+use crate::zygote::run_render_server_zygote_loop;
 
 #[derive(Parser, Debug)]
 #[command(version = "0.1.7", about = None, long_about = None)]
-#[allow(dead_code)]
 struct Args {
     /// The inherited socket file descriptor for the "main"/"parent" render server.
     #[arg(long)]
@@ -47,6 +47,15 @@ fn main() -> BroccoliniResult<()> {
     if capset_mask == 0 {
         return Err(BroccoliniError::InvalidContextTypes(args.context_types));
     }
+
+    let desc = unsafe { OwnedDescriptor::from_raw_descriptor(args.socket_fd) };
+    let tube = Tube::try_from(desc)?;
+    let broccolini_control_stream = Stream::<BroccoliniProtocol>::new(tube);
+    run_render_server_zygote_loop(
+        broccolini_control_stream,
+        capset_mask,
+        &args.renderer_features,
+    )?;
 
     Ok(())
 }

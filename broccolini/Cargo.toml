@@ -19,6 +19,7 @@ name = "broccolini"
 path = "src/main.rs"
 
 [dependencies]
+cfg-if = "1.0.0"
 clap = { version = "4.5.20", features = ["derive"] }
 libc = "0.2.153"
 log = "0.4.21"
