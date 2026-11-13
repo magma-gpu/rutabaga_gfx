@@ -8,6 +8,7 @@ use magma_gpu::protocols::ipc::Message;
 use magma_gpu::protocols::ipc::Stream;
 use magma_gpu::util::Error as MagmaGpuError;
 use remain::sorted;
+use rutabaga_gfx::RutabagaError;
 use thiserror::Error;
 
 #[sorted]
@@ -20,6 +21,10 @@ pub enum BroccoliniError {
     InvalidContextTypes(String),
     #[error("magma_gpu error: {0}")]
     MagmaGpuError(#[from] MagmaGpuError),
+    #[error("missing context_id in CtxCreate header")]
+    MissingContextId,
+    #[error("rutabaga error: {0}")]
+    RutabagaError(#[from] RutabagaError),
     #[allow(dead_code)]
     #[error("unimplemented")]
     Unimplemented,
