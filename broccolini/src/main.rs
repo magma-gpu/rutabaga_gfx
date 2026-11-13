@@ -3,6 +3,7 @@
 
 //! Single-threaded Zygote render server (`broccolini`) for Rutabaga multi-process context isolation.
 
+mod context_worker;
 mod sys;
 mod utils;
 mod zygote;
