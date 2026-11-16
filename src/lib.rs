@@ -13,6 +13,8 @@ mod handle;
 mod magma;
 #[macro_use]
 mod macros;
+#[cfg(all(target_os = "macos", feature = "virgl_renderer"))]
+mod cgl_context;
 #[cfg(any(feature = "gfxstream", feature = "virgl_renderer"))]
 mod renderer_utils;
 mod resource;
