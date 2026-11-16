@@ -397,8 +397,17 @@ extern "C" fn get_server_fd(cookie: *mut c_void, version: u32) -> c_int {
 const VIRGL_RENDERER_CALLBACKS: &virgl_renderer_callbacks = &virgl_renderer_callbacks {
     version: 3,
     write_fence: Some(write_fence),
+    #[cfg(target_os = "macos")]
+    create_gl_context: Some(crate::cgl_context::create_gl_context),
+    #[cfg(not(target_os = "macos"))]
     create_gl_context: None,
+    #[cfg(target_os = "macos")]
+    destroy_gl_context: Some(crate::cgl_context::destroy_gl_context),
+    #[cfg(not(target_os = "macos"))]
     destroy_gl_context: None,
+    #[cfg(target_os = "macos")]
+    make_current: Some(crate::cgl_context::make_current),
+    #[cfg(not(target_os = "macos"))]
     make_current: None,
     get_drm_fd: Some(get_drm_fd),
     write_context_fence: Some(write_context_fence),
@@ -581,6 +590,10 @@ impl RutabagaComponent for VirglRenderer {
     fn get_capset(&self, capset_id: u32, version: u32) -> Vec<u8> {
         let (_, max_size) = self.get_capset_info(capset_id);
         let mut buf = vec![0u8; max_size as usize];
+        // vrend reads the host GL version from the current context; on macOS none may be current
+        // on this thread.
+        #[cfg(target_os = "macos")]
+        crate::cgl_context::ensure_current();
         // SAFETY:
         // Safe because virglrenderer is initialized by now and the given buffer is sized properly
         // for the given cap id/version.
