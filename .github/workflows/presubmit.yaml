@@ -164,6 +164,8 @@ jobs:
           sudo ninja -C build install
       - name: Clippy
         run: cargo clippy --package rutabaga_gfx --features=virgl_renderer -- -D warnings
+      - name: Test
+        run: cargo test --package rutabaga_gfx --features=virgl_renderer
 
   build-macos-aarch64:
     name: build rutabaga (macOS aarch64)
