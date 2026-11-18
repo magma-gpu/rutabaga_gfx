@@ -324,9 +324,12 @@ impl RutabagaContext for GfxstreamContext {
     fn submit_cmd(
         &mut self,
         commands: &mut [u8],
-        _fence_ids: &[u64],
-        _shareable_fences: Vec<MagmaGpuHandle>,
+        fence_ids: &[u64],
+        shareable_fences: Vec<MagmaGpuHandle>,
     ) -> RutabagaResult<()> {
+        if !fence_ids.is_empty() || !shareable_fences.is_empty() {
+            return Err(MagmaGpuError::Unsupported.into());
+        }
         if commands.len() % size_of::<u32>() != 0 {
             return Err(RutabagaError::InvalidCommandSize(commands.len()));
         }
@@ -377,6 +380,9 @@ impl RutabagaContext for GfxstreamContext {
         fence: RutabagaFence,
     ) -> RutabagaResult<Option<MagmaGpuHandle>> {
         if fence.ring_idx as u32 == 1 {
+            if fence.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0 {
+                return Err(MagmaGpuError::Unsupported.into());
+            }
             self.fence_handler.call(fence);
             return Ok(None);
         }
