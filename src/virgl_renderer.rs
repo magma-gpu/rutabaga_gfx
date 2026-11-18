@@ -64,6 +64,7 @@ use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::VirglRendererFlags;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE;
+use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 use crate::rutabaga_utils::RUTABAGA_FLAG_INFO_RING_IDX;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 use crate::RutabagaPath;
@@ -165,13 +166,39 @@ fn import_resource(resource: &mut RutabagaResource) -> RutabagaResult<()> {
     Ok(())
 }
 
+#[allow(unused_variables)]
+fn export_fence_internal(fence_id: u64) -> RutabagaResult<MagmaGpuHandle> {
+    #[cfg(virgl_renderer_unstable)]
+    {
+        let mut fd: i32 = 0;
+        // SAFETY:
+        // Safe because the parameters are stack variables of the correct type.
+        let ret = unsafe { virgl_renderer_export_fence(fence_id, &mut fd) };
+        ret_to_res(ret)?;
+
+        // SAFETY:
+        // Safe because the FD was just returned by a successful virglrenderer call so it must
+        // be valid and owned by us.
+        let fence = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
+        Ok(MagmaGpuHandle {
+            os_handle: fence,
+            handle_type: MAGMA_GPU_HANDLE_TYPE_SIGNAL_SYNC_FD,
+        })
+    }
+    #[cfg(not(virgl_renderer_unstable))]
+    Err(MagmaGpuError::Unsupported.into())
+}
+
 impl RutabagaContext for VirglRendererContext {
     fn submit_cmd(
         &mut self,
         commands: &mut [u8],
         fence_ids: &[u64],
-        _shareable_fences: Vec<MagmaGpuHandle>,
+        shareable_fences: Vec<MagmaGpuHandle>,
     ) -> RutabagaResult<()> {
+        if !shareable_fences.is_empty() {
+            return Err(MagmaGpuError::Unsupported.into());
+        }
         #[cfg(not(virgl_renderer_unstable))]
         if !fence_ids.is_empty() {
             return Err(MagmaGpuError::Unsupported.into());
@@ -254,7 +281,12 @@ impl RutabagaContext for VirglRendererContext {
             )
         };
         ret_to_res(ret)?;
-        Ok(None)
+
+        let mut hnd: Option<MagmaGpuHandle> = None;
+        if fence.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0 {
+            hnd = Some(export_fence_internal(fence.fence_id)?);
+        }
+        Ok(hnd)
     }
 }
 
@@ -963,27 +995,8 @@ impl RutabagaComponent for VirglRenderer {
         ret_to_res(ret)
     }
 
-    #[allow(unused_variables)]
     fn export_fence(&self, fence_id: u64) -> RutabagaResult<MagmaGpuHandle> {
-        #[cfg(virgl_renderer_unstable)]
-        {
-            let mut fd: i32 = 0;
-            // SAFETY:
-            // Safe because the parameters are stack variables of the correct type.
-            let ret = unsafe { virgl_renderer_export_fence(fence_id, &mut fd) };
-            ret_to_res(ret)?;
-
-            // SAFETY:
-            // Safe because the FD was just returned by a successful virglrenderer call so it must
-            // be valid and owned by us.
-            let fence = unsafe { OwnedDescriptor::from_raw_descriptor(fd) };
-            Ok(MagmaGpuHandle {
-                os_handle: fence,
-                handle_type: MAGMA_GPU_HANDLE_TYPE_SIGNAL_SYNC_FD,
-            })
-        }
-        #[cfg(not(virgl_renderer_unstable))]
-        Err(MagmaGpuError::Unsupported.into())
+        export_fence_internal(fence_id)
     }
 
     #[allow(unused_variables)]

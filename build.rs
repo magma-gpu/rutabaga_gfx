@@ -87,10 +87,8 @@ fn gfxstream() -> PkgConfigResult<()> {
 }
 
 fn main() -> PkgConfigResult<()> {
-    println!("cargo:rustc-check-cfg=cfg(fence_passing_option1)");
     println!("cargo:rustc-check-cfg=cfg(gfxstream_unstable)");
     println!("cargo:rustc-check-cfg=cfg(virgl_renderer_unstable)");
-    let mut use_fence_passing_option1 = true;
 
     // Skip installing dependencies when generating documents.
     if env::var("CARGO_DOC").is_ok() {
@@ -99,7 +97,6 @@ fn main() -> PkgConfigResult<()> {
 
     if env::var("CARGO_FEATURE_VIRGL_RENDERER").is_ok() {
         virglrenderer()?;
-        use_fence_passing_option1 = false;
     }
 
     if env::var("CARGO_FEATURE_GBM").is_ok() {
@@ -108,10 +105,6 @@ fn main() -> PkgConfigResult<()> {
 
     if env::var("CARGO_FEATURE_GFXSTREAM").is_ok() {
         gfxstream()?;
-    }
-
-    if use_fence_passing_option1 {
-        println!("cargo:rustc-cfg=fence_passing_option1");
     }
 
     Ok(())

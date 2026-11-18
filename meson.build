@@ -61,10 +61,6 @@ if with_virgl_renderer
   dep_rutabaga_gfx += dep_virgl
 endif
 
-if with_kumquat
-  rutabaga_args += ['--cfg', 'fence_passing_option1']
-endif
-
 subdir('third_party')
 subdir('src')
 

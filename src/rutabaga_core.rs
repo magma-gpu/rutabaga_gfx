@@ -55,7 +55,6 @@ use crate::rutabaga_utils::RUTABAGA_CAPSET_VENUS;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VIRGL;
 use crate::rutabaga_utils::RUTABAGA_CAPSET_VIRGL2;
 use crate::rutabaga_utils::RUTABAGA_CONTEXT_INIT_CAPSET_ID_MASK;
-#[cfg(fence_passing_option1)]
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 use crate::rutabaga_utils::RUTABAGA_FLAG_INFO_RING_IDX;
 use crate::snapshot::RutabagaSnapshotReader;
@@ -423,7 +422,6 @@ fn calculate_component(component_mask: u8) -> RutabagaResult<RutabagaComponentTy
 /// thread-safe is more difficult.
 pub struct Rutabaga {
     resources: Map<u32, RutabagaResource>,
-    #[cfg(fence_passing_option1)]
     shareable_fences: Map<u64, MagmaGpuHandle>,
     contexts: Map<u32, Box<dyn RutabagaContext>>,
     // Declare components after resources and contexts such that it is dropped last.
@@ -486,6 +484,7 @@ impl Rutabaga {
             .into_iter()
             .try_for_each(|resource_id| self.unref_resource(resource_id))?;
 
+        self.shareable_fences.clear();
         self.contexts.clear();
 
         Ok(())
@@ -624,15 +623,17 @@ impl Rutabaga {
                 .get_mut(&fence.ctx_id)
                 .ok_or(RutabagaError::InvalidContextId)?;
 
-            #[allow(unused_variables)]
             let handle_opt = ctx.context_create_fence(fence)?;
 
-            #[cfg(fence_passing_option1)]
             if fence.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0 {
-                let handle = handle_opt.unwrap();
+                let handle = handle_opt.ok_or(MagmaGpuError::InvalidMagmaHandle)?;
                 self.shareable_fences.insert(fence.fence_id, handle);
             }
         } else {
+            if fence.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0 {
+                return Err(MagmaGpuError::Unsupported.into());
+            }
+
             let component = self
                 .components
                 .get_mut(&self.default_component)
@@ -1048,9 +1049,8 @@ impl Rutabaga {
 
     /// Exports the given fence for import into other processes.
     pub fn export_fence(&mut self, fence_id: u64) -> RutabagaResult<MagmaGpuHandle> {
-        #[cfg(fence_passing_option1)]
-        if let Some(handle) = self.shareable_fences.get_mut(&fence_id) {
-            return handle.try_clone().map_err(|e| e.into());
+        if let Some(handle) = self.shareable_fences.remove(&fence_id) {
+            return Ok(handle);
         }
 
         let component = self
@@ -1147,30 +1147,27 @@ impl Rutabaga {
             .get_mut(&ctx_id)
             .ok_or(RutabagaError::InvalidContextId)?;
 
-        #[allow(unused_mut)]
         let mut shareable_fences: Vec<MagmaGpuHandle> = Vec::with_capacity(fence_ids.len());
 
-        #[cfg(fence_passing_option1)]
-        for (i, fence_id) in fence_ids.iter().enumerate() {
-            let handle = self
-                .shareable_fences
-                .get_mut(fence_id)
-                .ok_or(MagmaGpuError::InvalidMagmaHandle)?;
+        if ctx.component_type() != RutabagaComponentType::VirglRenderer {
+            for fence_id in fence_ids {
+                let handle = self
+                    .shareable_fences
+                    .get_mut(fence_id)
+                    .ok_or(MagmaGpuError::InvalidMagmaHandle)?;
 
-            let clone = handle.try_clone()?;
-            shareable_fences.insert(i, clone);
+                let clone = handle.try_clone()?;
+                shareable_fences.push(clone);
+            }
         }
 
         ctx.submit_cmd(commands, fence_ids, shareable_fences)
     }
 
     /// destroy fences that are still outstanding
-    #[cfg(fence_passing_option1)]
     pub fn destroy_fences(&mut self, fence_ids: &[u64]) -> RutabagaResult<()> {
         for fence_id in fence_ids {
-            self.shareable_fences
-                .remove(fence_id)
-                .ok_or(MagmaGpuError::InvalidMagmaHandle)?;
+            self.shareable_fences.remove(fence_id);
         }
 
         Ok(())
@@ -1460,7 +1457,6 @@ impl RutabagaBuilder {
 
         Ok(Rutabaga {
             resources: Default::default(),
-            #[cfg(fence_passing_option1)]
             shareable_fences: Default::default(),
             contexts: Default::default(),
             components: rutabaga_components,

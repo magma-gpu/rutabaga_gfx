@@ -750,9 +750,12 @@ impl RutabagaContext for CrossDomainContext {
     fn submit_cmd(
         &mut self,
         mut commands: &mut [u8],
-        _fence_ids: &[u64],
-        _shareable_fences: Vec<MagmaGpuHandle>,
+        fence_ids: &[u64],
+        shareable_fences: Vec<MagmaGpuHandle>,
     ) -> RutabagaResult<()> {
+        if !fence_ids.is_empty() || !shareable_fences.is_empty() {
+            return Err(MagmaGpuError::Unsupported.into());
+        }
         while !commands.is_empty() {
             let (hdr, _) = CrossDomainHeader::read_from_prefix(commands)
                 .map_err(|_| RutabagaError::InvalidCommandBuffer)?;
