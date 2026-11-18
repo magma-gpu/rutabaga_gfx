@@ -15,6 +15,8 @@ use thiserror::Error;
 #[non_exhaustive]
 #[derive(Error, Debug)]
 pub enum BroccoliniError {
+    #[error("probe child returned no capsets")]
+    EmptyCapsetsFromProbeChild,
     #[error("failed to fork worker: {0}")]
     FailedToForkWorker(#[source] std::io::Error),
     #[error("no valid rutabaga capsets in --context-types '{0}'")]
