@@ -19,6 +19,7 @@ null_dep = dependency('', required : false)
 features = get_option('features')
 with_ffi = get_option('ffi')
 with_kumquat = get_option('kumquat')
+with_broccolini = get_option('broccolini')
 with_tests = get_option('build-tests')
 
 with_gbm = features.contains('gbm')
@@ -70,4 +71,8 @@ endif
 
 if with_kumquat
   subdir('kumquat')
+endif
+
+if with_broccolini
+  subdir('broccolini')
 endif
