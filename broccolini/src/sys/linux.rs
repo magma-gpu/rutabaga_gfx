@@ -97,10 +97,14 @@ impl WorkerProcess {
     }
 
     pub fn set_current_name(name: &str) {
-        let proc_title = format!("rutabaga-{name}");
+        let proc_title = format!("broccolini-{name}");
         let bytes = proc_title.as_bytes();
         if let Ok(c_title) = CString::new(&bytes[..bytes.len().min(15)]) {
-            let _ = rustix::thread::set_name(&c_title);
+            // SAFETY: `c_title` is a valid, null-terminated C string that remains alive
+            // for the duration of the `prctl` syscall,
+            unsafe {
+                libc::prctl(libc::PR_SET_NAME, c_title.as_ptr(), 0, 0, 0);
+            }
         }
     }
 }
