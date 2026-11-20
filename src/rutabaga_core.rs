@@ -15,6 +15,7 @@ use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::MemoryMapping;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::RawMapping;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 use serde::Deserialize;
 use serde::Serialize;
@@ -910,15 +911,21 @@ impl Rutabaga {
             .get_mut(&resource_id)
             .ok_or(RutabagaError::InvalidResourceId)?;
 
+        if let Some(ref mapping) = resource.mapping {
+            return Ok(mapping.as_raw_mapping());
+        }
+
         let component_type = calculate_component(resource.component_mask)?;
         if component_type == RutabagaComponentType::CrossDomain {
             let handle_opt = resource.handle.take();
             match handle_opt {
                 Some(handle) => {
                     if let Some(mesa_handle) = handle.as_mesa_handle() {
-                        if mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_SHM {
+                        if mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_SHM
+                            && mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF
+                        {
                             return Err(MagmaGpuError::WithContext(
-                                "expected a shared memory handle",
+                                "expected a shared memory or dmabuf handle",
                             )
                             .into());
                         }
