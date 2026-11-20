@@ -183,6 +183,8 @@ impl RutabagaGrallocFlags {
             || self.0 & RUTABAGA_GRALLOC_USE_SW_WRITE_OFTEN != 0
             || self.0 & RUTABAGA_GRALLOC_USE_CAMERA_WRITE != 0
             || self.0 & RUTABAGA_GRALLOC_USE_CAMERA_READ != 0
+            || self.0 & RUTABAGA_GRALLOC_USE_LINEAR != 0
+            || self.0 & RUTABAGA_GRALLOC_USE_SCANOUT != 0
     }
 
     /// Returns true if the memory will read by the CPU or an IP block that prefers cached
