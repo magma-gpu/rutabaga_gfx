@@ -1456,7 +1456,7 @@ impl RutabagaBuilder {
 
                 let component = if has_remote {
                     RemoteComponent::new(
-                        zygote.unwrap(),
+                        zygote.clone().unwrap(),
                         self.remote_capset_mask & gfxstream_mask,
                         RutabagaComponentType::Gfxstream,
                         self.fence_handler.clone(),
@@ -1485,18 +1485,33 @@ impl RutabagaBuilder {
                 push_capset(RUTABAGA_CAPSET_MAGMA);
             }
 
-            if local_capset_enabled(RUTABAGA_CAPSET_CROSS_DOMAIN)
-                || (total_capset_mask == 0
-                    && (self.default_component == RutabagaComponentType::CrossDomain
-                        || self.paths.is_some()))
             {
-                let cross_domain = CrossDomain::init(
-                    self.paths.clone(),
-                    self.fence_handler.clone(),
-                    self.virtiofs_lookup.clone(),
-                )?;
-                rutabaga_components.insert(RutabagaComponentType::CrossDomain, cross_domain);
-                push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
+                let cross_domain_mask = 1 << RUTABAGA_CAPSET_CROSS_DOMAIN;
+                let has_local = local_capset_enabled(RUTABAGA_CAPSET_CROSS_DOMAIN)
+                    || (total_capset_mask == 0
+                        && (self.default_component == RutabagaComponentType::CrossDomain
+                            || self.paths.is_some()));
+                let has_remote = (self.remote_capset_mask & cross_domain_mask) != 0;
+
+                if has_local || has_remote {
+                    let component = if has_remote {
+                        RemoteComponent::new(
+                            zygote.unwrap(),
+                            self.remote_capset_mask & cross_domain_mask,
+                            RutabagaComponentType::CrossDomain,
+                            self.fence_handler.clone(),
+                        )?
+                    } else {
+                        CrossDomain::init(
+                            self.paths.clone(),
+                            self.fence_handler.clone(),
+                            self.virtiofs_lookup.clone(),
+                        )?
+                    };
+
+                    rutabaga_components.insert(RutabagaComponentType::CrossDomain, component);
+                    push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
+                }
             }
         }
 
