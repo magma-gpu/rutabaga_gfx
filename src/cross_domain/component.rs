@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use magma_gpu::util::Error as MagmaGpuError;
+use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::Tube;
 use zerocopy::IntoBytes;
 
@@ -25,12 +26,19 @@ use crate::rutabaga_utils::ResourceCreateBlob;
 use crate::rutabaga_utils::RutabagaComponentType;
 use crate::rutabaga_utils::RutabagaFence;
 use crate::rutabaga_utils::RutabagaFenceHandler;
+use crate::rutabaga_utils::RutabagaImportData;
 use crate::rutabaga_utils::RutabagaIovec;
 use crate::rutabaga_utils::RutabagaPath;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::RUTABAGA_BLOB_FLAG_USE_MAPPABLE;
 use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
+use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_HOST3D;
+use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_3D_INFO;
+use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS;
+use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
+use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
+use crate::rutabaga_utils::RUTABAGA_MAP_CACHE_CACHED;
 use crate::RutabagaGralloc;
 use crate::RutabagaGrallocBackendFlags;
 
@@ -42,6 +50,7 @@ pub struct CrossDomain {
     fence_handler: RutabagaFenceHandler,
     internal_sockets: Arc<Mutex<Map<u128, Tube>>>,
     virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
+    use_host_blob: bool,
 }
 
 impl CrossDomain {
@@ -51,6 +60,7 @@ impl CrossDomain {
         paths: Option<Vec<RutabagaPath>>,
         fence_handler: RutabagaFenceHandler,
         virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
+        use_host_blob: bool,
     ) -> RutabagaResult<Box<dyn RutabagaComponent>> {
         let gralloc = RutabagaGralloc::new(RutabagaGrallocBackendFlags::new())?;
         Ok(Box::new(CrossDomain {
@@ -59,6 +69,7 @@ impl CrossDomain {
             fence_handler,
             internal_sockets: Arc::new(Mutex::new(Map::new())),
             virtiofs_lookup,
+            use_host_blob,
         }))
     }
 }
@@ -83,6 +94,8 @@ impl RutabagaComponent for CrossDomain {
         if self.gralloc.lock().unwrap().supports_external_gpu_memory() {
             caps.supports_external_gpu_memory = 1;
         }
+
+        caps.use_host_blob = u32::from(self.use_host_blob);
 
         // Version 1 supports all commands up to and including CROSS_DOMAIN_CMD_WRITE.
         caps.version = 1;
@@ -163,6 +176,39 @@ impl RutabagaComponent for CrossDomain {
             resource_create_3d,
             RutabagaComponentType::CrossDomain,
         )
+    }
+
+    fn import(
+        &self,
+        resource_id: u32,
+        import_handle: RutabagaHandle,
+        import_data: RutabagaImportData,
+    ) -> RutabagaResult<Option<RutabagaResource>> {
+        if (import_data.flags & RUTABAGA_IMPORT_FLAG_RESOURCE_EXISTS) != 0 {
+            return Ok(None);
+        }
+
+        let mesa_handle = MagmaGpuHandle::try_from(import_handle)?;
+        let info_3d = ((import_data.flags & RUTABAGA_IMPORT_FLAG_3D_INFO) != 0)
+            .then_some(import_data.info_3d);
+        let vulkan_info = ((import_data.flags & RUTABAGA_IMPORT_FLAG_VULKAN_INFO) != 0)
+            .then_some(import_data.info_vulkan);
+
+        Ok(Some(RutabagaResource {
+            resource_id,
+            handle: Some(Arc::new(mesa_handle.into())),
+            blob: true,
+            blob_mem: RUTABAGA_BLOB_MEM_HOST3D,
+            blob_flags: RUTABAGA_BLOB_FLAG_USE_MAPPABLE,
+            map_info: Some(RUTABAGA_MAP_CACHE_CACHED | RUTABAGA_MAP_ACCESS_RW),
+            info_2d: None,
+            info_3d,
+            vulkan_info,
+            backing_iovecs: None,
+            component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+            size: import_data.size,
+            mapping: None,
+        }))
     }
 
     fn transfer_write(

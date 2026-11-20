@@ -15,6 +15,7 @@ use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::MemoryMapping;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::RawMapping;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF;
 use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 use serde::Deserialize;
 use serde::Serialize;
@@ -910,15 +911,21 @@ impl Rutabaga {
             .get_mut(&resource_id)
             .ok_or(RutabagaError::InvalidResourceId)?;
 
+        if let Some(ref mapping) = resource.mapping {
+            return Ok(mapping.as_raw_mapping());
+        }
+
         let component_type = calculate_component(resource.component_mask)?;
         if component_type == RutabagaComponentType::CrossDomain {
             let handle_opt = resource.handle.take();
             match handle_opt {
                 Some(handle) => {
                     if let Some(mesa_handle) = handle.as_mesa_handle() {
-                        if mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_SHM {
+                        if mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_SHM
+                            && mesa_handle.handle_type != MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF
+                        {
                             return Err(MagmaGpuError::WithContext(
-                                "expected a shared memory handle",
+                                "expected a shared memory or dmabuf handle",
                             )
                             .into());
                         }
@@ -967,7 +974,13 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidResourceId)?;
 
         let component_type = calculate_component(resource.component_mask)?;
-        if component_type == RutabagaComponentType::CrossDomain || resource.mapping.is_some() {
+        if component_type == RutabagaComponentType::CrossDomain {
+            if resource.info_3d.is_some() {
+                resource.mapping = None;
+            }
+            return Ok(());
+        }
+        if resource.mapping.is_some() {
             resource.mapping = None;
             return Ok(());
         }
@@ -1168,6 +1181,7 @@ pub struct RutabagaBuilder {
     virglrenderer_flags: VirglRendererFlags,
     capset_mask: u64,
     remote_capset_mask: u64,
+    use_host_blob: bool,
     paths: Option<RutabagaPaths>,
     debug_handler: Option<RutabagaDebugHandler>,
     renderer_features: Option<String>,
@@ -1191,6 +1205,7 @@ impl RutabagaBuilder {
             virglrenderer_flags,
             capset_mask,
             remote_capset_mask: 0,
+            use_host_blob: false,
             paths: None,
             debug_handler: None,
             renderer_features: None,
@@ -1261,6 +1276,12 @@ impl RutabagaBuilder {
     /// Sets use system blob in gfxstream.
     pub fn set_use_system_blob(mut self, v: bool) -> RutabagaBuilder {
         self.gfxstream_flags = self.gfxstream_flags.use_system_blob(v);
+        self
+    }
+
+    /// Sets use host blob in cross-domain.
+    pub fn set_use_host_blob(mut self, v: bool) -> RutabagaBuilder {
+        self.use_host_blob = v;
         self
     }
 
@@ -1456,7 +1477,7 @@ impl RutabagaBuilder {
 
                 let component = if has_remote {
                     RemoteComponent::new(
-                        zygote.unwrap(),
+                        zygote.clone().unwrap(),
                         self.remote_capset_mask & gfxstream_mask,
                         RutabagaComponentType::Gfxstream,
                         self.fence_handler.clone(),
@@ -1485,18 +1506,34 @@ impl RutabagaBuilder {
                 push_capset(RUTABAGA_CAPSET_MAGMA);
             }
 
-            if local_capset_enabled(RUTABAGA_CAPSET_CROSS_DOMAIN)
-                || (total_capset_mask == 0
-                    && (self.default_component == RutabagaComponentType::CrossDomain
-                        || self.paths.is_some()))
             {
-                let cross_domain = CrossDomain::init(
-                    self.paths.clone(),
-                    self.fence_handler.clone(),
-                    self.virtiofs_lookup.clone(),
-                )?;
-                rutabaga_components.insert(RutabagaComponentType::CrossDomain, cross_domain);
-                push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
+                let cross_domain_mask = 1 << RUTABAGA_CAPSET_CROSS_DOMAIN;
+                let has_local = local_capset_enabled(RUTABAGA_CAPSET_CROSS_DOMAIN)
+                    || (total_capset_mask == 0
+                        && (self.default_component == RutabagaComponentType::CrossDomain
+                            || self.paths.is_some()));
+                let has_remote = (self.remote_capset_mask & cross_domain_mask) != 0;
+
+                if has_local || has_remote {
+                    let component = if has_remote {
+                        RemoteComponent::new(
+                            zygote.unwrap(),
+                            self.remote_capset_mask & cross_domain_mask,
+                            RutabagaComponentType::CrossDomain,
+                            self.fence_handler.clone(),
+                        )?
+                    } else {
+                        CrossDomain::init(
+                            self.paths.clone(),
+                            self.fence_handler.clone(),
+                            self.virtiofs_lookup.clone(),
+                            self.use_host_blob,
+                        )?
+                    };
+
+                    rutabaga_components.insert(RutabagaComponentType::CrossDomain, component);
+                    push_capset(RUTABAGA_CAPSET_CROSS_DOMAIN);
+                }
             }
         }
 

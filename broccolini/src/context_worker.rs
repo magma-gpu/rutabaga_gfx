@@ -49,6 +49,7 @@ pub(crate) fn build_rutabaga(
 
     Ok(RutabagaBuilder::new(capset_mask, fence_handler)
         .set_use_external_blob(true)
+        .set_use_host_blob(true)
         .set_use_egl(use_gles)
         .set_use_gles(use_gles)
         .set_use_vulkan(use_vulkan)

@@ -31,6 +31,7 @@ use vulkano::device::QueueFlags;
 use vulkano::image;
 use vulkano::image::ImageDimensions;
 use vulkano::image::ImageError;
+use vulkano::image::ImageTiling;
 use vulkano::image::ImageUsage;
 use vulkano::image::SampleCount;
 use vulkano::instance::Instance;
@@ -38,7 +39,6 @@ use vulkano::instance::InstanceCreateInfo;
 use vulkano::instance::InstanceCreationError;
 use vulkano::instance::InstanceExtensions;
 use vulkano::instance::Version;
-use vulkano::memory::DedicatedAllocation;
 use vulkano::memory::DeviceMemory;
 use vulkano::memory::DeviceMemoryError;
 use vulkano::memory::ExternalMemoryHandleType;
@@ -54,6 +54,8 @@ use vulkano::LoadingError;
 use vulkano::VulkanError;
 use vulkano::VulkanLibrary;
 
+use crate::rutabaga_gralloc::formats::canonical_image_requirements;
+use crate::rutabaga_gralloc::formats::DrmFormat;
 use crate::rutabaga_gralloc::gralloc::Gralloc;
 use crate::rutabaga_gralloc::gralloc::ImageAllocationInfo;
 use crate::rutabaga_gralloc::gralloc::ImageMemoryRequirements;
@@ -166,7 +168,22 @@ impl VulkanoGralloc {
         let mut device_by_id: Map<DeviceId, Arc<Device>> = Default::default();
         let mut has_integrated_gpu = false;
 
-        for physical in instance.enumerate_physical_devices()? {
+        let physical_devices: Vec<_> = instance.enumerate_physical_devices()?.collect();
+        let has_non_cpu_gpu = physical_devices.iter().any(|p| {
+            matches!(
+                p.properties().device_type,
+                PhysicalDeviceType::DiscreteGpu
+                    | PhysicalDeviceType::IntegratedGpu
+                    | PhysicalDeviceType::VirtualGpu
+            )
+        });
+
+        for physical in physical_devices {
+            let device_type = physical.properties().device_type;
+            if has_non_cpu_gpu && device_type == PhysicalDeviceType::Cpu {
+                continue;
+            }
+
             let queue_family_index = match physical.queue_family_properties().iter().position(|q| {
                 // We take the first queue family that supports graphics.
                 q.queue_flags.intersects(QueueFlags::GRAPHICS)
@@ -198,7 +215,6 @@ impl VulkanoGralloc {
                     ..Default::default()
                 },
             ) {
-                let device_type = device.physical_device().properties().device_type;
                 if device_type == PhysicalDeviceType::IntegratedGpu {
                     has_integrated_gpu = true
                 }
@@ -222,6 +238,25 @@ impl VulkanoGralloc {
         }))
     }
 
+    fn get_default_device(&self) -> RutabagaResult<&Arc<Device>> {
+        if self.has_integrated_gpu {
+            if let Some(dev) = self.devices.get(&PhysicalDeviceType::IntegratedGpu) {
+                return Ok(dev);
+            }
+        }
+        for dev_type in [
+            PhysicalDeviceType::DiscreteGpu,
+            PhysicalDeviceType::VirtualGpu,
+            PhysicalDeviceType::Cpu,
+            PhysicalDeviceType::Other,
+        ] {
+            if let Some(dev) = self.devices.get(&dev_type) {
+                return Ok(dev);
+            }
+        }
+        Err(RutabagaError::InvalidGrallocGpuType)
+    }
+
     // This function is used safely in this module because gralloc does not:
     //
     //  (1) bind images to any memory.
@@ -229,57 +264,76 @@ impl VulkanoGralloc {
     //  (3) transfer ownership of images between queues.
     //
     // In addition, we trust Vulkano to validate image parameters are within the Vulkan spec.
-    // TODO(tutankhamen): Do we still need a separate MemoryRequirements?
     unsafe fn create_image(
         &mut self,
         info: ImageAllocationInfo,
+        tiling: ImageTiling,
     ) -> RutabagaResult<(Arc<image::sys::RawImage>, MemoryRequirements)> {
-        let device = if self.has_integrated_gpu {
-            self.devices
-                .get(&PhysicalDeviceType::IntegratedGpu)
-                .ok_or(RutabagaError::InvalidGrallocGpuType)?
-        } else {
-            self.devices
-                .get(&PhysicalDeviceType::DiscreteGpu)
-                .ok_or(RutabagaError::InvalidGrallocGpuType)?
-        };
-
-        let usage = match info.flags.uses_rendering() {
-            true => ImageUsage::COLOR_ATTACHMENT,
-            false => ImageUsage::SAMPLED,
-        };
+        let device = self.get_default_device()?.clone();
 
         // Reasonable bounds on image width.
-        if info.width == 0 || info.width > 4096 {
+        if info.width == 0 || info.width > 16384 {
             return Err(RutabagaError::InvalidGrallocDimensions);
         }
 
         // Reasonable bounds on image height.
-        if info.height == 0 || info.height > 4096 {
+        if info.height == 0 || info.height > 16384 {
             return Err(RutabagaError::InvalidGrallocDimensions);
         }
 
         let vulkan_format = info.drm_format.vulkan_format()?;
-        let raw_image = Arc::new(image::sys::RawImage::new(
-            device.clone(),
-            image::sys::ImageCreateInfo {
-                dimensions: ImageDimensions::Dim2d {
-                    width: info.width,
-                    height: info.height,
-                    array_layers: 1,
-                },
-                format: Some(vulkan_format),
-                samples: SampleCount::Sample1,
-                usage,
-                mip_levels: 1,
-                sharing: Sharing::Exclusive,
-                ..Default::default()
-            },
-        )?);
 
-        // Won't panic since this not a swapchain image.
-        let memory_requirements = raw_image.memory_requirements()[0];
-        Ok((raw_image, memory_requirements))
+        let usage_candidates: &[ImageUsage] = match (tiling, info.flags.uses_rendering()) {
+            (ImageTiling::Linear, _) => &[
+                ImageUsage::TRANSFER_SRC | ImageUsage::TRANSFER_DST,
+                ImageUsage::TRANSFER_DST,
+                ImageUsage::SAMPLED,
+            ],
+            (_, true) => &[
+                ImageUsage::COLOR_ATTACHMENT
+                    | ImageUsage::SAMPLED
+                    | ImageUsage::TRANSFER_SRC
+                    | ImageUsage::TRANSFER_DST,
+                ImageUsage::SAMPLED | ImageUsage::TRANSFER_SRC | ImageUsage::TRANSFER_DST,
+                ImageUsage::TRANSFER_SRC | ImageUsage::TRANSFER_DST,
+            ],
+            (_, false) => &[
+                ImageUsage::SAMPLED | ImageUsage::TRANSFER_SRC | ImageUsage::TRANSFER_DST,
+                ImageUsage::TRANSFER_SRC | ImageUsage::TRANSFER_DST,
+            ],
+        };
+
+        let mut last_err = None;
+        for &usage in usage_candidates {
+            match image::sys::RawImage::new(
+                device.clone(),
+                image::sys::ImageCreateInfo {
+                    dimensions: ImageDimensions::Dim2d {
+                        width: info.width,
+                        height: info.height,
+                        array_layers: 1,
+                    },
+                    format: Some(vulkan_format),
+                    tiling,
+                    samples: SampleCount::Sample1,
+                    usage,
+                    mip_levels: 1,
+                    sharing: Sharing::Exclusive,
+                    ..Default::default()
+                },
+            ) {
+                Ok(raw) => {
+                    let raw_image = Arc::new(raw);
+                    let memory_requirements = raw_image.memory_requirements()[0];
+                    return Ok((raw_image, memory_requirements));
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                }
+            }
+        }
+
+        Err(last_err.unwrap().into())
     }
 }
 
@@ -309,31 +363,58 @@ impl Gralloc for VulkanoGralloc {
         info: ImageAllocationInfo,
     ) -> RutabagaResult<ImageMemoryRequirements> {
         let mut reqs: ImageMemoryRequirements = Default::default();
+        let is_1d_buffer =
+            info.height == 1 && info.drm_format == DrmFormat::new(b'R', b'8', b' ', b' ');
 
-        let (raw_image, memory_requirements) = unsafe { self.create_image(info)? };
-
-        let device_type = if self.has_integrated_gpu {
-            &PhysicalDeviceType::IntegratedGpu
+        let (raw_size, memory_type_bits) = if is_1d_buffer {
+            reqs.strides[0] = info.width;
+            reqs.offsets[0] = 0;
+            let aligned_size = ((info.width as u64) + 4095) & !4095;
+            (aligned_size.max(4096), 0xffff_ffffu32)
         } else {
-            &PhysicalDeviceType::DiscreteGpu
+            let (linear_size, linear_bits) =
+                match unsafe { self.create_image(info, ImageTiling::Linear) } {
+                    Ok((linear_image, linear_reqs)) => {
+                        let planar_layout = info.drm_format.planar_layout()?;
+                        for plane in 0..planar_layout.num_planes {
+                            let aspect = info.drm_format.vulkan_image_aspect(plane)?;
+                            let layout = linear_image.subresource_layout(aspect, 0, 0)?;
+                            reqs.strides[plane] = layout.row_pitch as u32;
+                            reqs.offsets[plane] = layout.offset as u32;
+                        }
+                        (
+                            linear_reqs.layout.size() as u64,
+                            linear_reqs.memory_type_bits,
+                        )
+                    }
+                    Err(_) => {
+                        let canonical = canonical_image_requirements(info)?;
+                        reqs.strides = canonical.strides;
+                        reqs.offsets = canonical.offsets;
+                        (canonical.size, 0xffff_ffffu32)
+                    }
+                };
+
+            if let Ok((_optimal_image, optimal_reqs)) =
+                unsafe { self.create_image(info, ImageTiling::Optimal) }
+            {
+                let size = std::cmp::max(linear_size, optimal_reqs.layout.size() as u64);
+                let combined_bits = optimal_reqs.memory_type_bits & linear_bits;
+                let bits = if info.flags.host_visible() {
+                    linear_bits
+                } else if combined_bits != 0 {
+                    combined_bits
+                } else {
+                    optimal_reqs.memory_type_bits
+                };
+                (size, bits)
+            } else {
+                (linear_size, linear_bits)
+            }
         };
+        let size = ((raw_size + 4095) & !4095).max(4096);
 
-        let device = self
-            .devices
-            .get(device_type)
-            .ok_or(RutabagaError::InvalidGrallocGpuType)?;
-
-        let planar_layout = info.drm_format.planar_layout()?;
-
-        // Safe because we created the image with the linear bit set and verified the format is
-        // not a depth or stencil format.  We are also using the correct image aspect.  Vulkano
-        // will panic if we are not.
-        for plane in 0..planar_layout.num_planes {
-            let aspect = info.drm_format.vulkan_image_aspect(plane)?;
-            let layout = raw_image.subresource_layout(aspect, 0, 0)?;
-            reqs.strides[plane] = layout.row_pitch as u32;
-            reqs.offsets[plane] = layout.offset as u32;
-        }
+        let device = self.get_default_device()?.clone();
 
         let need_visible = info.flags.host_visible();
         let want_cached = info.flags.host_cached();
@@ -395,9 +476,15 @@ impl Gralloc for VulkanoGralloc {
                 .enumerate()
                 .map(|(i, t)| (i, t, AllocFromRequirementsFilter::Allowed));
             let found_type = first_loop
-                .chain(second_loop)
-                .filter(|&(i, _, _)| (memory_requirements.memory_type_bits & (1 << i)) != 0)
+                .clone()
+                .chain(second_loop.clone())
+                .filter(|&(i, _, _)| (memory_type_bits & (1 << i)) != 0)
                 .find(|&(_, t, rq)| filter(t) == rq)
+                .or_else(|| {
+                    first_loop
+                        .chain(second_loop)
+                        .find(|&(_, t, rq)| filter(t) == rq)
+                })
                 .ok_or(MagmaGpuError::WithContext(
                     "unable to find required memory type",
                 ))?;
@@ -405,7 +492,7 @@ impl Gralloc for VulkanoGralloc {
         };
 
         reqs.info = info;
-        reqs.size = memory_requirements.layout.size() as u64;
+        reqs.size = size;
 
         if memory_type
             .property_flags
@@ -433,19 +520,9 @@ impl Gralloc for VulkanoGralloc {
     }
 
     fn allocate_memory(&mut self, reqs: ImageMemoryRequirements) -> RutabagaResult<MagmaGpuHandle> {
-        let (raw_image, memory_requirements) = unsafe { self.create_image(reqs.info)? };
-
         let vulkan_info = reqs.vulkan_info.ok_or(RutabagaError::InvalidVulkanInfo)?;
 
-        let device = if self.has_integrated_gpu {
-            self.devices
-                .get(&PhysicalDeviceType::IntegratedGpu)
-                .ok_or(RutabagaError::InvalidGrallocGpuType)?
-        } else {
-            self.devices
-                .get(&PhysicalDeviceType::DiscreteGpu)
-                .ok_or(RutabagaError::InvalidGrallocGpuType)?
-        };
+        let device = self.get_default_device()?.clone();
 
         if vulkan_info.memory_idx as usize
             >= device
@@ -454,7 +531,7 @@ impl Gralloc for VulkanoGralloc {
                 .memory_types
                 .len()
         {
-            return Err(RutabagaError::InvalidVulkanInfo.into());
+            return Err(RutabagaError::InvalidVulkanInfo);
         }
 
         let (export_handle_type, export_handle_types, rutabaga_type) =
@@ -471,23 +548,12 @@ impl Gralloc for VulkanoGralloc {
                 ),
             };
 
-        let dedicated_allocation = match device.enabled_extensions().khr_dedicated_allocation {
-            true => {
-                if memory_requirements.prefers_dedicated_allocation {
-                    Some(DedicatedAllocation::Image(&raw_image))
-                } else {
-                    None
-                }
-            }
-            false => None,
-        };
-
         let device_memory = DeviceMemory::allocate(
-            device.clone(),
+            device,
             MemoryAllocateInfo {
                 allocation_size: reqs.size,
                 memory_type_index: vulkan_info.memory_idx,
-                dedicated_allocation,
+                dedicated_allocation: None,
                 export_handle_types,
                 ..Default::default()
             },
