@@ -46,7 +46,12 @@ impl VulkanoGralloc {
     ) -> RutabagaResult<DeviceMemory> {
         let import_info = MemoryImportInfo::Fd {
             handle_type: match handle.handle_type {
-                MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF => ExternalMemoryHandleType::DmaBuf,
+                MAGMA_GPU_HANDLE_TYPE_MEM_DMABUF => {
+                    if !device.enabled_extensions().ext_external_memory_dma_buf {
+                        return Err(MagmaGpuError::Unsupported.into());
+                    }
+                    ExternalMemoryHandleType::DmaBuf
+                }
                 MAGMA_GPU_HANDLE_TYPE_MEM_OPAQUE_FD => ExternalMemoryHandleType::OpaqueFd,
                 _ => return Err(MagmaGpuError::InvalidMagmaHandle.into()),
             },
