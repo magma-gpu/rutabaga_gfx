@@ -73,6 +73,7 @@ pub struct CrossDomainCapabilities {
     pub supported_channels: u32,
     pub supports_dmabuf: u32,
     pub supports_external_gpu_memory: u32,
+    pub use_host_blob: u32,
 }
 
 #[repr(C)]

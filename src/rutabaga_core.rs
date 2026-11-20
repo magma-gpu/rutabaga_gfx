@@ -974,7 +974,13 @@ impl Rutabaga {
             .ok_or(RutabagaError::InvalidResourceId)?;
 
         let component_type = calculate_component(resource.component_mask)?;
-        if component_type == RutabagaComponentType::CrossDomain || resource.mapping.is_some() {
+        if component_type == RutabagaComponentType::CrossDomain {
+            if resource.info_3d.is_some() {
+                resource.mapping = None;
+            }
+            return Ok(());
+        }
+        if resource.mapping.is_some() {
             resource.mapping = None;
             return Ok(());
         }
@@ -1175,6 +1181,7 @@ pub struct RutabagaBuilder {
     virglrenderer_flags: VirglRendererFlags,
     capset_mask: u64,
     remote_capset_mask: u64,
+    use_host_blob: bool,
     paths: Option<RutabagaPaths>,
     debug_handler: Option<RutabagaDebugHandler>,
     renderer_features: Option<String>,
@@ -1198,6 +1205,7 @@ impl RutabagaBuilder {
             virglrenderer_flags,
             capset_mask,
             remote_capset_mask: 0,
+            use_host_blob: false,
             paths: None,
             debug_handler: None,
             renderer_features: None,
@@ -1268,6 +1276,12 @@ impl RutabagaBuilder {
     /// Sets use system blob in gfxstream.
     pub fn set_use_system_blob(mut self, v: bool) -> RutabagaBuilder {
         self.gfxstream_flags = self.gfxstream_flags.use_system_blob(v);
+        self
+    }
+
+    /// Sets use host blob in cross-domain.
+    pub fn set_use_host_blob(mut self, v: bool) -> RutabagaBuilder {
+        self.use_host_blob = v;
         self
     }
 
@@ -1513,6 +1527,7 @@ impl RutabagaBuilder {
                             self.paths.clone(),
                             self.fence_handler.clone(),
                             self.virtiofs_lookup.clone(),
+                            self.use_host_blob,
                         )?
                     };
 
