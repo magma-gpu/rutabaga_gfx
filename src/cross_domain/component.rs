@@ -50,6 +50,7 @@ pub struct CrossDomain {
     fence_handler: RutabagaFenceHandler,
     internal_sockets: Arc<Mutex<Map<u128, Tube>>>,
     virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
+    use_shareable_ring_blob: bool,
 }
 
 impl CrossDomain {
@@ -59,6 +60,7 @@ impl CrossDomain {
         paths: Option<Vec<RutabagaPath>>,
         fence_handler: RutabagaFenceHandler,
         virtiofs_lookup: Option<Arc<dyn VirtioFsLookup>>,
+        use_shareable_ring_blob: bool,
     ) -> RutabagaResult<Box<dyn RutabagaComponent>> {
         let gralloc = RutabagaGralloc::new(RutabagaGrallocBackendFlags::new())?;
         Ok(Box::new(CrossDomain {
@@ -67,6 +69,7 @@ impl CrossDomain {
             fence_handler,
             internal_sockets: Arc::new(Mutex::new(Map::new())),
             virtiofs_lookup,
+            use_shareable_ring_blob,
         }))
     }
 }
@@ -91,6 +94,8 @@ impl RutabagaComponent for CrossDomain {
         if self.gralloc.lock().unwrap().supports_external_gpu_memory() {
             caps.supports_external_gpu_memory = 1;
         }
+
+        caps.use_shareable_ring_blob = u32::from(self.use_shareable_ring_blob);
 
         // Version 1 supports all commands up to and including CROSS_DOMAIN_CMD_WRITE.
         caps.version = 1;

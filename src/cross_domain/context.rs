@@ -16,11 +16,14 @@ use magma_gpu::util::AsBorrowedDescriptor;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::EventSignaler;
 use magma_gpu::util::Handle as MagmaGpuHandle;
+use magma_gpu::util::MemoryMapping;
 use magma_gpu::util::OwnedDescriptor;
+use magma_gpu::util::SharedMemory;
 use magma_gpu::util::Tube;
 use magma_gpu::util::TubeType;
 use magma_gpu::util::WaitContext;
 use magma_gpu::util::WritePipe;
+use magma_gpu::util::MAGMA_GPU_HANDLE_TYPE_MEM_SHM;
 
 use zerocopy::FromBytes;
 use zerocopy::IntoBytes;
@@ -83,6 +86,7 @@ use crate::rutabaga_utils::RutabagaFenceHandler;
 use crate::rutabaga_utils::RutabagaPath;
 use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
+use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_HOST3D;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 use crate::rutabaga_utils::RUTABAGA_MAP_CACHE_CACHED;
 use crate::DrmFormat;
@@ -611,6 +615,45 @@ impl CrossDomainContext {
         }
     }
 
+    fn create_host_shm_blob(
+        resource_id: u32,
+        resource_create_blob: ResourceCreateBlob,
+    ) -> RutabagaResult<RutabagaResource> {
+        let size: usize = resource_create_blob
+            .size
+            .try_into()
+            .map_err(MagmaGpuError::TryFromIntError)?;
+        let shm = SharedMemory::new("rutabaga_cross_domain_ring", resource_create_blob.size)?;
+        let os_handle: OwnedDescriptor = shm.into();
+        let cloned_handle = os_handle.try_clone().map_err(MagmaGpuError::IoError)?;
+        let map_info = RUTABAGA_MAP_CACHE_CACHED | RUTABAGA_MAP_ACCESS_RW;
+        let mapping = MemoryMapping::from_safe_descriptor(cloned_handle, size, map_info)?;
+        let raw_mapping = mapping.as_raw_mapping();
+        let handle = MagmaGpuHandle {
+            os_handle,
+            handle_type: MAGMA_GPU_HANDLE_TYPE_MEM_SHM,
+        };
+
+        Ok(RutabagaResource {
+            resource_id,
+            handle: Some(Arc::new(handle.into())),
+            blob: true,
+            blob_mem: resource_create_blob.blob_mem,
+            blob_flags: resource_create_blob.blob_flags,
+            map_info: Some(map_info),
+            info_2d: None,
+            info_3d: None,
+            vulkan_info: None,
+            backing_iovecs: Some(vec![RutabagaIovec {
+                base: raw_mapping.ptr as *mut std::ffi::c_void,
+                len: raw_mapping.size as usize,
+            }]),
+            component_mask: 1 << (RutabagaComponentType::CrossDomain as u8),
+            size: resource_create_blob.size,
+            mapping: Some(mapping),
+        })
+    }
+
     fn create_blob_from_handle(
         &self,
         resource_id: u32,
@@ -711,6 +754,10 @@ impl RutabagaContext for CrossDomainContext {
                     MagmaGpuError::WithContext("tried to create guest memory w/o iovecs")
                 })?,
             )),
+            // Host SHM ring buffer when `use_shareable_ring_blob` is enabled.
+            (0, RUTABAGA_BLOB_MEM_HOST3D, None) => {
+                Self::create_host_shm_blob(resource_id, resource_create_blob)
+            }
             // Case 2: Guest memory with imported handle (CREATE_GUEST_HANDLE / PRIME import)
             //  It is the caller's responsibility to create such handles in response to
             //  the CREATE_GUEST_HANDLE flag being set by the guest, because the handle

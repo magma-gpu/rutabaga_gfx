@@ -57,6 +57,7 @@ struct CrossDomainCapabilities {
     uint32_t supported_channels;
     uint32_t supports_dmabuf;
     uint32_t supports_external_gpu_memory;
+    uint32_t use_shareable_ring_blob;
 };
 
 struct CrossDomainImageRequirements {
