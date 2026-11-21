@@ -166,7 +166,23 @@ impl VulkanoGralloc {
         let mut device_by_id: Map<DeviceId, Arc<Device>> = Default::default();
         let mut has_integrated_gpu = false;
 
-        for physical in instance.enumerate_physical_devices()? {
+        let (real_gpus, sw_gpus): (Vec<_>, Vec<_>) =
+            instance.enumerate_physical_devices()?.partition(|p| {
+                matches!(
+                    p.properties().device_type,
+                    PhysicalDeviceType::DiscreteGpu
+                        | PhysicalDeviceType::IntegratedGpu
+                        | PhysicalDeviceType::VirtualGpu
+                )
+            });
+
+        let candidates = if real_gpus.is_empty() {
+            sw_gpus
+        } else {
+            real_gpus
+        };
+
+        for physical in candidates {
             let queue_family_index = match physical.queue_family_properties().iter().position(|q| {
                 // We take the first queue family that supports graphics.
                 q.queue_flags.intersects(QueueFlags::GRAPHICS)
@@ -222,6 +238,25 @@ impl VulkanoGralloc {
         }))
     }
 
+    fn get_default_device(&self) -> RutabagaResult<&Arc<Device>> {
+        if self.has_integrated_gpu {
+            if let Some(dev) = self.devices.get(&PhysicalDeviceType::IntegratedGpu) {
+                return Ok(dev);
+            }
+        }
+        for dev_type in [
+            PhysicalDeviceType::DiscreteGpu,
+            PhysicalDeviceType::VirtualGpu,
+            PhysicalDeviceType::Cpu,
+            PhysicalDeviceType::Other,
+        ] {
+            if let Some(dev) = self.devices.get(&dev_type) {
+                return Ok(dev);
+            }
+        }
+        Err(RutabagaError::InvalidGrallocGpuType)
+    }
+
     // This function is used safely in this module because gralloc does not:
     //
     //  (1) bind images to any memory.
@@ -234,15 +269,7 @@ impl VulkanoGralloc {
         &mut self,
         info: ImageAllocationInfo,
     ) -> RutabagaResult<(Arc<image::sys::RawImage>, MemoryRequirements)> {
-        let device = if self.has_integrated_gpu {
-            self.devices
-                .get(&PhysicalDeviceType::IntegratedGpu)
-                .ok_or(RutabagaError::InvalidGrallocGpuType)?
-        } else {
-            self.devices
-                .get(&PhysicalDeviceType::DiscreteGpu)
-                .ok_or(RutabagaError::InvalidGrallocGpuType)?
-        };
+        let device = self.get_default_device()?.clone();
 
         let usage = match info.flags.uses_rendering() {
             true => ImageUsage::COLOR_ATTACHMENT,
@@ -312,16 +339,7 @@ impl Gralloc for VulkanoGralloc {
 
         let (raw_image, memory_requirements) = unsafe { self.create_image(info)? };
 
-        let device_type = if self.has_integrated_gpu {
-            &PhysicalDeviceType::IntegratedGpu
-        } else {
-            &PhysicalDeviceType::DiscreteGpu
-        };
-
-        let device = self
-            .devices
-            .get(device_type)
-            .ok_or(RutabagaError::InvalidGrallocGpuType)?;
+        let device = self.get_default_device()?.clone();
 
         let planar_layout = info.drm_format.planar_layout()?;
 
@@ -437,15 +455,7 @@ impl Gralloc for VulkanoGralloc {
 
         let vulkan_info = reqs.vulkan_info.ok_or(RutabagaError::InvalidVulkanInfo)?;
 
-        let device = if self.has_integrated_gpu {
-            self.devices
-                .get(&PhysicalDeviceType::IntegratedGpu)
-                .ok_or(RutabagaError::InvalidGrallocGpuType)?
-        } else {
-            self.devices
-                .get(&PhysicalDeviceType::DiscreteGpu)
-                .ok_or(RutabagaError::InvalidGrallocGpuType)?
-        };
+        let device = self.get_default_device()?.clone();
 
         if vulkan_info.memory_idx as usize
             >= device
@@ -454,7 +464,7 @@ impl Gralloc for VulkanoGralloc {
                 .memory_types
                 .len()
         {
-            return Err(RutabagaError::InvalidVulkanInfo.into());
+            return Err(RutabagaError::InvalidVulkanInfo);
         }
 
         let (export_handle_type, export_handle_types, rutabaga_type) =
