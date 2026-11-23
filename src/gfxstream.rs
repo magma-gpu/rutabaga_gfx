@@ -792,13 +792,6 @@ impl RutabagaComponent for Gfxstream {
         import_handle: RutabagaHandle,
         import_data: RutabagaImportData,
     ) -> RutabagaResult<Option<RutabagaResource>> {
-        let import_handle = MagmaGpuHandle::try_from(import_handle)?;
-        let raw_descriptor = import_handle.os_handle.into_raw_descriptor();
-        let stream_handle = stream_renderer_handle {
-            os_handle: raw_descriptor as i64,
-            handle_type: import_handle.handle_type,
-        };
-
         let stream_import_data = stream_renderer_import_data {
             flags: import_data.flags,
             info_3d: stream_renderer_3d_info {
@@ -817,17 +810,89 @@ impl RutabagaComponent for Gfxstream {
             size: import_data.size,
         };
 
-        // SAFETY:
-        // Safe because gfxstream is initialized by now, and the return value is checked before
-        // returning a new resource. The backing buffers are not supplied with this call.
-        let ret = unsafe {
-            stream_renderer_import_resource(resource_id, &stream_handle, &stream_import_data)
-        };
-        if ret != 0 {
-            // SAFETY: `stream_renderer_import_resource` failed before taking ownership of
-            // `raw_descriptor`.
-            let _ = unsafe { OwnedDescriptor::from_raw_descriptor(raw_descriptor) };
-            ret_to_res(ret)?;
+        match import_handle {
+            RutabagaHandle::MagmaGpuHandle(mesa_handle) => {
+                let raw_descriptor = mesa_handle.os_handle.into_raw_descriptor();
+                let stream_handle = stream_renderer_handle {
+                    os_handle: raw_descriptor as i64,
+                    handle_type: mesa_handle.handle_type,
+                };
+
+                // SAFETY:
+                // Safe because gfxstream is initialized by now, and the return value is checked
+                // before returning a new resource. The backing buffers are not supplied with this
+                // call.
+                let ret = unsafe {
+                    stream_renderer_import_resource(
+                        resource_id,
+                        &stream_handle,
+                        &stream_import_data,
+                    )
+                };
+                if ret != 0 {
+                    // SAFETY: `stream_renderer_import_resource` failed before taking ownership of
+                    // `raw_descriptor`.
+                    let _ = unsafe { OwnedDescriptor::from_raw_descriptor(raw_descriptor) };
+                    ret_to_res(ret)?;
+                }
+            }
+            RutabagaHandle::AhbInfo(ahb_info) => {
+                #[cfg(target_os = "android")]
+                {
+                    use nativewindow::AhbInfo as NativeAhbInfo;
+                    use nativewindow::HardwareBuffer;
+                    use std::os::fd::FromRawFd;
+                    use std::os::fd::OwnedFd;
+
+                    let fds = ahb_info
+                        .fds
+                        .into_iter()
+                        .map(|fd| {
+                            // SAFETY: Each descriptor is valid and exclusively owned by `ahb_info`.
+                            unsafe { OwnedFd::from_raw_fd(fd.into_raw_descriptor()) }
+                        })
+                        .collect();
+                    let buffer = HardwareBuffer::try_from(NativeAhbInfo {
+                        fds,
+                        data: ahb_info.metadata,
+                    })
+                    .map_err(|status| {
+                        log::error!(
+                            "Gfxstream::import: failed to unmarshal AHB for resource {}: {:?}",
+                            resource_id,
+                            status
+                        );
+                        MagmaGpuError::InvalidMagmaHandle
+                    })?;
+                    let raw_ahb = buffer.into_raw();
+                    let stream_handle = stream_renderer_handle {
+                        os_handle: raw_ahb.as_ptr() as usize as i64,
+                        handle_type: RUTABAGA_HANDLE_TYPE_PLATFORM_AHB,
+                    };
+
+                    // SAFETY:
+                    // Safe because gfxstream is initialized by now and `raw_ahb` is a valid owned
+                    // `AHardwareBuffer` pointer whose ownership transfers on success.
+                    let ret = unsafe {
+                        stream_renderer_import_resource(
+                            resource_id,
+                            &stream_handle,
+                            &stream_import_data,
+                        )
+                    };
+                    if ret != 0 {
+                        // SAFETY: `stream_renderer_import_resource` failed before taking ownership
+                        // of `raw_ahb`.
+                        let _ = unsafe { HardwareBuffer::from_raw(raw_ahb) };
+                        ret_to_res(ret)?;
+                    }
+                }
+                #[cfg(not(target_os = "android"))]
+                {
+                    let _ = ahb_info;
+                    return Err(MagmaGpuError::InvalidMagmaHandle.into());
+                }
+            }
         }
 
         if (import_data.flags & STREAM_RENDERER_IMPORT_FLAG_RESOURCE_EXISTS) != 0 {

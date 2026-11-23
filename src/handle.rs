@@ -1,6 +1,7 @@
 // Copyright 2025 Google
 // SPDX-License-Identifier: BSD-3-Clause
 
+use magma_gpu::protocols::broccolini_protocol::BroccoliniHandle;
 use magma_gpu::util::Error as MagmaGpuError;
 use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::OwnedDescriptor;
@@ -83,6 +84,28 @@ impl RutabagaHandle {
         match self {
             RutabagaHandle::MagmaGpuHandle(handle) => Some(handle),
             _ => None,
+        }
+    }
+}
+
+impl From<RutabagaHandle> for BroccoliniHandle {
+    fn from(handle: RutabagaHandle) -> Self {
+        match handle {
+            RutabagaHandle::MagmaGpuHandle(h) => BroccoliniHandle::Magma(h),
+            RutabagaHandle::AhbInfo(AhbInfo { fds, metadata }) => {
+                BroccoliniHandle::Ahb { fds, metadata }
+            }
+        }
+    }
+}
+
+impl From<BroccoliniHandle> for RutabagaHandle {
+    fn from(handle: BroccoliniHandle) -> Self {
+        match handle {
+            BroccoliniHandle::Magma(h) => RutabagaHandle::MagmaGpuHandle(h),
+            BroccoliniHandle::Ahb { fds, metadata } => {
+                RutabagaHandle::AhbInfo(AhbInfo { fds, metadata })
+            }
         }
     }
 }
