@@ -6,7 +6,9 @@
 use std::collections::VecDeque;
 use std::mem::size_of;
 
+use crate::protocols::ipc::Message;
 use crate::protocols::ipc::Protocol;
+use crate::protocols::ipc::Stream;
 pub use crate::protocols::kumquat_gpu_protocol::DeviceId;
 pub use crate::protocols::kumquat_gpu_protocol::VulkanInfo;
 use crate::util::Error;
@@ -36,11 +38,18 @@ pub const BROCCOLINI_RESP_RESOURCE_CREATE: u32 = 0x202;
 pub const BROCCOLINI_RESP_CREATE_FENCE: u32 = 0x203;
 pub const BROCCOLINI_RESP_CAPSET_INFO: u32 = 0x204;
 pub const BROCCOLINI_RESP_CAPSET: u32 = 0x205;
+pub const BROCCOLINI_RESP_ERROR: u32 = 0x206;
 
 // Bitflags for broccolini_resp_resource_create::flags
 pub const BROCCOLINI_RESOURCE_FLAG_MAP_INFO: u32 = 1 << 0;
 pub const BROCCOLINI_RESOURCE_FLAG_VULKAN_INFO: u32 = 1 << 1;
 pub const BROCCOLINI_RESOURCE_FLAG_3D_INFO: u32 = 1 << 2;
+
+/// Handle type tag for Android HardwareBuffer (matches RUTABAGA_HANDLE_TYPE_PLATFORM_AHB).
+pub const BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB: u32 = 0x0300_0000;
+
+/// Maximum number of descriptors allowed in a single AHB transfer.
+pub const BROCCOLINI_MAX_AHB_FDS: usize = crate::util::TUBE_MAX_IDENTIFIERS;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
@@ -113,6 +122,8 @@ pub struct broccolini_resp_resource_create {
     pub strides: [u32; 4],
     pub offsets: [u32; 4],
     pub modifier: u64,
+    pub num_fds: u32,
+    pub metadata_size: u32,
 }
 
 #[repr(C)]
@@ -130,6 +141,8 @@ pub struct broccolini_ctx_attach_resource {
     pub modifier: u64,
     pub size: u64,
     pub vulkan_info: VulkanInfo,
+    pub num_fds: u32,
+    pub metadata_size: u32,
     pub padding: u32,
 }
 
@@ -164,6 +177,117 @@ pub struct broccolini_resp_create_fence {
 }
 
 #[derive(Debug)]
+pub enum BroccoliniHandle {
+    Magma(MagmaGpuHandle),
+    Ahb {
+        fds: Vec<OwnedDescriptor>,
+        metadata: Vec<u8>,
+    },
+}
+
+trait ResourceHandleCmd: FromBytes + IntoBytes + Immutable {
+    fn set_handle_header(&mut self, handle_type: u32, num_fds: u32, metadata_size: u32);
+}
+
+impl ResourceHandleCmd for broccolini_resp_resource_create {
+    fn set_handle_header(&mut self, handle_type: u32, num_fds: u32, metadata_size: u32) {
+        self.handle_type = handle_type;
+        self.num_fds = num_fds;
+        self.metadata_size = metadata_size;
+    }
+}
+
+impl ResourceHandleCmd for broccolini_ctx_attach_resource {
+    fn set_handle_header(&mut self, handle_type: u32, num_fds: u32, metadata_size: u32) {
+        self.handle_type = handle_type;
+        self.num_fds = num_fds;
+        self.metadata_size = metadata_size;
+    }
+}
+
+fn write_with_resource_handle<T: ResourceHandleCmd>(
+    stream: &mut Stream<BroccoliniProtocol>,
+    mut cmd: T,
+    handle: BroccoliniHandle,
+) -> Result<()> {
+    match handle {
+        BroccoliniHandle::Magma(magma_handle) => {
+            cmd.set_handle_header(magma_handle.handle_type, 1, 0);
+            stream.write(Message::CmdWithHandle(cmd, magma_handle))
+        }
+        BroccoliniHandle::Ahb { fds, metadata } => {
+            if fds.is_empty() || fds.len() > BROCCOLINI_MAX_AHB_FDS || metadata.is_empty() {
+                return Err(Error::InvalidMagmaHandle);
+            }
+            let num_fds = u32::try_from(fds.len())?;
+            let metadata_size = u32::try_from(metadata.len())?;
+            cmd.set_handle_header(BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB, num_fds, metadata_size);
+            let handles = fds
+                .into_iter()
+                .map(|os_handle| MagmaGpuHandle {
+                    os_handle,
+                    handle_type: 0,
+                })
+                .collect();
+            stream.write(Message::CmdWithDataAndHandles(cmd, &metadata, handles))
+        }
+    }
+}
+
+pub fn write_resp_resource_create(
+    stream: &mut Stream<BroccoliniProtocol>,
+    resp: broccolini_resp_resource_create,
+    handle: BroccoliniHandle,
+) -> Result<()> {
+    write_with_resource_handle(stream, resp, handle)
+}
+
+pub fn write_ctx_attach_resource(
+    stream: &mut Stream<BroccoliniProtocol>,
+    cmd: broccolini_ctx_attach_resource,
+    handle: BroccoliniHandle,
+) -> Result<()> {
+    write_with_resource_handle(stream, cmd, handle)
+}
+
+fn decode_resource_handle(
+    handle_type: u32,
+    num_fds: u32,
+    metadata_size: u32,
+    reader: &mut Reader<'_>,
+    descriptors: &mut VecDeque<OwnedDescriptor>,
+) -> Result<BroccoliniHandle> {
+    if handle_type == BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB {
+        let num_fds: usize = num_fds.try_into()?;
+        let metadata_size: usize = metadata_size.try_into()?;
+        if num_fds == 0
+            || num_fds > BROCCOLINI_MAX_AHB_FDS
+            || metadata_size == 0
+            || descriptors.len() < num_fds
+            || reader.available_bytes() < metadata_size
+        {
+            return Err(Error::InvalidMagmaHandle);
+        }
+        let mut metadata = vec![0u8; metadata_size];
+        reader.read_exact(&mut metadata)?;
+        let mut fds = Vec::with_capacity(num_fds);
+        for _ in 0..num_fds {
+            fds.push(descriptors.pop_front().ok_or(Error::InvalidMagmaHandle)?);
+        }
+        Ok(BroccoliniHandle::Ahb { fds, metadata })
+    } else {
+        if num_fds != 1 || metadata_size != 0 {
+            return Err(Error::InvalidMagmaHandle);
+        }
+        let os_handle = descriptors.pop_front().ok_or(Error::Unsupported)?;
+        Ok(BroccoliniHandle::Magma(MagmaGpuHandle {
+            os_handle,
+            handle_type,
+        }))
+    }
+}
+
+#[derive(Debug)]
 pub enum BroccoliniProtocol {
     // Zygote messages
     GetCapsetInfo(u32),
@@ -181,8 +305,8 @@ pub enum BroccoliniProtocol {
 
     // Worker messages
     ResourceCreateBlob(broccolini_resource_create_blob, Option<MagmaGpuHandle>),
-    RespResourceCreate(broccolini_resp_resource_create, MagmaGpuHandle),
-    CtxAttachResource(broccolini_ctx_attach_resource, MagmaGpuHandle),
+    RespResourceCreate(broccolini_resp_resource_create, BroccoliniHandle),
+    CtxAttachResource(broccolini_ctx_attach_resource, BroccoliniHandle),
     CtxDetachResource(u32 /* resource_id */),
     CmdSubmit3d {
         cmd_buf: Vec<u8>,
@@ -193,6 +317,7 @@ pub enum BroccoliniProtocol {
     RespCreateFence(u64 /* fence_id */, MagmaGpuHandle),
     CtxDestroy,
     OkNoData,
+    RespError,
     Terminate,
 }
 
@@ -245,20 +370,24 @@ impl Protocol for BroccoliniProtocol {
             }
             BROCCOLINI_RESP_RESOURCE_CREATE => {
                 let resp: broccolini_resp_resource_create = reader.read_obj()?;
-                let os_handle = descriptors.pop_front().ok_or(Error::Unsupported)?;
-                let handle = MagmaGpuHandle {
-                    os_handle,
-                    handle_type: resp.handle_type,
-                };
+                let handle = decode_resource_handle(
+                    resp.handle_type,
+                    resp.num_fds,
+                    resp.metadata_size,
+                    reader,
+                    descriptors,
+                )?;
                 BroccoliniProtocol::RespResourceCreate(resp, handle)
             }
             BROCCOLINI_CMD_CTX_ATTACH_RESOURCE => {
                 let req: broccolini_ctx_attach_resource = reader.read_obj()?;
-                let os_handle = descriptors.pop_front().ok_or(Error::Unsupported)?;
-                let handle = MagmaGpuHandle {
-                    os_handle,
-                    handle_type: req.handle_type,
-                };
+                let handle = decode_resource_handle(
+                    req.handle_type,
+                    req.num_fds,
+                    req.metadata_size,
+                    reader,
+                    descriptors,
+                )?;
                 BroccoliniProtocol::CtxAttachResource(req, handle)
             }
             BROCCOLINI_CMD_CTX_DETACH_RESOURCE => {
@@ -320,11 +449,247 @@ impl Protocol for BroccoliniProtocol {
                 reader.consume(size_of::<broccolini_ctrl_hdr>());
                 BroccoliniProtocol::OkNoData
             }
+            BROCCOLINI_RESP_ERROR => {
+                reader.consume(size_of::<broccolini_ctrl_hdr>());
+                BroccoliniProtocol::RespError
+            }
             _ => {
                 return Err(Error::Unsupported);
             }
         };
 
         Ok(protocol)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::create_pipe;
+    use crate::util::AsBorrowedDescriptor;
+    use zerocopy::IntoBytes;
+
+    fn make_descriptors(count: usize) -> VecDeque<OwnedDescriptor> {
+        let mut fds = VecDeque::with_capacity(count);
+        for _ in 0..count {
+            let (read_pipe, _write_pipe) = create_pipe().expect("create_pipe failed");
+            let desc = read_pipe
+                .as_borrowed_descriptor()
+                .try_clone()
+                .expect("try_clone failed");
+            fds.push_back(desc);
+        }
+        fds
+    }
+
+    #[test]
+    fn decode_ahb_resp_resource_create_round_trip() {
+        let metadata = [0x11u8, 0x22, 0x33, 0x44, 0x55];
+        let resp = broccolini_resp_resource_create {
+            hdr: broccolini_ctrl_hdr {
+                type_: BROCCOLINI_RESP_RESOURCE_CREATE,
+                payload: 0,
+            },
+            resource_id: 7,
+            handle_type: BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB,
+            num_fds: 2,
+            metadata_size: metadata.len() as u32,
+            ..Default::default()
+        };
+        let mut buf = Vec::new();
+        buf.extend_from_slice(resp.as_bytes());
+        buf.extend_from_slice(&metadata);
+
+        let mut reader = Reader::new(&buf);
+        let mut descriptors = make_descriptors(2);
+        let decoded = BroccoliniProtocol::decode(&mut reader, &mut descriptors).unwrap();
+        assert_eq!(reader.available_bytes(), 0);
+        assert!(descriptors.is_empty());
+
+        match decoded {
+            BroccoliniProtocol::RespResourceCreate(
+                decoded_resp,
+                BroccoliniHandle::Ahb {
+                    fds,
+                    metadata: decoded_meta,
+                },
+            ) => {
+                assert_eq!(decoded_resp.resource_id, 7);
+                assert_eq!(fds.len(), 2);
+                assert_eq!(decoded_meta, metadata);
+            }
+            other => panic!("unexpected decoded variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decode_ahb_rejects_invalid_bounds() {
+        let make_attach_bytes =
+            |handle_type: u32, num_fds: u32, metadata_size: u32, payload: &[u8]| {
+                let req = broccolini_ctx_attach_resource {
+                    hdr: broccolini_ctrl_hdr {
+                        type_: BROCCOLINI_CMD_CTX_ATTACH_RESOURCE,
+                        payload: 0,
+                    },
+                    resource_id: 9,
+                    handle_type,
+                    num_fds,
+                    metadata_size,
+                    ..Default::default()
+                };
+                let mut buf = Vec::new();
+                buf.extend_from_slice(req.as_bytes());
+                buf.extend_from_slice(payload);
+                buf
+            };
+
+        // Zero FDs, too many FDs, zero metadata, truncated metadata, short descriptors.
+        let cases = [
+            (
+                BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB,
+                0,
+                4,
+                &[1u8, 2, 3, 4][..],
+                1,
+            ),
+            (
+                BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB,
+                (BROCCOLINI_MAX_AHB_FDS + 1) as u32,
+                4,
+                &[1u8, 2, 3, 4][..],
+                1,
+            ),
+            (BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB, 1, 0, &[][..], 1),
+            (
+                BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB,
+                1,
+                8,
+                &[1u8, 2, 3, 4][..],
+                1,
+            ),
+            (
+                BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB,
+                2,
+                4,
+                &[1u8, 2, 3, 4][..],
+                1,
+            ),
+            // Non-AHB must have num_fds == 1 and metadata_size == 0.
+            (1, 2, 0, &[][..], 2),
+            (1, 1, 4, &[1u8, 2, 3, 4][..], 1),
+        ];
+
+        for (handle_type, num_fds, metadata_size, payload, desc_count) in cases {
+            let buf = make_attach_bytes(handle_type, num_fds, metadata_size, payload);
+            let mut reader = Reader::new(&buf);
+            let mut descriptors = make_descriptors(desc_count);
+            assert!(
+                BroccoliniProtocol::decode(&mut reader, &mut descriptors).is_err(),
+                "expected error for handle_type={handle_type} num_fds={num_fds} metadata_size={metadata_size}"
+            );
+        }
+    }
+
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    #[test]
+    fn write_and_decode_resource_handle_round_trip() {
+        use crate::util::Tube;
+
+        let (tx_tube, rx_fd) = Tube::pair().expect("Tube::pair failed");
+        let mut tx = Stream::<BroccoliniProtocol>::new(tx_tube);
+        let mut rx = Stream::<BroccoliniProtocol>::new(
+            Tube::try_from(rx_fd).expect("Tube::try_from failed"),
+        );
+
+        // Round-trip AHB via write_resp_resource_create.
+        let metadata = vec![0xaa, 0xbb, 0xcc, 0xdd];
+        let resp = broccolini_resp_resource_create {
+            hdr: broccolini_ctrl_hdr {
+                type_: BROCCOLINI_RESP_RESOURCE_CREATE,
+                payload: 0,
+            },
+            resource_id: 11,
+            ..Default::default()
+        };
+        write_resp_resource_create(
+            &mut tx,
+            resp,
+            BroccoliniHandle::Ahb {
+                fds: make_descriptors(2).into(),
+                metadata: metadata.clone(),
+            },
+        )
+        .unwrap();
+        let msgs = rx.read().unwrap();
+        assert_eq!(msgs.len(), 1);
+        match &msgs[0] {
+            BroccoliniProtocol::RespResourceCreate(
+                decoded_resp,
+                BroccoliniHandle::Ahb {
+                    fds,
+                    metadata: decoded_meta,
+                },
+            ) => {
+                assert_eq!(decoded_resp.resource_id, 11);
+                assert_eq!(fds.len(), 2);
+                assert_eq!(decoded_meta, &metadata);
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
+
+        // Round-trip AHB via write_ctx_attach_resource.
+        let attach = broccolini_ctx_attach_resource {
+            hdr: broccolini_ctrl_hdr {
+                type_: BROCCOLINI_CMD_CTX_ATTACH_RESOURCE,
+                payload: 0,
+            },
+            resource_id: 12,
+            ..Default::default()
+        };
+        write_ctx_attach_resource(
+            &mut tx,
+            attach,
+            BroccoliniHandle::Ahb {
+                fds: make_descriptors(1).into(),
+                metadata: metadata.clone(),
+            },
+        )
+        .unwrap();
+        let msgs = rx.read().unwrap();
+        assert_eq!(msgs.len(), 1);
+        match &msgs[0] {
+            BroccoliniProtocol::CtxAttachResource(
+                decoded_req,
+                BroccoliniHandle::Ahb {
+                    fds,
+                    metadata: decoded_meta,
+                },
+            ) => {
+                assert_eq!(decoded_req.resource_id, 12);
+                assert_eq!(fds.len(), 1);
+                assert_eq!(decoded_meta, &metadata);
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
+
+        // Reject invalid AHB bounds on write.
+        assert!(write_ctx_attach_resource(
+            &mut tx,
+            attach,
+            BroccoliniHandle::Ahb {
+                fds: Vec::new(),
+                metadata: metadata.clone(),
+            },
+        )
+        .is_err());
+        assert!(write_ctx_attach_resource(
+            &mut tx,
+            attach,
+            BroccoliniHandle::Ahb {
+                fds: make_descriptors(1).into(),
+                metadata: Vec::new(),
+            },
+        )
+        .is_err());
     }
 }

@@ -65,6 +65,8 @@ impl fmt::Debug for Handle {
     }
 }
 
+pub const TUBE_MAX_IDENTIFIERS: usize = 28;
+
 pub enum TubeType {
     Stream,
     Packet,

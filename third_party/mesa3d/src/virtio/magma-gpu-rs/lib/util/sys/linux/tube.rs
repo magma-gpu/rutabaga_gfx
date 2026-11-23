@@ -38,8 +38,7 @@ use crate::util::Error;
 use crate::util::OwnedDescriptor;
 use crate::util::Result as MagmaGpuResult;
 use crate::util::TubeType;
-
-const MAX_IDENTIFIERS: usize = 28;
+use crate::util::TUBE_MAX_IDENTIFIERS as MAX_IDENTIFIERS;
 
 pub struct Tube {
     socket: OwnedDescriptor,

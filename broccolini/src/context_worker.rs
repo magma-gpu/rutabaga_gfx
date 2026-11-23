@@ -9,7 +9,6 @@ use magma_gpu::protocols::broccolini_protocol::*;
 use magma_gpu::protocols::ipc::Message;
 use magma_gpu::protocols::ipc::Stream;
 use magma_gpu::util::Error as MagmaGpuError;
-use magma_gpu::util::Handle as MagmaGpuHandle;
 use magma_gpu::util::OwnedDescriptor;
 use magma_gpu::util::WritePipe;
 use magma_gpu::util::Writer;
@@ -182,15 +181,13 @@ pub fn run_context_worker_loop(
                         }
                     };
                     let exported = rutabaga.export_blob(res_id)?;
-                    let handle = MagmaGpuHandle::try_from(exported)?;
-
                     let resp = broccolini_resp_resource_create {
                         hdr: broccolini_ctrl_hdr {
                             type_: BROCCOLINI_RESP_RESOURCE_CREATE,
                             payload: 0,
                         },
                         resource_id: res_id,
-                        handle_type: handle.handle_type,
+                        handle_type: 0,
                         flags,
                         map_info,
                         vulkan_info: VulkanInfo {
@@ -206,8 +203,10 @@ pub fn run_context_worker_loop(
                         strides: info_3d.strides,
                         offsets: info_3d.offsets,
                         modifier: info_3d.modifier,
+                        num_fds: 0,
+                        metadata_size: 0,
                     };
-                    stream.write(Message::CmdWithHandle(resp, handle))?;
+                    write_resp_resource_create(&mut stream, resp, exported.into())?;
                 }
                 BroccoliniProtocol::CtxAttachResource(attach_req, handle) => {
                     let import_data = RutabagaImportData {
@@ -229,9 +228,27 @@ pub fn run_context_worker_loop(
                         },
                         size: attach_req.size,
                     };
-                    rutabaga.resource_import(attach_req.resource_id, handle.into(), import_data)?;
-                    let _ = rutabaga.context_attach_resource(ctx_id, attach_req.resource_id);
-                    send_ok_nodata(&mut stream)?;
+                    match rutabaga
+                        .resource_import(attach_req.resource_id, handle.into(), import_data)
+                        .and_then(|()| {
+                            rutabaga
+                                .context_attach_resource(ctx_id, attach_req.resource_id)
+                                .inspect_err(|_| {
+                                    let _ = rutabaga.unref_resource(attach_req.resource_id);
+                                })
+                        }) {
+                        Ok(()) => send_ok_nodata(&mut stream)?,
+                        Err(e) => {
+                            eprintln!(
+                                "broccolini: worker ctx_id={ctx_id} attach({}) failed: {e:?}",
+                                attach_req.resource_id
+                            );
+                            stream.write(Message::Cmd(broccolini_ctrl_hdr {
+                                type_: BROCCOLINI_RESP_ERROR,
+                                payload: 0,
+                            }))?;
+                        }
+                    }
                 }
                 BroccoliniProtocol::CtxDetachResource(res_id) => {
                     let _ = rutabaga.context_detach_resource(ctx_id, res_id);

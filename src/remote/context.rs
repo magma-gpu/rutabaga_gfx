@@ -33,10 +33,13 @@ use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::VulkanInfo as RutabagaVulkanInfo;
 use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
+use crate::rutabaga_utils::RUTABAGA_HANDLE_TYPE_PLATFORM_AHB;
 use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_3D_INFO;
 use crate::rutabaga_utils::RUTABAGA_IMPORT_FLAG_VULKAN_INFO;
 use crate::rutabaga_utils::RUTABAGA_MAP_ACCESS_RW;
 use crate::rutabaga_utils::RUTABAGA_MAP_CACHE_CACHED;
+
+const _: () = assert!(BROCCOLINI_HANDLE_TYPE_PLATFORM_AHB == RUTABAGA_HANDLE_TYPE_PLATFORM_AHB);
 
 pub(crate) struct FenceState {
     pub(crate) read_pipe: ReadPipe,
@@ -128,6 +131,10 @@ impl RutabagaContext for RemoteContext {
         let protocols = self.stream.read()?;
         for protocol in protocols {
             if let BroccoliniProtocol::RespResourceCreate(resp, handle) = protocol {
+                let is_shm = matches!(
+                    &handle,
+                    BroccoliniHandle::Magma(h) if h.handle_type == MAGMA_GPU_HANDLE_TYPE_MEM_SHM
+                );
                 let rutabaga_vk_info = RutabagaVulkanInfo {
                     memory_idx: resp.vulkan_info.memory_idx,
                     device_id: RutabagaDeviceId {
@@ -136,7 +143,7 @@ impl RutabagaContext for RemoteContext {
                     },
                 };
                 let vulkan_info = if resp.flags & BROCCOLINI_RESOURCE_FLAG_VULKAN_INFO == 0
-                    || handle.handle_type == MAGMA_GPU_HANDLE_TYPE_MEM_SHM
+                    || is_shm
                     || rutabaga_vk_info == RutabagaVulkanInfo::default()
                 {
                     None
@@ -166,7 +173,7 @@ impl RutabagaContext for RemoteContext {
 
                 return Ok(RutabagaResource {
                     resource_id,
-                    handle: Some(Arc::new(handle.into())),
+                    handle: Some(Arc::new(RutabagaHandle::from(handle))),
                     blob: true,
                     blob_mem: resource_create_blob.blob_mem,
                     blob_flags: resource_create_blob.blob_flags,
@@ -247,12 +254,6 @@ impl RutabagaContext for RemoteContext {
             );
             return;
         };
-        let Some(mesa_handle) = handle.as_mesa_handle() else {
-            return;
-        };
-        let Ok(cloned_handle) = mesa_handle.try_clone() else {
-            return;
-        };
 
         let mut flags = 0u32;
         let info_3d = if let Some(info) = resource.info_3d {
@@ -280,13 +281,14 @@ impl RutabagaContext for RemoteContext {
         } else {
             VulkanInfo::default()
         };
+
         let attach_cmd = broccolini_ctx_attach_resource {
             hdr: broccolini_ctrl_hdr {
                 type_: BROCCOLINI_CMD_CTX_ATTACH_RESOURCE,
                 payload: 0,
             },
             resource_id: resource.resource_id,
-            handle_type: cloned_handle.handle_type,
+            handle_type: 0,
             flags,
             width: info_3d.width,
             height: info_3d.height,
@@ -296,20 +298,60 @@ impl RutabagaContext for RemoteContext {
             modifier: info_3d.modifier,
             size: resource.size,
             vulkan_info,
+            num_fds: 0,
+            metadata_size: 0,
             padding: 0,
         };
-        if self
-            .stream
-            .write(Message::CmdWithHandle(attach_cmd, cloned_handle))
-            .is_ok()
+
+        let cloned_handle = match handle.try_clone() {
+            Ok(h) => h,
+            Err(e) => {
+                error!(
+                    "RemoteContext (ctx_id={}) failed to clone handle for resource {}: {:?}",
+                    self.ctx_id, resource.resource_id, e
+                );
+                return;
+            }
+        };
+
+        if let Err(e) =
+            write_ctx_attach_resource(&mut self.stream, attach_cmd, cloned_handle.into())
         {
-            if let Ok(protocols) = self.stream.read() {
+            error!(
+                "RemoteContext (ctx_id={}) failed to send attach for resource {}: {:?}",
+                self.ctx_id, resource.resource_id, e
+            );
+            return;
+        }
+        match self.stream.read() {
+            Ok(protocols)
                 if protocols
                     .iter()
-                    .any(|p| matches!(p, BroccoliniProtocol::OkNoData))
-                {
-                    self.resident_resources.insert(resource.resource_id);
-                }
+                    .any(|p| matches!(p, BroccoliniProtocol::OkNoData)) =>
+            {
+                self.resident_resources.insert(resource.resource_id);
+            }
+            Ok(protocols)
+                if protocols
+                    .iter()
+                    .any(|p| matches!(p, BroccoliniProtocol::RespError)) =>
+            {
+                error!(
+                    "RemoteContext (ctx_id={}) worker failed to attach resource {}",
+                    self.ctx_id, resource.resource_id
+                );
+            }
+            Ok(protocols) => {
+                error!(
+                    "RemoteContext (ctx_id={}) unexpected attach response for resource {}: {:?}",
+                    self.ctx_id, resource.resource_id, protocols
+                );
+            }
+            Err(e) => {
+                error!(
+                    "RemoteContext (ctx_id={}) failed to read attach response for resource {}: {:?}",
+                    self.ctx_id, resource.resource_id, e
+                );
             }
         }
     }
