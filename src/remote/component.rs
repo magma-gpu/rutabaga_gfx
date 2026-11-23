@@ -25,6 +25,7 @@ use super::context::FenceState;
 use super::context::RemoteContext;
 use super::ZygoteChannel;
 use crate::handle::RutabagaHandle;
+use crate::resource::Rutabaga2DInfo;
 use crate::resource::RutabagaResource;
 use crate::rutabaga_core::RutabagaComponent;
 use crate::rutabaga_core::RutabagaContext;
@@ -39,8 +40,80 @@ use crate::rutabaga_utils::RutabagaResult;
 use crate::rutabaga_utils::Transfer3D;
 use crate::rutabaga_utils::RUTABAGA_BLOB_MEM_GUEST;
 use crate::rutabaga_utils::RUTABAGA_CONTEXT_INIT_CAPSET_ID_MASK;
+use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 
 const REMOTE_FENCE_SHUTDOWN_ID: u64 = u64::MAX;
+
+/// Lightweight local context for default (`capset_id == 0`) virtio-gpu contexts
+/// created lazily by guest DRM clients for dumb/2D resource attachment without
+/// initializing a 3D capset, avoiding spawning an unused render server worker.
+struct DefaultRemoteContext {
+    component_type: RutabagaComponentType,
+    fence_handler: RutabagaFenceHandler,
+}
+
+impl RutabagaContext for DefaultRemoteContext {
+    fn context_create_blob(
+        &mut self,
+        resource_id: u32,
+        resource_create_blob: ResourceCreateBlob,
+        iovec_opt: Option<Vec<RutabagaIovec>>,
+        handle_opt: Option<RutabagaHandle>,
+    ) -> RutabagaResult<RutabagaResource> {
+        if resource_create_blob.blob_mem != RUTABAGA_BLOB_MEM_GUEST {
+            return Err(MagmaGpuError::Unsupported.into());
+        }
+        let info_2d = Rutabaga2DInfo {
+            width: 0,
+            height: 0,
+            host_mem: None,
+            scanout_stride: None,
+        };
+        Ok(RutabagaResource {
+            resource_id,
+            handle: handle_opt.map(Arc::new),
+            blob: true,
+            blob_mem: resource_create_blob.blob_mem,
+            blob_flags: resource_create_blob.blob_flags,
+            map_info: None,
+            info_2d: Some(info_2d),
+            info_3d: None,
+            vulkan_info: None,
+            backing_iovecs: iovec_opt,
+            component_mask: 1 << (self.component_type as u8),
+            size: resource_create_blob.size,
+            mapping: None,
+        })
+    }
+
+    fn submit_cmd(
+        &mut self,
+        _commands: &mut [u8],
+        _fence_ids: &[u64],
+        _shareable_fences: Vec<magma_gpu::util::Handle>,
+    ) -> RutabagaResult<()> {
+        Err(MagmaGpuError::Unsupported.into())
+    }
+
+    fn attach(&mut self, _resource: &mut RutabagaResource) {}
+
+    fn detach(&mut self, _resource: &RutabagaResource) {}
+
+    fn context_create_fence(
+        &mut self,
+        fence: RutabagaFence,
+    ) -> RutabagaResult<Option<magma_gpu::util::Handle>> {
+        if fence.flags & RUTABAGA_FLAG_FENCE_HOST_SHAREABLE != 0 {
+            return Err(MagmaGpuError::Unsupported.into());
+        }
+        self.fence_handler.call(fence);
+        Ok(None)
+    }
+
+    fn component_type(&self) -> RutabagaComponentType {
+        self.component_type
+    }
+}
 
 pub struct RemoteComponent {
     zygote: Arc<ZygoteChannel>,
@@ -306,6 +379,12 @@ impl RutabagaComponent for RemoteComponent {
         fence_handler: RutabagaFenceHandler,
     ) -> RutabagaResult<Box<dyn RutabagaContext>> {
         let capset_id = context_init & RUTABAGA_CONTEXT_INIT_CAPSET_ID_MASK;
+        if capset_id == 0 && self.component_type == RutabagaComponentType::Gfxstream {
+            return Ok(Box::new(DefaultRemoteContext {
+                component_type: self.component_type,
+                fence_handler,
+            }));
+        }
         if !self.is_remote_capset(capset_id) {
             return Err(RutabagaError::InvalidComponent);
         }
