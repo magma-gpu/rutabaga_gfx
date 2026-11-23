@@ -49,6 +49,7 @@ impl WorkerProcess {
         });
 
         let (child_tube, parent_fd) = Tube::pair()?;
+        let parent_pid = std::process::id() as libc::pid_t;
 
         // SAFETY: `fork()` is called from the single-threaded Zygote before initializing GPU drivers.
         let pid = unsafe { libc::fork() };
@@ -59,11 +60,23 @@ impl WorkerProcess {
         }
 
         if pid == 0 {
-            drop(parent_fd);
-            // SAFETY: Resetting SIGCHLD to default in the child process is safe.
+            // SAFETY: `prctl`, `getppid`, `_exit`, and `signal` are direct libc syscalls with
+            // valid constant arguments (`PR_SET_PDEATHSIG` with `SIGKILL`, `SIGCHLD` with
+            // `SIG_DFL`) and do not access Rust memory or non-async-signal-safe state after fork.
             unsafe {
+                let ret = libc::prctl(
+                    libc::PR_SET_PDEATHSIG,
+                    libc::SIGKILL as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                );
+                if ret != 0 || libc::getppid() != parent_pid {
+                    libc::_exit(1);
+                }
                 libc::signal(libc::SIGCHLD, libc::SIG_DFL);
             }
+            drop(parent_fd);
             let code = match f(Stream::new(child_tube)) {
                 Ok(()) => 0,
                 Err(e) => {
