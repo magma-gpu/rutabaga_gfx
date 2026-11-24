@@ -1280,6 +1280,11 @@ impl RutabagaBuilder {
         }
     }
 
+    /// Set the remote capset mask for contexts routed to the render server.
+    pub fn set_remote_capset_mask(mut self, _remote_capset_mask: u64) -> RutabagaBuilder {
+        self
+    }
+
     /// Set display width for the RutabagaBuilder
     pub fn set_display_width(mut self, display_width: u32) -> RutabagaBuilder {
         self.display_width = display_width;
