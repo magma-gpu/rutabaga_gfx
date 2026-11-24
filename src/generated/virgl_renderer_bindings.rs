@@ -506,3 +506,10 @@ extern "C" {
         num_in_fences: u32,
     ) -> ::std::os::raw::c_int;
 }
+#[cfg(virgl_renderer_unstable)]
+extern "C" {
+    pub fn virgl_renderer_resource_export_ahb(
+        res_id: u32,
+        out_ahb: *mut *mut ::std::os::raw::c_void,
+    ) -> ::std::os::raw::c_int;
+}
