@@ -11,6 +11,7 @@ licenses = ["BSD", "MIT"]
 license_texts = ["LICENSE"]
 
 [target_renames]
+inc_include = "inc_include_rutabaga"
 magma_gpu = "magma_gpu_rutabaga"
 rust_global_args = "rust_global_args_rutabaga"
 

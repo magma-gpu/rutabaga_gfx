@@ -56,3 +56,6 @@ zerocopy = [
 zerocopy-derive = [
     { target_name = "libzerocopy_derive", proc_macro = true }
 ]
+
+[programs]
+bindgen = { version = "0.71.1" }
