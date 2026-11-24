@@ -3,13 +3,12 @@
 
 [package]
 name = "broccolini"
-version = "0.1.85"
+version = "0.1.90"
 authors = ["Magma GPU project"]
 edition = "2021"
 description = "Single-threaded Zygote render server for Rutabaga multi-process context isolation"
 license = "MIT"
 repository = "https://github.com/magma-gpu/rutabaga_gfx"
-rust-version = "1.81.0"
 
 [features]
 gfxstream = ["rutabaga_gfx/gfxstream"]
@@ -24,10 +23,10 @@ path = "src/main.rs"
 cfg-if = "1.0.0"
 clap = { version = "4.1.8", features = ["derive"] }
 log = "0.4"
-magma-gpu = { path = "../third_party/mesa3d/src/virtio/magma-gpu-rs/lib", version = "0.1.85" }
+magma-gpu = { path = "../third_party/mesa3d/src/virtio/magma-gpu-rs/lib", version = "0.1.90" }
 remain = "0.2"
 rustix = { version = "1.0.7", features = ["thread"] }
-rutabaga_gfx = { path = "../", version = "0.1.85" }
+rutabaga_gfx = { path = "../", version = "0.1.90" }
 thiserror = "1.0.23"
 
 [target.'cfg(unix)'.dependencies]
