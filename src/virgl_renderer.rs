@@ -550,7 +550,53 @@ impl VirglRenderer {
         })
     }
 
+    #[cfg(all(target_os = "android", virgl_renderer_unstable))]
+    fn export_ahb(&self, resource_id: u32) -> RutabagaResult<Option<Arc<RutabagaHandle>>> {
+        use std::os::fd::IntoRawFd;
+        use std::ptr::NonNull;
+
+        use nativewindow::AhbInfo as NativeAhbInfo;
+        use nativewindow::HardwareBuffer;
+
+        use crate::handle::AhbInfo;
+
+        let mut ahb_ptr: *mut c_void = null_mut();
+        // SAFETY:
+        // Safe because `ahb_ptr` is a valid stack pointer; on success (`0`),
+        // `virgl_renderer_resource_export_ahb` returns an acquired AHardwareBuffer reference.
+        let ret = unsafe { virgl_renderer_resource_export_ahb(resource_id, &mut ahb_ptr) };
+        if ret != 0 {
+            return Ok(None);
+        }
+
+        let buffer_ptr = NonNull::new(ahb_ptr).ok_or(RutabagaError::InvalidResourceId)?;
+        // SAFETY:
+        // Safe because `buffer_ptr` is non-null and its acquired reference is adopted by
+        // `from_raw`.
+        let buffer = unsafe { HardwareBuffer::from_raw(buffer_ptr.cast()) };
+        let ahb_info = NativeAhbInfo::try_from(buffer).map_err(|_| MagmaGpuError::Unsupported)?;
+        let fds = ahb_info
+            .fds
+            .into_iter()
+            .map(|fd| {
+                // SAFETY:
+                // Safe because each `OwnedFd` in `ahb_info.fds` is valid and uniquely owned.
+                unsafe { OwnedDescriptor::from_raw_descriptor(fd.into_raw_fd()) }
+            })
+            .collect();
+
+        Ok(Some(Arc::new(RutabagaHandle::from(AhbInfo {
+            fds,
+            metadata: ahb_info.data,
+        }))))
+    }
+
     fn export_blob(&self, resource_id: u32) -> RutabagaResult<Arc<RutabagaHandle>> {
+        #[cfg(all(target_os = "android", virgl_renderer_unstable))]
+        if let Some(handle) = self.export_ahb(resource_id)? {
+            return Ok(handle);
+        }
+
         let mut fd_type = 0;
         let mut fd = -1;
         // TODO(b/315870313): Add safety comment
