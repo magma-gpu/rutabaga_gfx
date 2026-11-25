@@ -5,7 +5,8 @@ use std::os::fd::AsFd;
 
 use rustix::io::read;
 use rustix::io::write;
-use rustix::pipe::pipe;
+use rustix::pipe::pipe_with;
+use rustix::pipe::PipeFlags;
 
 use crate::util::AsBorrowedDescriptor;
 use crate::util::AsRawDescriptor;
@@ -22,7 +23,7 @@ pub struct WritePipe {
 }
 
 pub fn create_pipe() -> Result<(ReadPipe, WritePipe)> {
-    let (read_pipe, write_pipe) = pipe()?;
+    let (read_pipe, write_pipe) = pipe_with(PipeFlags::CLOEXEC)?;
     Ok((
         ReadPipe {
             descriptor: read_pipe.into(),
