@@ -107,6 +107,10 @@ impl OwnedDescriptor {
         };
         Ok(access)
     }
+
+    pub fn seal_and_validate_shm(&self, _min_size: u64) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl AsRawDescriptor for OwnedDescriptor {

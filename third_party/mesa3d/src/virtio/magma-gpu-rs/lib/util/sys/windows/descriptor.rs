@@ -39,6 +39,10 @@ impl OwnedDescriptor {
     pub fn determine_map_access_mode(&self) -> Result<u32> {
         Err(Error::from(ErrorKind::Unsupported))
     }
+
+    pub fn seal_and_validate_shm(&self, _min_size: u64) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl AsRawDescriptor for OwnedDescriptor {
