@@ -14,6 +14,7 @@ use std::os::unix::io::FromRawFd;
 use std::os::unix::io::IntoRawFd;
 use std::os::unix::io::RawFd;
 
+use rustix::fs::fcntl_add_seals;
 use rustix::fs::fcntl_get_seals;
 use rustix::fs::fcntl_getfl;
 use rustix::fs::fstat;
@@ -107,6 +108,25 @@ impl OwnedDescriptor {
         Ok(access)
     }
 
+    pub fn seal_and_validate_shm(&self, min_size: u64) -> Result<()> {
+        let mut seals = fcntl_get_seals(&self.owned)?;
+        if !seals.contains(SealFlags::SHRINK) {
+            fcntl_add_seals(
+                &self.owned,
+                SealFlags::SHRINK | SealFlags::GROW | SealFlags::SEAL,
+            )?;
+            seals = fcntl_get_seals(&self.owned)?;
+        }
+        if !seals.contains(SealFlags::SHRINK) {
+            return Err(Error::from(ErrorKind::PermissionDenied));
+        }
+        let st = fstat(&self.owned)?;
+        if st.st_size < 0 || (st.st_size as u64) < min_size {
+            return Err(Error::from(ErrorKind::InvalidData));
+        }
+        Ok(())
+    }
+
     fn get_memory_handle_type(&self) -> Result<u32> {
         let fd_path = read_link(format!("/proc/self/fd/{}", self.as_raw_descriptor()))
             .map_err(|_| Error::from(ErrorKind::Unsupported))?;
@@ -182,5 +202,54 @@ impl From<File> for OwnedDescriptor {
 impl From<OwnedFd> for OwnedDescriptor {
     fn from(o: OwnedFd) -> OwnedDescriptor {
         OwnedDescriptor { owned: o }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustix::fs::ftruncate;
+    use rustix::fs::memfd_create;
+    use rustix::fs::MemfdFlags;
+
+    #[test]
+    fn seal_and_validate_shm_seals_unsealed_memfd_and_blocks_shrink() {
+        let fd = memfd_create(
+            "test-unsealed",
+            MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING,
+        )
+        .expect("memfd_create failed");
+        ftruncate(&fd, 4096).expect("ftruncate failed");
+        let desc = OwnedDescriptor::from(fd);
+
+        desc.seal_and_validate_shm(4096)
+            .expect("should seal and validate");
+        assert!(ftruncate(&desc.owned, 0).is_err());
+    }
+
+    #[test]
+    fn seal_and_validate_shm_accepts_presealed_memfd() {
+        let fd = memfd_create(
+            "test-sealed",
+            MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING,
+        )
+        .expect("memfd_create failed");
+        ftruncate(&fd, 8192).expect("ftruncate failed");
+        fcntl_add_seals(&fd, SealFlags::SEAL | SealFlags::SHRINK | SealFlags::GROW)
+            .expect("fcntl_add_seals failed");
+        let desc = OwnedDescriptor::from(fd);
+
+        desc.seal_and_validate_shm(4096)
+            .expect("presealed memfd should pass");
+        assert!(desc.seal_and_validate_shm(16384).is_err());
+    }
+
+    #[test]
+    fn seal_and_validate_shm_rejects_unsealable_memfd() {
+        let fd = memfd_create("test-no-sealing", MemfdFlags::CLOEXEC).expect("memfd_create failed");
+        ftruncate(&fd, 4096).expect("ftruncate failed");
+        let desc = OwnedDescriptor::from(fd);
+
+        assert!(desc.seal_and_validate_shm(4096).is_err());
     }
 }

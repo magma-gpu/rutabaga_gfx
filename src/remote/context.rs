@@ -131,10 +131,22 @@ impl RutabagaContext for RemoteContext {
         let protocols = self.stream.read()?;
         for protocol in protocols {
             if let BroccoliniProtocol::RespResourceCreate(resp, handle) = protocol {
-                let is_shm = matches!(
-                    &handle,
-                    BroccoliniHandle::Magma(h) if h.handle_type == MAGMA_GPU_HANDLE_TYPE_MEM_SHM
-                );
+                let is_shm = match &handle {
+                    BroccoliniHandle::Magma(h)
+                        if h.handle_type == MAGMA_GPU_HANDLE_TYPE_MEM_SHM =>
+                    {
+                        if let Err(e) = h.os_handle.seal_and_validate_shm(resource_create_blob.size)
+                        {
+                            error!(
+                                "RemoteContext (ctx_id={}) rejected invalid MEM_SHM blob for resource {resource_id}: {e}",
+                                self.ctx_id
+                            );
+                            return Err(MagmaGpuError::InvalidMagmaHandle.into());
+                        }
+                        true
+                    }
+                    _ => false,
+                };
                 let rutabaga_vk_info = RutabagaVulkanInfo {
                     memory_idx: resp.vulkan_info.memory_idx,
                     device_id: RutabagaDeviceId {
