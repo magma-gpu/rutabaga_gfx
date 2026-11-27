@@ -341,6 +341,9 @@ impl Protocol for BroccoliniProtocol {
             BROCCOLINI_RESP_CAPSET => {
                 let len: usize = hdr.payload.try_into()?;
                 reader.consume(size_of::<broccolini_ctrl_hdr>());
+                if reader.available_bytes() < len {
+                    return Err(Error::Unsupported);
+                }
                 let mut capset: Vec<u8> = vec![0; len];
                 reader.read_exact(&mut capset)?;
                 BroccoliniProtocol::RespCapset(capset)
@@ -691,5 +694,16 @@ mod tests {
             },
         )
         .is_err());
+    }
+
+    #[test]
+    fn decode_resp_capset_rejects_oversized_length() {
+        let hdr = broccolini_ctrl_hdr {
+            type_: BROCCOLINI_RESP_CAPSET,
+            payload: u32::MAX,
+        };
+        let mut reader = Reader::new(hdr.as_bytes());
+        let mut descriptors = VecDeque::new();
+        assert!(BroccoliniProtocol::decode(&mut reader, &mut descriptors).is_err());
     }
 }

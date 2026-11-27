@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use std::thread;
 
 use log::error;
+use log::warn;
 use magma_gpu::protocols::broccolini_protocol::broccolini_create_fence;
 use magma_gpu::util::create_event_pair;
 use magma_gpu::util::create_pipe;
@@ -43,6 +44,7 @@ use crate::rutabaga_utils::RUTABAGA_CONTEXT_INIT_CAPSET_ID_MASK;
 use crate::rutabaga_utils::RUTABAGA_FLAG_FENCE_HOST_SHAREABLE;
 
 const REMOTE_FENCE_SHUTDOWN_ID: u64 = u64::MAX;
+const MAX_REMOTE_CONTEXTS: usize = 256;
 
 /// Lightweight local context for default (`capset_id == 0`) virtio-gpu contexts
 /// created lazily by guest DRM clients for dumb/2D resource attachment without
@@ -162,16 +164,14 @@ fn run_fence_wait_loop(
                     Ok(bytes_read) if bytes_read == buf.len() => {
                         let mut reader = Reader::new(&buf);
                         if let Ok(cmd) = reader.read_obj::<broccolini_create_fence>() {
-                            state.pending.remove(&cmd.fence_id);
-                            completed_fence = Some((
-                                state.fence_handler.clone(),
-                                RutabagaFence {
-                                    flags: cmd.flags,
-                                    fence_id: cmd.fence_id,
-                                    ctx_id: cmd.hdr.payload,
-                                    ring_idx: cmd.ring_idx,
-                                },
-                            ));
+                            if let Some(fence) = state.pending.remove(&cmd.fence_id) {
+                                completed_fence = Some((state.fence_handler.clone(), fence));
+                            } else {
+                                warn!(
+                                    "ignoring unexpected fence completion fence_id={} from ctx_id={ctx_id}",
+                                    cmd.fence_id
+                                );
+                            }
                         }
                     }
                     Ok(_) => {
@@ -387,6 +387,12 @@ impl RutabagaComponent for RemoteComponent {
         }
         if !self.is_remote_capset(capset_id) {
             return Err(RutabagaError::InvalidComponent);
+        }
+        if self.fence_contexts.lock().unwrap().len() >= MAX_REMOTE_CONTEXTS {
+            error!(
+                "refusing remote context ctx_id={ctx_id}: active context limit ({MAX_REMOTE_CONTEXTS}) reached"
+            );
+            return Err(MagmaGpuError::WithContext("maximum remote context limit reached").into());
         }
 
         let (fence_read_pipe, fence_write_pipe) = create_pipe()?;
