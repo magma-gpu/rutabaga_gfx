@@ -386,6 +386,14 @@ const VIRGLRENDERER_NO_VIRGL: u32 = 1 << 7;
 const VIRGLRENDERER_USE_ASYNC_FENCE_CB: u32 = 1 << 8;
 const VIRGLRENDERER_RENDER_SERVER: u32 = 1 << 9;
 const VIRGLRENDERER_DRM: u32 = 1 << 10;
+#[allow(dead_code)]
+const VIRGLRENDERER_USE_VIDEO: u32 = 1 << 11;
+#[allow(dead_code)]
+const VIRGLRENDERER_D3D11_SHARE_TEXTURE: u32 = 1 << 12;
+#[allow(dead_code)]
+const VIRGLRENDERER_COMPAT_PROFILE: u32 = 1 << 13;
+#[allow(dead_code)]
+const VIRGLRENDERER_USE_GUEST_VRAM: u32 = 1 << 14;
 const VIRGLRENDERER_ROCM: u32 = 1 << 15;
 
 /// virglrenderer flag struct.
