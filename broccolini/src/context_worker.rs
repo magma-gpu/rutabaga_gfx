@@ -65,6 +65,21 @@ fn get_context_name(ctx_create: &broccolini_ctx_create) -> String {
     String::from_utf8_lossy(&raw_name[..trimmed_len]).into_owned()
 }
 
+fn resolve_worker_capset_mask(capset_mask: u64, context_init: u32) -> BroccoliniResult<u64> {
+    let ctx_capset_id = context_init & 0x00ff;
+    if ctx_capset_id == 0 {
+        return Ok(capset_mask);
+    }
+    let ctx_capset_bit = 1u64
+        .checked_shl(ctx_capset_id)
+        .ok_or(BroccoliniError::InvalidCapsetId(ctx_capset_id))?;
+    if (capset_mask & ctx_capset_bit) != 0 {
+        Ok(ctx_capset_bit)
+    } else {
+        Err(BroccoliniError::InvalidCapsetId(ctx_capset_id))
+    }
+}
+
 pub fn run_context_worker_loop(
     mut stream: Stream<BroccoliniProtocol>,
     ctx_create: broccolini_ctx_create,
@@ -103,12 +118,7 @@ pub fn run_context_worker_loop(
     let debug_name = get_context_name(&ctx_create);
     WorkerProcess::set_current_name(&debug_name);
 
-    let ctx_capset_id = ctx_create.context_init & 0x00ff;
-    let worker_capset_mask = if ctx_capset_id != 0 && (capset_mask & (1u64 << ctx_capset_id)) != 0 {
-        1u64 << ctx_capset_id
-    } else {
-        capset_mask
-    };
+    let worker_capset_mask = resolve_worker_capset_mask(capset_mask, ctx_create.context_init)?;
     let mut rutabaga =
         build_rutabaga(worker_capset_mask, renderer_features, fence_handler.clone())?;
 
@@ -301,4 +311,38 @@ pub fn run_context_worker_loop(
 
     let _ = rutabaga.destroy_context(ctx_id);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use rutabaga_gfx::RUTABAGA_CAPSET_CROSS_DOMAIN;
+
+    use super::*;
+
+    #[test]
+    fn resolve_worker_capset_mask_filters_and_validates() {
+        let mask =
+            (1u64 << RUTABAGA_CAPSET_GFXSTREAM_VULKAN) | (1u64 << RUTABAGA_CAPSET_CROSS_DOMAIN);
+
+        assert_eq!(
+            resolve_worker_capset_mask(mask, RUTABAGA_CAPSET_GFXSTREAM_VULKAN).unwrap(),
+            1u64 << RUTABAGA_CAPSET_GFXSTREAM_VULKAN
+        );
+        assert_eq!(resolve_worker_capset_mask(mask, 0).unwrap(), mask);
+
+        // Unconfigured capset in 1..64 must be rejected.
+        assert!(matches!(
+            resolve_worker_capset_mask(mask, RUTABAGA_CAPSET_VENUS),
+            Err(BroccoliniError::InvalidCapsetId(RUTABAGA_CAPSET_VENUS))
+        ));
+
+        // Out-of-range capset IDs (>= 64), including values aliasing valid capsets modulo 64,
+        // must return an error rather than overflowing or wrapping.
+        for bad_id in [64u32, 64 + RUTABAGA_CAPSET_CROSS_DOMAIN, 255] {
+            assert!(matches!(
+                resolve_worker_capset_mask(mask, bad_id),
+                Err(BroccoliniError::InvalidCapsetId(id)) if id == bad_id
+            ));
+        }
+    }
 }

@@ -19,6 +19,8 @@ pub enum BroccoliniError {
     EmptyCapsetsFromProbeChild,
     #[error("failed to fork worker: {0}")]
     FailedToForkWorker(#[source] std::io::Error),
+    #[error("invalid or disabled capset id {0} in CtxCreate")]
+    InvalidCapsetId(u32),
     #[error("no valid rutabaga capsets in --context-types '{0}'")]
     InvalidContextTypes(String),
     #[error("magma_gpu error: {0}")]
