@@ -25,6 +25,7 @@ use rustix::net::AddressFamily;
 use rustix::net::RecvAncillaryBuffer;
 use rustix::net::RecvAncillaryMessage;
 use rustix::net::RecvFlags;
+use rustix::net::ReturnFlags;
 use rustix::net::SendAncillaryBuffer;
 use rustix::net::SendAncillaryMessage;
 use rustix::net::SendFlags;
@@ -139,7 +140,7 @@ impl Tube {
             &self.socket,
             &mut iovecs,
             &mut cmsg_buffer,
-            RecvFlags::empty(),
+            RecvFlags::CMSG_CLOEXEC,
         )?;
 
         let len = r.bytes;
@@ -153,6 +154,12 @@ impl Tube {
                 }
                 _ => return Err(Error::Unsupported), // Handle unexpected control messages
             }
+        }
+
+        if r.flags.contains(ReturnFlags::CTRUNC) {
+            return Err(Error::WithContext(
+                "control message truncated during Tube::receive",
+            ));
         }
 
         Ok((len, received_descriptors))
